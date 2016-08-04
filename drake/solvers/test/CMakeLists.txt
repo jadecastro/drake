@@ -3,6 +3,9 @@ target_link_libraries(optimization_problem_test drakeOptimization
   ${GTEST_BOTH_LIBRARIES})
 add_test(NAME optimization_problem_test COMMAND optimization_problem_test)
 
+add_executable(stl_test stl_test.cc)
+target_link_libraries(stl_test drakeOptimization)
+
 if(mosek_FOUND)
   add_executable(mosek_test mosek_test.cc)
   target_link_libraries(mosek_test drakeOptimization ${GTEST_BOTH_LIBRARIES})

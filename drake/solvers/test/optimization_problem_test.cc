@@ -103,6 +103,7 @@ void RunNonlinearProgram(OptimizationProblem& prog,
       continue;
     }
     SolutionResult result = SolutionResult::kUnknownError;
+    result = solver.second->Solve(prog);
     ASSERT_NO_THROW(result = solver.second->Solve(prog)) << "Using solver: "
                                                          << solver.first;
     EXPECT_EQ(result, SolutionResult::kSolutionFound) << "Using solver: "
@@ -908,7 +909,10 @@ OptimizationProblem prog;
       << "\tActual: " << actual_answer.transpose();
 }
 
-/** Initial testing for STL-to-optimization problem parser. */
+/** 
+ * Initial testing of a parser that translates an STL spec into a 
+ * Drake optimization problem. 
+*/
 GTEST_TEST(testOptimizationProblem, testSTLParser) {
   static const double kInf = std::numeric_limits<double>::infinity();
   // Generic constraints in nlopt require a very generous epsilon.
@@ -934,17 +938,21 @@ GTEST_TEST(testOptimizationProblem, testSTLParser) {
   // Given a small univariate polynomial, find a low point.
   {
     const Polynomiald x("x");
-    const Polynomiald poly = (x - 1) * (x - 1);
+    const Polynomiald poly1 = (x - 1) * (x - 1);
+    const Polynomiald poly2 = - (x - 10);
     OptimizationProblem problem;
     const auto x_var = problem.AddContinuousVariables(1);
     const std::vector<Polynomiald::VarType> var_mapping = {
       x.GetSimpleVariable()};
-    problem.AddPolynomialConstraint(VectorXPoly::Constant(1, poly), var_mapping,
+    problem.AddPolynomialConstraint(VectorXPoly::Constant(1, poly1), var_mapping,
                                     Eigen::VectorXd::Zero(1),
                                     Eigen::VectorXd::Zero(1));
+    //problem.AddPolynomialConstraint(VectorXPoly::Constant(1, poly2), var_mapping,
+    //                                Eigen::VectorXd::Zero(1),
+    //                                Eigen::VectorXd::Zero(1));
     RunNonlinearProgram(problem, [&]() {
       EXPECT_NEAR(x_var.value()[0], 1, 0.2);
-      EXPECT_LE(poly.EvaluateUnivariate(x_var.value()[0]), kEpsilon);
+      EXPECT_LE(poly1.EvaluateUnivariate(x_var.value()[0]), kEpsilon);
     });
   }
 
