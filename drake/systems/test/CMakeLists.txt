@@ -30,6 +30,10 @@ add_executable(simulation_trajectory_logger_test simulation_trajectory_logger_te
 target_link_libraries(simulation_trajectory_logger_test drakeCommon ${GTEST_BOTH_LIBRARIES})
 add_test(NAME simulation_trajectory_logger_test COMMAND simulation_trajectory_logger_test)
 
+add_executable(ego_car_with_agents_test ego_car_with_agents_test.cc)
+target_link_libraries(ego_car_with_agents_test drakeRBSystem ${GTEST_BOTH_LIBRARIES})
+add_test(NAME ego_car_with_agents_test COMMAND ego_car_with_agents_test)
+
 add_matlab_test(NAME systems/test/HybridSystemSampleTimeTest.run COMMAND HybridSystemSampleTimeTest.run)
 add_matlab_test(NAME systems/test/LinearGaussianDT.run COMMAND LinearGaussianDT.run)
 # add_matlab_test(NAME systems/test/linear_gaussian_dt COMMAND linear_gaussian_dt)  # FIXME: see #366
