@@ -302,7 +302,18 @@ class DRAKEOPTIMIZATION_EXPORT OptimizationProblem {
   void AddConstraint(std::shared_ptr<Constraint> con,
                      VariableList const& vars) {
     problem_type_.AddGenericConstraint();
+    std::cerr << con << "\n";
     generic_constraints_.push_back(Binding<Constraint>(con, vars));
+  }
+
+  /**
+   * @brief Adds a scalartype constraint to the program.
+   */
+  void AddScalartypeConstraint(std::shared_ptr<Constraint> con,
+                     VariableList const& vars) {
+    problem_type_.AddScalartypeConstraint();
+    std::cerr << con << "\n";
+    scalartype_constraints_.push_back(Binding<Constraint>(con, vars));
   }
 
   /**
@@ -744,6 +755,7 @@ class DRAKEOPTIMIZATION_EXPORT OptimizationProblem {
   VariableList variable_views_;
   std::list<Binding<Constraint>> generic_costs_;
   std::list<Binding<Constraint>> generic_constraints_;
+  std::list<Binding<Constraint>> scalartype_constraints_;
   std::list<Binding<QuadraticConstraint>> quadratic_costs_;
   // TODO(naveenoid) : quadratic_constraints_
 

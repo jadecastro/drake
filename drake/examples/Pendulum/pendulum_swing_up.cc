@@ -86,9 +86,14 @@ void AddSwingUpTrajectoryParams(
 
   dircol_traj->AddRunningCostFunc(PendulumRunningCost());
   dircol_traj->AddFinalCostFunc(PendulumFinalCost());
+  std::cerr << "***Start adding dynamic constraints\n";
+  std::cerr << pendulum << "\n";
+  std::cerr << std::make_shared<drake::systems::SystemDirectCollocationConstraint<Pendulum>>(pendulum) << "\n";
   dircol_traj->AddDynamicConstraint(
       std::make_shared<
       drake::systems::SystemDirectCollocationConstraint<Pendulum>>(pendulum));
+  std::cerr << "***Finished adding dynamic constraints\n";
+
 }
 
 }  // pendulum

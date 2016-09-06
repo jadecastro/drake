@@ -24,7 +24,7 @@ DirectCollocationConstraint::DirectCollocationConstraint(
                  Eigen::VectorXd::Zero(num_states),
                  Eigen::VectorXd::Zero(num_states)),
       num_states_(num_states),
-      num_inputs_(num_inputs) {}
+      num_inputs_(num_inputs) {std::cerr << "DirectCollocationConstraint in cc file\n";}
 
 DirectCollocationConstraint::~DirectCollocationConstraint() {}
 

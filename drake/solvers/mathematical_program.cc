@@ -7,6 +7,7 @@
 #include "nlopt_solver.h"
 #include "optimization.h"
 #include "snopt_solver.h"
+#include "dreal_solver.h"
 
 namespace drake {
 namespace solvers {
@@ -18,12 +19,13 @@ enum ProblemAttributes {
   kError = 1 << 0,  ///< Do not use, to avoid & vs. && typos.
   kGenericCost                     = 1 << 1,
   kGenericConstraint               = 1 << 2,
-  kQuadraticCost                   = 1 << 3,
-  kQuadraticConstraint             = 1 << 4,
-  kLinearCost                      = 1 << 5,
-  kLinearConstraint                = 1 << 6,
-  kLinearEqualityConstraint        = 1 << 7,
-  kLinearComplementarityConstraint = 1 << 8
+  kScalartypeConstraint            = 1 << 3,
+  kQuadraticCost                   = 1 << 4,
+  kQuadraticConstraint             = 1 << 5,
+  kLinearCost                      = 1 << 6,
+  kLinearConstraint                = 1 << 7,
+  kLinearEqualityConstraint        = 1 << 8,
+  kLinearComplementarityConstraint = 1 << 9
 };
 typedef uint32_t AttributesSet;
 
@@ -52,6 +54,12 @@ AttributesSet kGenericSolverCapabilities = (
     kQuadraticCost | kQuadraticConstraint |
     kLinearCost | kLinearConstraint | kLinearEqualityConstraint);
 
+// Solvers for generic systems of constraints and costs.
+AttributesSet kDrealSolverCapabilities = (
+    kGenericConstraint | kScalartypeConstraint |
+    kQuadraticCost | kQuadraticConstraint |
+    kLinearCost | kLinearConstraint | kLinearEqualityConstraint);
+
 // Returns true iff no capabilities are in required and not in available.
 bool is_satisfied(AttributesSet required, AttributesSet available) {
   return ((required & ~available) == kNoCapabilities);
@@ -63,6 +71,7 @@ bool is_satisfied(AttributesSet required, AttributesSet available) {
 MathematicalProgram::MathematicalProgram()
     : required_capabilities_(kNoCapabilities),
       ipopt_solver_(new IpoptSolver()),
+      dreal_solver_(new DrealSolver()),
       nlopt_solver_(new NloptSolver()),
       snopt_solver_(new SnoptSolver()),
       moby_lcp_solver_(new MobyLCPSolver()),
@@ -74,6 +83,9 @@ void MathematicalProgram::AddGenericCost() {
 }
 void MathematicalProgram::AddGenericConstraint() {
   required_capabilities_ |= kGenericConstraint;
+}
+void MathematicalProgram::AddScalartypeConstraint() {
+  required_capabilities_ |= kScalartypeConstraint;
 }
 void MathematicalProgram::AddQuadraticCost() {
   required_capabilities_ |= kQuadraticCost;
@@ -104,23 +116,33 @@ SolutionResult MathematicalProgram::Solve(OptimizationProblem& prog) const {
     // TODO(ggould-tri) Also allow quadratic objectives whose matrix is
     // Identity: This is the objective function the solver uses anyway when
     // underconstrainted, and is fairly common in real-world problems.
+    std::cerr << "linear system solver\n";
     return linear_system_solver_->Solve(prog);
   } else if (is_satisfied(required_capabilities_,
                           kEqualityConstrainedQPCapabilities) &&
             equality_constrained_qp_solver_->available()) {
+    std::cerr << "equality constrained solver\n";
     return equality_constrained_qp_solver_->Solve(prog);
   } else if (is_satisfied(required_capabilities_, kMobyLcpCapabilities) &&
              moby_lcp_solver_->available()) {
+    std::cerr << "moby lcp solver\n";
     return moby_lcp_solver_->Solve(prog);
   } else if (is_satisfied(required_capabilities_, kGenericSolverCapabilities) &&
              snopt_solver_->available()) {
+    std::cerr << "snopt solver\n";
     return snopt_solver_->Solve(prog);
   } else if (is_satisfied(required_capabilities_, kGenericSolverCapabilities) &&
              ipopt_solver_->available()) {
+    std::cerr << "ipopt solver\n";
     return ipopt_solver_->Solve(prog);
   } else if (is_satisfied(required_capabilities_, kGenericSolverCapabilities) &&
              nlopt_solver_->available()) {
+    std::cerr << "nlopt solver\n";
     return nlopt_solver_->Solve(prog);
+  } else if (is_satisfied(required_capabilities_, kDrealSolverCapabilities) &&
+             dreal_solver_->available()) {
+    std::cerr << "dreal solver\n";
+    return dreal_solver_->Solve(prog);
   } else {
     throw std::runtime_error(
         "MathematicalProgram::Solve: "

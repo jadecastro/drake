@@ -33,9 +33,11 @@ class DRAKEDYNAMICCONSTRAINT_EXPORT DirectCollocationConstraint :
   /// num_states: state 1
   /// num_inputs: input 0
   /// num_inputs: input 1
+  //std::cerr << "DirectCollocationConstraint in h file\n";
   DirectCollocationConstraint(int num_states, int num_inputs);
   virtual ~DirectCollocationConstraint();
 
+  //std::cerr << "hello world\n";
   void Eval(const Eigen::Ref<const Eigen::VectorXd>& x,
             Eigen::VectorXd& y) const override;
   void Eval(const Eigen::Ref<const TaylorVecXd>& x,
@@ -60,8 +62,7 @@ class SystemDirectCollocationConstraint : public DirectCollocationConstraint {
   explicit SystemDirectCollocationConstraint(std::shared_ptr<System> system)
       : DirectCollocationConstraint(drake::getNumStates(*system),
                           drake::getNumInputs(*system)),
-        system_(system) {}
-
+        system_(system) {std::cerr << "SystemDirectCollocationConstraint\n";}
  private:
   void dynamics(const TaylorVecXd& state,
                 const TaylorVecXd& input,

@@ -333,6 +333,7 @@ SolutionResult SnoptSolver::Solve(OptimizationProblem& prog) const {
                                                  // because the cost is the
                                                  // first row
   for (auto const& binding : prog.generic_constraints()) {
+    std::cerr "snopt solver\n";
     auto const& c = binding.constraint();
     size_t n = c->num_constraints();
 

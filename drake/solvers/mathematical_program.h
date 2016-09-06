@@ -56,6 +56,9 @@ class DRAKEOPTIMIZATION_EXPORT MathematicalProgram {
   /// Call if problem requires bounding some f(x).
   void AddGenericConstraint();
 
+  /// Call if problem requires bounding some "scalar type" f(x).
+  void AddScalartypeConstraint();
+
   /// Call if problem requires minimizing some quadratic.
   void AddQuadraticCost();
 
@@ -81,6 +84,7 @@ class DRAKEOPTIMIZATION_EXPORT MathematicalProgram {
  private:
   uint32_t required_capabilities_ {0};
   std::unique_ptr<MathematicalProgramSolverInterface> ipopt_solver_;
+  std::unique_ptr<MathematicalProgramSolverInterface> dreal_solver_;
   std::unique_ptr<MathematicalProgramSolverInterface> nlopt_solver_;
   std::unique_ptr<MathematicalProgramSolverInterface> snopt_solver_;
   std::unique_ptr<MathematicalProgramSolverInterface> moby_lcp_solver_;

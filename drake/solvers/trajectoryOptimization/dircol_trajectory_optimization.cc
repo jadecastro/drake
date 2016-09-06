@@ -20,6 +20,7 @@ void DircolTrajectoryOptimization::AddDynamicConstraint(
   // value along with the state and input vectors at that knot and the
   // next.
   for (int i = 0; i < N() - 1; i++) {
+    std::cerr << constraint << "\n";
     opt_problem()->AddConstraint(
         constraint,
         {h_vars()(i), x_vars().segment(i * num_states(), num_states() * 2),
