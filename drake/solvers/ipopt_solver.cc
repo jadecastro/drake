@@ -30,9 +30,12 @@ size_t GetConstraintBounds(
     const Constraint& c, Number* lb, Number* ub) {
   const Eigen::VectorXd& lower_bound = c.lower_bound();
   const Eigen::VectorXd& upper_bound = c.upper_bound();
+  std::cerr << "Constraint type: " << &c << "\n";
+  std::cerr << "Number of constraints: " << c.num_constraints() << "\n";
   for (size_t i = 0; i < c.num_constraints(); i++) {
     lb[i] = lower_bound(i);
     ub[i] = upper_bound(i);
+    std::cerr << lb[i] << ", " << ub[i] << "\n";
   }
 
   return c.num_constraints();
@@ -240,6 +243,7 @@ class IpoptSolver_NLP : public Ipopt::TNLP {
 
     size_t constraint_idx = 0;  // offset into g_l and g_u output arrays
     for (const auto& c : problem_->generic_constraints()) {
+      //std::cerr << "Constraint type: " << c.constraint() << "\n";
       constraint_idx += GetConstraintBounds(
           *(c.constraint()), g_l + constraint_idx, g_u + constraint_idx);
     }
@@ -278,7 +282,7 @@ class IpoptSolver_NLP : public Ipopt::TNLP {
     if (new_x || !cost_cache_->is_x_equal(n, x)) {
       EvaluateCosts(n, x);
     }
-
+    //std::cerr << "eval_f\n";
     DRAKE_ASSERT(cost_cache_->result.size() == 1);
     obj_value = cost_cache_->result[0];
     return true;
@@ -298,6 +302,7 @@ class IpoptSolver_NLP : public Ipopt::TNLP {
   virtual bool eval_g(
       Index n, const Number* x, bool new_x, Index m, Number* g) {
     if (new_x || !constraint_cache_->is_x_equal(n, x)) {
+      //std::cerr << "eval_g\n";
       EvaluateConstraints(n, x);
     }
 
