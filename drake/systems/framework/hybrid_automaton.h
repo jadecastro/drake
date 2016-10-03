@@ -7,12 +7,39 @@
 namespace drake {
 namespace systems {
 
+/// 
+///
+/// @tparam T The type of .....
+template <typename T>
+class ModeTransition : public System<T> {
+ public:
+  OutputPort* set_guard(int index) override {
+    return ports_[index];
+  }
+
+  const OutputPort& get_guard(int index) const override {
+    return *ports_[index];
+  }
+
+  std::vector<OutputPort*>* get_mutable_ports() { return &ports_; }
+
+ protected:
+  // Returns a clone that has the same number of output ports, set to nullptr.
+  DiagramOutput<T>* DoClone() const override {
+    DiagramOutput<T>* clone = new DiagramOutput<T>();
+    clone->ports_.resize(get_num_ports());
+    return clone;
+  }
+
+ private:
+  std::vector<OutputPort*> ports_;
+};
+
 /// HybridAutomaton is a System composed of one or more constituent Systems,
 /// arranged in a directed graph where the vertices are the constituent Systems,
 /// and the edges connect various Systems.
 template <typename T>
-class HybridAutomaton : public System<T>,
-                public detail::InputPortEvaluatorInterface<T> {
+class HybridAutomaton : public System<T> {
  public:
   typedef typename std::pair<const System<T>*, int> ModeIdentifier;
 
@@ -34,12 +61,6 @@ class HybridAutomaton : public System<T>,
     // For each output, see whether it has direct feedthrough all the way back
     // to any input.
 
-    // TODO: re-visit this...
-    for (const auto& output_port_id : output_port_ids_) {
-      if (HasDirectFeedthroughFromAnyInput(output_port_id)) {
-        return true;
-      }
-    }
     return false;
   }
 
@@ -107,16 +128,12 @@ class HybridAutomaton : public System<T>,
   // A structural outline of a HybridAutomaton, produced by
   // HybridAutomatonBuilder.
   struct StateMachine {
-    // The ordered subsystem ports that are inputs to the entire hybrid
-    // automaton.
-    std::vector<ModeIdentifier> modal_subsystem_id;
-    // The ordered subsystem ports that are outputs of the entire hybrid
-    // automaton.
-    std::vector<ModeIdentifier> output_port_ids;
+    // The modes for the entire hybrid automaton.
+    std::vector<ModeIdentifier> modes;
     // A map from the input ports of constituent systems to the output ports
     // on which they depend. This graph is possibly cyclic, but must not
     // contain an algebraic loop.
-    std::map<ModeIdentifier, ModeIdentifier> dependency_graph;
+    std::map<ModeIdentifier, ModeIdentifier> edges;
     // A list of the systems in the dependency graph in a valid, sorted
     // execution order, such that if EvalOutput is called on each system in
     // succession, every system will have valid inputs by the time its turn
@@ -132,7 +149,7 @@ class HybridAutomaton : public System<T>,
   }
 
   // Validates the given @p state_machine and sets up the HybridAutomaton
-  //accordingly.
+  // accordingly.
   void Initialize(const StateMachine& state_machine) {
     // The HybridAutomaton must not already be initialized.
     DRAKE_DEMAND(sorted_systems_.empty());
