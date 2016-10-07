@@ -56,14 +56,6 @@ class HybridAutomaton : public System<T> {
       context->AddSystem(i, std::move(subcontext), std::move(suboutput));
     }
 
-    // Wire up the HybridAutomaton-internal inputs and outputs.
-    for (const auto& mode_trans : mode_transition_) {
-      const ModeId& src = mode_trans.second;
-      const ModeId& dest = mode_trans.first;
-      context->Connect(ConvertToContextPortIdentifier(src),
-                       ConvertToContextPortIdentifier(dest));
-    }
-
     // Declare the HybridAutomaton-external inputs.
     for (const PortIdentifier& id : input_port_ids_) {
       context->ExportInput(ConvertToContextPortIdentifier(id));
@@ -113,8 +105,9 @@ class HybridAutomaton : public System<T> {
 
   // Add a mode to the automaton.
   std::unique_ptr<> AddModalSubsystem(const System<T>& sys) const {
-    const ModalSubsystem sys, modes_.size()++;
-    modes_[modes_.size()++] = sys;
+    int size = state_machine.size();
+    state_machine.modes[size++] = sys;
+    context->AllocateDifferenceState(size++);
     // TODO: this seems a weird way to do this...
     // TODO: add modes to the context (pending discussion with Sherm).
   }
@@ -173,6 +166,18 @@ class HybridAutomaton : public System<T> {
   }
 
  private:
+  template <typename T>
+    std::unique_ptr<DifferenceState<T>>
+    ZeroOrderHold<T>::AllocateDifferenceState() const {
+    // The zero-order hold's state is first-order. Its state vector size is the
+    // same as the input (and output) vector size.
+    const int size = System<T>::get_output_port(0).get_size();
+    DRAKE_DEMAND(System<T>::get_input_port(0).get_size() == size);
+    std::vector<std::unique_ptr<BasicVector<T>>> xd;
+    xd.push_back(std::make_unique<BasicVector<T>>(size));
+    return std::make_unique<DifferenceState<T>>(std::move(xd));
+  }
+
   // A structural outline of a HybridAutomaton, produced by
   // HybridAutomatonBuilder.
   struct ModeTransition {
@@ -211,8 +216,8 @@ class HybridAutomaton : public System<T> {
     DRAKE_DEMAND(!state_machine.sorted_systems.empty());
 
     // Copy the data from the state_machine into private member variables.
-    mode_transitions_ = state_machine.mode_transitions;
-    modes_ = state_machine.modes;
+    auto mode_transitions_ = state_machine.mode_transitions;
+    auto modes_ = state_machine.modes;
 
     // Every system must appear in the sort order exactly once.
     DRAKE_DEMAND(sorted_systems_.size() == sorted_systems_map_.size());

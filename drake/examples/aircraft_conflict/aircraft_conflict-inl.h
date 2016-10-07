@@ -18,13 +18,13 @@ AircraftConflictResolution<T>::AircraftConflictResolution() {
   // TODO: explain the plant model (two aircraft with same controller, etc.)
 
   // Register two modes: cruise and avoid.
-  auto cruise_mode_ = hybrid_automaton.AddMode<RelativeDubins>(1.0);
+  auto cruise_mode_ = hybrid_automaton.AddModalSubsystem<RelativeDubins>(1.0);
   cruise_mode_.add_invariant(SymbolicExpression& invar_c);  // invariant is
   // infinite, unless specified with the add_invariant call.
   cruise_mode_.add_initial_states(SymbolicExpression& init_c);  // initial
   // states are infinite unless specified with the add_intial_states call.
 
-  auto avoid_mode_ = hybrid_automaton.AddMode<RelativeDubins>(0.0);
+  auto avoid_mode_ = hybrid_automaton.AddModalSubsystem<RelativeDubins>(0.0);
   avoid_mode_.add_invariant(SymbolicExpression& invar_a);  // invariant is
   // infinite, unless specified with the add_invariant call.
   avoid_mode_.add_initial_states(SymbolicExpression& init_a);  // initial
