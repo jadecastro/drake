@@ -17,7 +17,8 @@ namespace systems {
 template <typename T>
 class HybridAutomaton : public System<T> {
  public:
-  typedef typename std::pair<const System<T>*, int> ModalSubsystem;
+  typedef int ModeId;
+  typedef typename std::pair<std::unique_ptr<System<T>>, ModeId> ModalSubsystem;
   typedef typename std::pair<const ModalSubsystem<T>*,
     const ModalSubsystem<T>*> ModalSubsystemPair;
 
@@ -103,23 +104,6 @@ class HybridAutomaton : public System<T> {
     }
   }
 
-  // Add a mode to the automaton.
-  std::unique_ptr<> AddModalSubsystem(const System<T>& sys) const {
-    int size = state_machine.size();
-    state_machine.modes[size++] = sys;
-    context->AllocateDifferenceState(size++);
-    // TODO: this seems a weird way to do this...
-    // TODO: add modes to the context (pending discussion with Sherm).
-  }
-
-  // Connect a "pre" mode to a "post" mode.
-  std::unique_ptr<> AddModeTransition(const ModalSubsystem<T>& pre,
-                                      const ModalSubsystem<T>& post) const {
-    const int pre_id = pre.second;
-    const int post_id = post.second;
-    mode_transition_[pre_id] = post_id; // TODO: is the best ordering pre->post?
-  }
-
   // Assign an invariant set of states to a given mode.
   // (default is the infinite state space)
   void HybridAutomaton::AddInvariant(const Mode& mode) {
@@ -166,15 +150,14 @@ class HybridAutomaton : public System<T> {
   }
 
  private:
+  // TODO: check -- is this all that's needed to register a difference variable?
   template <typename T>
-    std::unique_ptr<DifferenceState<T>>
-    ZeroOrderHold<T>::AllocateDifferenceState() const {
-    // The zero-order hold's state is first-order. Its state vector size is the
-    // same as the input (and output) vector size.
-    const int size = System<T>::get_output_port(0).get_size();
-    DRAKE_DEMAND(System<T>::get_input_port(0).get_size() == size);
+  std::unique_ptr<DifferenceState<T>> AllocateDifferenceState() const {
+    // Introduce a difference state defining the discrete mode that is active
+    // at any given moment.
     std::vector<std::unique_ptr<BasicVector<T>>> xd;
-    xd.push_back(std::make_unique<BasicVector<T>>(size));
+    // The discrete mode is a singleton; we allocate a size-one vector here.
+    xd.push_back(std::make_unique<BasicVector<T>>(1));
     return std::make_unique<DifferenceState<T>>(std::move(xd));
   }
 
@@ -238,9 +221,9 @@ class HybridAutomaton : public System<T> {
 
   // Returns the index of the given @p sys in the sorted order of this hybrid
   // automaton, or aborts if @p sys is not a member of the hybrid automaton.
-  int GetSystemIndexOrAbort(const System<T>* sys) const {
-    auto it = sorted_systems_map_.find(sys);
-    DRAKE_DEMAND(it != sorted_systems_map_.end());
+  int GetSystemIndexOrAbort(std::unique_ptr<System<T>> sys) const {
+    auto it = state_machine.modes.find(sys);
+    DRAKE_DEMAND(it != state_machine.modes.end());
     return it->second;
   }
 

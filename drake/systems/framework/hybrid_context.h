@@ -50,7 +50,7 @@ class HybridContext : public Context<T> {
   ///
   /// User code should not call this method. It is for use during Hybrid
   /// context allocation only.
-  void AddSystem(SystemIndex index, std::unique_ptr<Context<T>> context,
+  void AddModalSubsystem(SystemIndex index, std::unique_ptr<Context<T>> context,
                  std::unique_ptr<SystemOutput<T>> output) {
     DRAKE_DEMAND(contexts_[index] == nullptr);
     DRAKE_DEMAND(outputs_[index] == nullptr);
