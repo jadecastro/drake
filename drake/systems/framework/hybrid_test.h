@@ -1,12 +1,27 @@
 #pragma once
 
+#include <algorithm>
+#include <functional>
+#include <map>
+#include <set>
+#include <stdexcept>
+#include <vector>
+
 #include "drake/common/drake_assert.h"
+#include "drake/common/text_logging.h"
+#include "drake/systems/framework/cache.h"
+#include "drake/systems/framework/context.h"
+#include "drake/systems/framework/leaf_context.h"
 #include "drake/systems/framework/state.h"
+#include "drake/systems/framework/subvector.h"
 #include "drake/systems/framework/system.h"
-#include "drake/systems/framework/hybrid_context.h"
+#include "drake/systems/framework/system_port_descriptor.h"
 
 namespace drake {
 namespace systems {
+
+template <typename T>
+class HybridAutomatonBuilder;
 
 /// NB: This implents a DTHS which is the easier case to simulate, that is, it
 /// doesn't require any machinery above and beyond that needed for DT systems.
@@ -18,9 +33,10 @@ template <typename T>
 class HybridAutomaton : public System<T> {
  public:
   typedef int ModeId;
-  typedef typename std::pair<std::unique_ptr<System<T>>, ModeId> ModalSubsystem;
-  typedef typename std::pair<const ModalSubsystem<T>*,
-    const ModalSubsystem<T>*> ModalSubsystemPair;
+  typedef typename std::pair<const std::unique_ptr<System<T>>,
+    ModeId> ModalSubsystem;
+  typedef typename std::pair<const ModalSubsystem*,
+    const ModalSubsystem*> ModalSubsystemPair;
 
   ~HybridAutomaton() override {}
 
@@ -43,29 +59,33 @@ class HybridAutomaton : public System<T> {
   // TODO: modify PerformReset.
   // TODO: reset should check whether or not the pre/post contexts are
   // consistent.
+  /*
   std::unique_ptr<Context<T>> CreateDefaultContext() const override {
-    const int num_subsystems = static_cast<int>(modes_.size());
+    const int num_subsystems = static_cast<int>(modal_subsystems_.size());
 
     // Reserve inputs as specified during HybridAutomaton initialization.
-    auto context = std::make_unique<HybridContext<T>>(num_subsystems);
+    // auto context = std::make_unique<Context<T>>(num_subsystems);
 
     // Add each constituent system to the Context.
-    for (int i = 0; i < num_subsystems; ++i) {
-      const System<T>* const sys = sorted_systems_[i];
-      auto subcontext = sys->CreateDefaultContext();
-      auto suboutput = sys->AllocateOutput(*subcontext);
-      context->AddModalSubystem(i, std::move(subcontext), std::move(suboutput));
-    }
+    //for (int i = 0; i < num_subsystems; ++i) {
+    //  auto sys = modal_subsystems_[i];
+    //  auto subcontext = sys->CreateDefaultContext();
+    //  auto suboutput = sys->AllocateOutput(*subcontext);
+    //  context->AddModalSubystem(i, std::move(subcontext),
+    //    std::move(suboutput));
+    //}
 
     // Declare the HybridAutomaton-external inputs.
-    for (const PortIdentifier& id : input_port_ids_) {
-      context->ExportInput(ConvertToContextPortIdentifier(id));
-    }
+    //for (const PortIdentifier& id : input_port_ids_) {
+    //  context->ExportInput(ConvertToContextPortIdentifier(id));
+    //}
 
-    context->MakeState();
+    //context->MakeState();
     return std::unique_ptr<Context<T>>(context.release());
   }
+  */
 
+  /*
   std::unique_ptr<SystemOutput<T>> AllocateOutput(
       const Context<T>& context) const override {
 
@@ -137,6 +157,7 @@ class HybridAutomaton : public System<T> {
                                              Context* context) {
 
   }
+  */
 
   // TODO: add a getter to expose the whole automaton to anyone interested?
 
@@ -145,11 +166,14 @@ class HybridAutomaton : public System<T> {
   /// constructor are obligated to call HybridAutomatonBuilder::BuildInto(this).
   HybridAutomaton() {}
 
+  /*
   void DoPublish(const Context<T>& context) const override {
 
   }
+  */
 
  private:
+  /*
   // TODO: check -- is this all that's needed to register a difference variable?
   template <typename T>
   std::unique_ptr<DifferenceState<T>> AllocateDifferenceState() const {
@@ -160,13 +184,15 @@ class HybridAutomaton : public System<T> {
     xd.push_back(std::make_unique<BasicVector<T>>(1));
     return std::make_unique<DifferenceState<T>>(std::move(xd));
   }
+  */
 
   // A structural outline of a HybridAutomaton, produced by
   // HybridAutomatonBuilder.
   struct ModeTransition {
-    ModalSubsystemPair<T> modal_subsystem_pair;
-    std::vector<SymbolicExpression<T>*> guard;
-    std::vector<Context<T>> reset;
+    ModalSubsystemPair modal_subsystem_pair;
+    //std::vector<SymbolicExpression<T>*> guard;
+    //std::vector<Context<T>> reset;
+
     // TODO: We should no longer be mutating a single context, as was done
     // previously.
   };
@@ -176,12 +202,12 @@ class HybridAutomaton : public System<T> {
     // TODO: do we even need to store the modes??
     // TODO: should this be a map? If so, we lose the label (number) for each
     // instantiated system. If not, we can't use keys.
-    std::vector<ModalSubsystem> modes;
+    std::vector<std::unique_ptr<ModalSubsystem>> modes;
     // A map from the input ports of constituent systems to the output ports
     // on which they depend. This graph is possibly cyclic, but must not
     // contain an algebraic loop.
     // NB: (from note above) here it seems to make more sense as a map.
-    std::map<ModeTransition, int> mode_transitions;
+    std::map<const ModalSubsystemPair, ModeId> mode_transitions;
   };
 
   // Constructs a HybridAutomaton from the StateMachine that a
@@ -195,56 +221,50 @@ class HybridAutomaton : public System<T> {
   // accordingly.
   void Initialize(const StateMachine& state_machine) {
     // The HybridAutomaton must be noninitialized and nonempty.
-    DRAKE_DEMAND(sorted_systems_.empty());
-    DRAKE_DEMAND(!state_machine.sorted_systems.empty());
+    //DRAKE_DEMAND(sorted_systems_.empty());
+    //DRAKE_DEMAND(!state_machine.sorted_systems.empty());
 
     // Copy the data from the state_machine into private member variables.
-    auto mode_transitions_ = state_machine.mode_transitions;
-    auto modes_ = state_machine.modes;
-
-    // Every system must appear in the sort order exactly once.
-    DRAKE_DEMAND(sorted_systems_.size() == sorted_systems_map_.size());
-    // Every port named in the dependency_graph_ must actually exist.
-    DRAKE_ASSERT(PortsAreValid());
-    // The sort order must square with the dependency_graph_.
-    DRAKE_ASSERT(SortOrderIsCorrect());
+    //mode_transitions_ = state_machine.mode_transitions;
+    //modal_subsystems_ = state_machine.modes;
 
     // Add the inputs to the HybridAutomaton topology, and check their
     // invariants.
-    for (const PortIdentifier& id : input_port_ids_) {
-      ExportInput(id);
-    }
-    for (const PortIdentifier& id : output_port_ids_) {
-      ExportOutput(id);
-    }
+    //for (const PortIdentifier& id : input_port_ids_) {
+    //  ExportInput(id);
+    //}
+    //for (const PortIdentifier& id : output_port_ids_) {
+    //  ExportOutput(id);
+    //}
   }
 
   // Returns the index of the given @p sys in the sorted order of this hybrid
   // automaton, or aborts if @p sys is not a member of the hybrid automaton.
-  int GetSystemIndexOrAbort(std::unique_ptr<System<T>> sys) const {
-    auto it = state_machine.modes.find(sys);
-    DRAKE_DEMAND(it != state_machine.modes.end());
-    return it->second;
-  }
+  //int GetSystemIndexOrAbort(std::unique_ptr<System<T>> sys) const {
+  //  auto it = modal_subsystems_.find(sys);
+  //  //DRAKE_DEMAND(it != modal_subsystems_.end());
+  //  return it->second;
+  // }
 
   // HybridAutomaton objects are neither copyable nor moveable.
-  HybridAutomaton(const HybridAutomaton<T>& other) = delete;
-  HybridAutomaton& operator=(const HybridAutomaton<T>& other) = delete;
-  HybridAutomaton(HybridAutomaton<T>&& other) = delete;
-  HybridAutomaton& operator=(HybridAutomaton<T>&& other) = delete;
+  //HybridAutomaton(const HybridAutomaton<T>& other) = delete;
+  //HybridAutomaton& operator=(const HybridAutomaton<T>& other) = delete;
+  //HybridAutomaton(HybridAutomaton<T>&& other) = delete;
+  //HybridAutomaton& operator=(HybridAutomaton<T>&& other) = delete;
 
   // A map from the input ports of constituent systems, to the output ports of
   // the systems on which they depend.
-  std::map<ModeId, ModeId> mode_transitions_;
+  std::map<const ModalSubsystemPair, ModeId> mode_transitions_;
 
   // The Systems in this HybridAutomaton, which are owned by this
   // HybridAutomaton, in the order they were registered.
-  std::vector<std::unique_ptr<ModalSubsystem<T>>> modal_subsystems_;
+  std::vector<std::unique_ptr<ModalSubsystem>> modal_subsystems_;
 
   // TODO(jadecastro): Throw some exception if the number of outputs do not
   // completely align among subsystems. Also require that their names also
   // match?
 
+  friend class HybridAutomatonBuilder<T>;
 };
 
 }  // namespace systems

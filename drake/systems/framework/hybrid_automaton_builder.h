@@ -188,30 +188,6 @@ class HybridAutomatonBuilder {
     return result;
   }
 
-  /// Declares that input port @p dest is connected to output port @p src.
-  void Connect(const SystemPortDescriptor<T>& src,
-               const SystemPortDescriptor<T>& dest) {
-    DRAKE_DEMAND(src.get_face() == kOutputPort);
-    DRAKE_DEMAND(dest.get_face() == kInputPort);
-    PortIdentifier dest_id{dest.get_system(), dest.get_index()};
-    PortIdentifier src_id{src.get_system(), src.get_index()};
-    ThrowIfInputAlreadyWired(dest_id);
-    ThrowIfSystemNotRegistered(src.get_system());
-    ThrowIfSystemNotRegistered(dest.get_system());
-    dependency_graph_[dest_id] = src_id;
-  }
-
-  /// Declares that sole input port on the @p dest system is connected to sole
-  /// output port on the @p src system.  Throws an exception if the sole-port
-  /// precondition is not met (i.e., if @p dest has no input ports, or @p dest
-  /// has more than one input port, or @p src has no output ports, or @p src
-  /// has more than one output port).
-  void Connect(const System<T>& src, const System<T>& dest) {
-    DRAKE_THROW_UNLESS(src.get_num_output_ports() == 1);
-    DRAKE_THROW_UNLESS(dest.get_num_input_ports() == 1);
-    Connect(src.get_output_port(0), dest.get_input_port(0));
-  }
-
   /// Builds the HybridAutomaton that has been described by the calls to
   /// Connect, ExportInput, and ExportOutput. Throws std::logic_error if the
   /// graph is not buildable.
@@ -226,6 +202,7 @@ class HybridAutomatonBuilder {
   /// Produces a state machine that has been described by the calls to
   /// Connect, ExportInput, and ExportOutput. Throws std::logic_error if the
   /// graph is not buildable.
+  /*
   typename HybridAutomaton<T>::StateMachine Compile() const {
     if (modal_subsystems_.size() == 0) {
       throw std::logic_error("Cannot compile an empty HybridAutomatonBuilder.");
@@ -235,6 +212,7 @@ class HybridAutomatonBuilder {
     blueprint.modal_subsystems = modal_subsystems_;
     return state_machine;
   }
+  */
 
   // HybridAutomatonBuilder objects are neither copyable nor moveable.
   HybridAutomatonBuilder(const HybridAutomatonBuilder<T>& other) = delete;

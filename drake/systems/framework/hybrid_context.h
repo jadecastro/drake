@@ -36,9 +36,7 @@ namespace systems {
 template <typename T>
 class HybridContext : public Context<T> {
  public:
-  typedef int SystemIndex;
-  typedef int PortIndex;
-  typedef std::pair<SystemIndex, PortIndex> PortIdentifier;
+  typedef int ModeId;
 
   /// Constructs a HybridContext with a fixed number @p num_subsystems in a
   /// way that allows for dynamic re-sizing during discrete events.
@@ -177,43 +175,6 @@ class HybridContext : public Context<T> {
   State<T>* get_mutable_state() override { return &state_; }
 
  protected:
-  HybridContext<T>* DoClone() const override {
-    DRAKE_ASSERT(contexts_.size() == outputs_.size());
-    const int num_subsystems = static_cast<int>(contexts_.size());
-    HybridContext<T>* clone = new HybridContext(num_subsystems);
-
-    // Clone all the subsystem contexts and outputs.
-    for (int i = 0; i < num_subsystems; ++i) {
-      DRAKE_DEMAND(contexts_[i] != nullptr);
-      DRAKE_DEMAND(outputs_[i] != nullptr);
-      // When a leaf context is cloned, it will clone the data that currently
-      // appears on each of its input ports into a FreestandingInputPort.
-      clone->AddSystem(i, contexts_[i]->Clone(), outputs_[i]->Clone());
-    }
-
-    // Build a superstate over the subsystem contexts.
-    clone->MakeState();
-
-    // Clone the internal graph structure. After this is done, the clone will
-    // still have FreestandingInputPorts at the inputs to the Hybrid itself,
-    // but all of the intermediate nodes will have DependentInputPorts.
-    for (const auto& connection : dependency_graph_) {
-      const PortIdentifier& src = connection.second;
-      const PortIdentifier& dest = connection.first;
-      clone->Connect(src, dest);
-    }
-
-    // Clone the external input structure.
-    for (const PortIdentifier& id : input_ids_) {
-      clone->ExportInput(id);
-    }
-
-    // Make deep copies of everything else using the default copy constructors.
-    *clone->get_mutable_step_info() = this->get_step_info();
-
-    return clone;
-  }
-
   /// Returns the input port at the given @p index, which of course belongs
   /// to the subsystem whose input was exposed at that index.
   const InputPort* GetInputPort(int index) const override {
@@ -235,10 +196,10 @@ class HybridContext : public Context<T> {
 
   // A map from the input ports of constituent systems, to the output ports of
   // the systems on which they depend.
-  std::map<PortIdentifier, PortIdentifier> dependency_graph_;
+  std::map<ModeId, ModeId> mode_transition_;
 
   // The internal state of the System.
-  State<T> state_;
+  ModalSubsystem<T> mode_;
 };
 
 }  // namespace systems
