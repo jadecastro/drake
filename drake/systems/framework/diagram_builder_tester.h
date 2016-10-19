@@ -41,9 +41,15 @@ class DiagramBuilderTester {
   /// @tparam S The type of system to add.
   template<class S>
   std::unique_ptr<S> AddModalSubsystem(std::unique_ptr<S> sys) {
-    ModalSubsystem modal_subsystem;
-    modal_subsystem.first = sys.get();
-    modal_subsystem.second = 0;
+    // Initialize the invariant to True.
+    std::vector<symbolic::Formula> true_invariant;
+    // Initialize the intial conditions to True.
+    std::vector<symbolic::Formula> true_init;
+    true_invariant[0] = symbolic::Formula::True();
+    auto modal_subsystem = std::make_tuple(sys.get(),
+                                           &true_invariant,
+                                           &true_init,
+                                           0);
     modal_subsystems_.push_back(modal_subsystem);
     return std::move(sys);  // TODO: How does ownership work here?
   }

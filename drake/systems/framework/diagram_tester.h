@@ -16,6 +16,8 @@
 #include "drake/systems/framework/subvector.h"
 #include "drake/systems/framework/system.h"
 #include "drake/systems/framework/system_port_descriptor.h"
+#include "drake/common/symbolic_formula.h"
+//#include "drake/common/symbolic_environment.h"
 
 namespace drake {
 namespace systems {
@@ -92,14 +94,21 @@ class DiagramTimeDerivatives : public DiagramContinuousState<T> {
 /// to the input of another. To construct a Diagram, use a DiagramBuilder.
 template <typename T>
 class DiagramTester : public System<T>,
-                public detail::InputPortEvaluatorInterface<T> {
+  public detail::InputPortEvaluatorInterface<T> {
  public:
-                  typedef int ModeId;
-                  typedef std::pair<System<T>*,
-                  int> ModalSubsystem;
-                  //typedef typename std::pair<const ModalSubsystem*,
-                  //const ModalSubsystem*> ModalSubsystemPair;
-  typedef typename std::pair<const System<T>*, int> PortIdentifier;
+    typedef int ModeId;
+    typedef typename std::tuple<
+      // System model.
+      const System<T>*,
+      // Formula representing the invariant for this mode.
+      const std::vector<symbolic::Formula>*,  // TODO: Eigen??
+      // Pair representing the initial conditions for this mode.
+      const std::vector<symbolic::Formula>*,  // TODO: Eigen??
+      // Index for this mode.
+      ModeId> ModalSubsystem;
+    //typedef typename std::pair<const ModalSubsystem*,
+    //const ModalSubsystem*> ModalSubsystemPair;
+    typedef typename std::pair<const System<T>*, int> PortIdentifier;
 
   ~DiagramTester() override {}
 
