@@ -1,5 +1,6 @@
 #pragma once
 
+// TODO: triage this list.
 #include <algorithm>
 #include <functional>
 #include <map>
@@ -7,6 +8,7 @@
 #include <stdexcept>
 #include <vector>
 
+// TODO: triage this list.
 #include "drake/common/drake_assert.h"
 #include "drake/common/text_logging.h"
 #include "drake/systems/framework/cache.h"
@@ -16,6 +18,7 @@
 #include "drake/systems/framework/subvector.h"
 #include "drake/systems/framework/system.h"
 #include "drake/systems/framework/system_port_descriptor.h"
+#include "drake/systems/framework/modal_state.h"
 #include "drake/common/symbolic_formula.h"
 
 namespace drake {
@@ -108,6 +111,16 @@ class ModalSubsystem : public System<T> {
 /// in a directed graph where the vertices are the constituent Systems
 /// themselves, and the edges connect the output of one constituent System
 /// to the input of another. To construct a Diagram, use a DiagramBuilder.
+
+/// Limitations:
+///  1) modal_subsystems can be Diagrams or (Leaf)Systems, but cannot themselves
+/// be HybridAutomata.
+/// TODO: Is there a way to mark systems as being "finalized" such that no
+/// other system type can inherit from it?
+///  2) modal_subsystems do not have to have consistent same state dimensions,
+/// input dimensions, and output dimensions. (really a non-limitation)
+/// TODO: Accommodate this most general case in the first spiral.
+///  3) ....
 template <typename T>
 class HybridAutomaton : public System<T>,
   public detail::InputPortEvaluatorInterface<T> {
@@ -136,6 +149,13 @@ class HybridAutomaton : public System<T>,
     typedef typename std::pair<const System<T>*, int> PortIdentifier;
 
   ~HybridAutomaton() override {}
+
+  ///
+  //symbolic::Formula* get_mutable_invariant(int index) {
+  //  DRAKE_ASSERT(index >= 0 && index < size());
+  //
+  //  return data_[index];
+  //}
 
   /// Returns the list of contained Systems.
   std::vector<const systems::System<T>*> GetSystems() const {

@@ -6,6 +6,8 @@
 #include <stdexcept>
 #include <utility>
 #include <vector>
+#include <iostream>  //needed?
+#include <tuple>  //needed?
 
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_throw.h"
@@ -22,12 +24,22 @@ namespace systems {
   // TODO: Validate the state machine (all registered systems are connected).
   // Note: Simulator should be a secondary priority.
 
-// TODO: I'm not at all positive this needs its own special class...
+/// DiagramBuilder is a factory class for Diagram. It collects the dependency
+/// graph of constituent systems, and topologically sorts them. It is single
+/// use: after calling Build or BuildInto, DiagramBuilder gives up ownership
+/// of the constituent systems, and should therefore be discarded.
+///
+/// A system must be added to the DiagramBuilder with AddSystem before it can
+/// be wired up in any way.
 template <typename T>
-class ModalSubsystemBuilder {
+class HybridAutomatonBuilder {
  public:
-  // TODO: Is it okay for this to be public (also below)?
+  HybridAutomatonBuilder() {}
+  virtual ~HybridAutomatonBuilder() {}
+
+  // TODO: Is it okay for this to be public?
   typedef typename HybridAutomaton<T>::ModalSubsystem ModalSubsystem;
+  typedef typename HybridAutomaton<T>::ModeTransition ModeTransition;
 
   /// Takes ownership of @p system and adds it to the builder. Returns a bare
   /// pointer to the System, which will remain valid for the lifetime of the
@@ -41,7 +53,7 @@ class ModalSubsystemBuilder {
   /// @tparam S The type of system to add.
   template<class S>
   //std::unique_ptr<S> AddModalSubsystem(std::unique_ptr<S> sys) {
-  const ModalSubsystem& AddModalSubsystem(std::unique_ptr<S> sys) {
+  ModalSubsystem* AddModalSubsystem(std::unique_ptr<S> sys) {
     // Initialize the invariant to True.
     // TODO: check if conjunctions can be done via std::vector.
     std::vector<symbolic::Formula> true_invariant;
@@ -54,7 +66,8 @@ class ModalSubsystemBuilder {
       = std::make_tuple(sys.get(), &true_invariant, &true_init, 0);
     modal_subsystems_->push_back(modal_subsystem);
     //return std::move(sys);  // TODO: How does ownership work here?
-    return *modal_subsystem;
+    return &modal_subsystem;
+    // TODO: fix warnings^
   }
   /// Constructs a new system with the given @p args, and adds it to the
   /// builder, which retains ownership. Returns a bare pointer to the System,
@@ -110,37 +123,9 @@ class ModalSubsystemBuilder {
                                          std::forward<Args>(args)...));
   }
 
-  // Getter for the ordered list of modal subsystems.
-  std::vector<ModalSubsystem>& get_modal_subsystems() const {
-    return *modal_subsystems_;
-  };
-
- private:
-  //typedef typename HybridAutomaton<T>::ModalSubsystem ModalSubsystem;
-
-  std::unique_ptr<std::vector<ModalSubsystem>> modal_subsystems_;
- };
-
-/// DiagramBuilder is a factory class for Diagram. It collects the dependency
-/// graph of constituent systems, and topologically sorts them. It is single
-/// use: after calling Build or BuildInto, DiagramBuilder gives up ownership
-/// of the constituent systems, and should therefore be discarded.
-///
-/// A system must be added to the DiagramBuilder with AddSystem before it can
-/// be wired up in any way.
-template <typename T>
-class HybridAutomatonBuilder {
- public:
-  HybridAutomatonBuilder() {}
-  virtual ~HybridAutomatonBuilder() {}
-
-  // TODO: Is it okay for this to be public (also above)?
-  typedef typename HybridAutomaton<T>::ModalSubsystem ModalSubsystem;
-  typedef typename HybridAutomaton<T>::ModeTransition ModeTransition;
-
-  //std::unique_ptr<mode_transition>
-  void AddModeTransition(ModalSubsystem& sys_pre,
-                         ModalSubsystem& sys_post) {
+  ModeTransition*
+  AddModeTransition(ModalSubsystem& sys_pre, ModalSubsystem& sys_post) {
+    // TODO: some validation checks.
     std::pair<ModalSubsystem*,ModalSubsystem*> pair;
     pair.first = &sys_pre;
     pair.second = &sys_post;
@@ -149,15 +134,35 @@ class HybridAutomatonBuilder {
     // Initialize the reset map to True.
     //std::vector<symbolic::Formula> identity_reset;
     //true_reset[0] = symbolic::Formula::True();
-    auto mode_transition = std::make_tuple(&pair, &guard);
+    ModeTransition mode_transition = std::make_tuple(&pair, &guard);
     mode_transitions_->push_back(mode_transition);
-    //return std::move(mode_transition);  // TODO: How does ownership work here?
+    return &mode_transition;  // TODO: should we make use of smart ptrs?
+    // TODO: fix warnings^
+  }
+
+  // A helper for self-transitions.
+  ModeTransition* AddModeTransition(ModalSubsystem& sys) {
+    return this->AddModeTransition(sys, sys);
   }
 
   // Getter for the ordered list of mode transitions.
   std::vector<ModeTransition>& get_mode_transitions() const {
     return *mode_transitions_;
   };
+
+  // TODO: We want something that will yield modalsubsys.PushBackInvariant(...).
+  void AddInvariant(ModalSubsystem* modal_subsystem,
+  symbolic::Formula& new_invariant) const {
+    DRAKE_ASSERT(modal_subsystem != nullptr);
+    // TODO: validate, like in context.
+    //DRAKE_ASSERT_VOID(systems::System<T>::CheckValidContext(*context));
+
+    // Define a pointer to the continuous state in the context.
+    // TODO: cleanup.
+    auto mss = *modal_subsystem;
+    auto mss1 = *std::get<1>(mss);
+    mss1.push_back(new_invariant);
+  }
 
   /// Returns the list of contained Systems.
   std::vector<systems::System<T>*> GetMutableSystems() {
@@ -302,9 +307,8 @@ class HybridAutomatonBuilder {
     state_machine.input_port_ids = input_port_ids_;
     state_machine.output_port_ids = output_port_ids_;
     state_machine.dependency_graph = dependency_graph_;
-    state_machine.sorted_systems = SortSystems();
-    //state_machine.modal_subsystems = modal_subsystems_;
-    //state_machine.mode_transitions = mode_transitions_;
+    state_machine.modal_subsystems = *modal_subsystems_;
+    state_machine.mode_transitions = *mode_transitions_;
     return state_machine;
   }
 
@@ -332,6 +336,9 @@ class HybridAutomatonBuilder {
   // The Systems in this DiagramBuilder, in the order they were registered.
   std::vector<std::unique_ptr<System<T>>> registered_systems_;
 
+  // TODO: map?
+  std::unique_ptr<std::vector<ModalSubsystem>> modal_subsystems_;
+  // TODO: map?
   std::unique_ptr<std::vector<ModeTransition>> mode_transitions_;
 };
 

@@ -7,19 +7,24 @@
 namespace drake {
 namespace bouncing_ball {
 
+
 template <typename T>
 //BouncingBall<T>::BouncingBall(const ModalSubsystem& mss) :
 //  systems::HybridAutomaton<T>(), ball_subsystem_(mss) {
 BouncingBall<T>::BouncingBall() : systems::HybridAutomaton<T>() {
+//BouncingBall<T>::BouncingBall(const ModalSubsystem& mss) :
+//  ball_subsystem_(mss) {
 
-  systems::ModalSubsystemBuilder<T> modal_subsystem_builder;
+  systems::HybridAutomatonBuilder<T> builder;
 
-  ball_subsystem_ = modal_subsystem_builder.AddModalSubsystem(
+  ball_subsystem_ = builder.AddModalSubsystem(
     std::unique_ptr<Ball<T>>());
-  //ball_.add_invariant(int 5);  // test the invariant-addition approach by
-  // simply pushing back an int.
+  symbolic::Formula invariant_formula = symbolic::Formula::True();
+  builder.AddInvariant(ball_subsystem_, invariant_formula);
 
-  systems::HybridAutomatonBuilder<T> hybrid_automaton_builder;
+  ball_to_ball_ = builder.AddModeTransition(*ball_subsystem_);
+  // TODO: add the guard.
+  // TODO: add the reset map.
 
 }
 
