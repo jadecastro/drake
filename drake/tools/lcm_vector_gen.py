@@ -135,6 +135,7 @@ VECTOR_HH_PREAMBLE = """
 
 #include <Eigen/Core>
 
+#include "drake/common/drake_export.h"
 #include "drake/systems/framework/basic_vector.h"
 
 %(opening_namespace)s
