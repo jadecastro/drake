@@ -174,34 +174,14 @@ class HybridAutomatonBuilder {
     return result;
   }
 
-  /// Declares that the given @p input port of a constituent system is an input
-  /// to the entire Diagram.
-  void ExportInput(const SystemPortDescriptor<T>& input) {
-    DRAKE_DEMAND(input.get_face() == kInputPort);
-    PortIdentifier id{input.get_system(), input.get_index()};
-    ThrowIfInputAlreadyWired(id);
-    ThrowIfSystemNotRegistered(input.get_system());
-    input_port_ids_.push_back(id);
-    diagram_input_set_.insert(id);
-  }
-
-  /// Declares that the given @p output port of a constituent system is an
-  /// output of the entire diagram.
-  void ExportOutput(const SystemPortDescriptor<T>& output) {
-    DRAKE_DEMAND(output.get_face() == kOutputPort);
-    ThrowIfSystemNotRegistered(output.get_system());
-    output_port_ids_.push_back(
-        PortIdentifier{output.get_system(), output.get_index()});
-  }
-
   /// Builds the Diagram that has been described by the calls to Connect,
   /// ExportInput, and ExportOutput. Throws std::logic_error if the graph is
   /// not buildable.
   std::unique_ptr<HybridAutomaton<T>> Build() {
     std::unique_ptr<HybridAutomaton<T>>
-      diagram(new HybridAutomaton<T>(Compile()));
-    diagram->Own(std::move(registered_systems_));
-    return std::move(diagram);
+      hybrid_automaton(new HybridAutomaton<T>(Compile()));
+    hybrid_automaton->Own(std::move(registered_systems_));
+    return std::move(hybrid_automaton);
   }
 
   /// Configures @p target to have the topology that has been described by
@@ -221,79 +201,8 @@ class HybridAutomatonBuilder {
   //typedef typename HybridAutomaton<T>::ModeTransition ModeTransition;
   typedef typename HybridAutomaton<T>::PortIdentifier PortIdentifier;
 
-  void ThrowIfInputAlreadyWired(const PortIdentifier& id) const {
-    if (dependency_graph_.find(id) != dependency_graph_.end() ||
-        diagram_input_set_.find(id) != diagram_input_set_.end()) {
-      throw std::logic_error("Input port is already wired.");
-    }
-  }
-
   void ThrowIfSystemNotRegistered(const System<T>* system) const {
     DRAKE_THROW_UNLESS(systems_.find(system) != systems_.end());
-  }
-
-  // Runs Kahn's algorithm to compute the topological sort order of the
-  // Systems in the graph. If EvalOutput is called on each System in
-  // the order that is returned, each System's inputs will be valid by
-  // the time its EvalOutput is called.
-  //
-  // TODO(david-german-tri): Update this sort to operate on individual
-  // output ports once #2890 is resolved.
-  //
-  // TODO(david-german-tri, bradking): Consider using functional form to
-  // produce a separate execution order for each output of the Diagram.
-  std::vector<const System<T>*> SortSystems() const {
-    std::vector<const System<T>*> sorted_systems;
-
-    // Build two maps:
-    // A map from each system, to every system that depends on it.
-    std::map<const System<T>*, std::set<const System<T>*>> dependents;
-    // A map from each system, to every system on which it depends.
-    std::map<const System<T>*, std::set<const System<T>*>> dependencies;
-
-    for (const auto& connection : dependency_graph_) {
-      const System<T>* src = connection.second.first;
-      const System<T>* dest = connection.first.first;
-      // If a system is not direct-feedthrough, the connections to its inputs
-      // are not relevant for detecting algebraic loops or determining
-      // execution order.
-      //
-      // TODO(david-german-tri): Make direct-feedthrough resolution more
-      // fine-grained once #3170 is resolved.
-      if (dest->has_any_direct_feedthrough()) {
-        dependents[src].insert(dest);
-        dependencies[dest].insert(src);
-      }
-    }
-
-    // Find the systems that have no direct-feedthrough inputs.
-    std::vector<const System<T>*> nodes_with_in_degree_zero;
-    for (const auto& system : registered_systems_) {
-      if (dependencies.find(system.get()) == dependencies.end()) {
-        nodes_with_in_degree_zero.push_back(system.get());
-      }
-    }
-
-    while (!nodes_with_in_degree_zero.empty()) {
-      // Pop a node with in-degree zero.
-      const System<T>* node = nodes_with_in_degree_zero.back();
-      nodes_with_in_degree_zero.pop_back();
-
-      // Push the node onto the sorted output.
-      sorted_systems.push_back(node);
-
-      for (const System<T>* dependent : dependents[node]) {
-        dependencies[dependent].erase(node);
-        if (dependencies[dependent].empty()) {
-          nodes_with_in_degree_zero.push_back(dependent);
-        }
-      }
-    }
-
-    if (sorted_systems.size() != systems_.size()) {
-      throw std::logic_error("Algebraic loop detected in DiagramBuilder.");
-    }
-    return sorted_systems;
   }
 
   /// Produces the StateMachine that has been described by the calls to
