@@ -215,7 +215,6 @@ class HybridAutomatonBuilder {
     typename HybridAutomaton<T>::StateMachine state_machine;
     state_machine.input_port_ids = input_port_ids_;
     state_machine.output_port_ids = output_port_ids_;
-    state_machine.dependency_graph = dependency_graph_;
     state_machine.modal_subsystems = *modal_subsystems_;
     state_machine.mode_transitions = *mode_transitions_;
     return state_machine;
@@ -234,10 +233,6 @@ class HybridAutomatonBuilder {
 
   // For fast membership queries: has this input port already been declared?
   std::set<PortIdentifier> diagram_input_set_;
-
-  // A map from the input ports of constituent systems, to the output ports of
-  // the systems on which they depend.
-  std::map<PortIdentifier, PortIdentifier> dependency_graph_;
 
   // The unsorted set of Systems in this DiagramBuilder. Used for fast
   // membership queries.

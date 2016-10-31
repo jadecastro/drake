@@ -13,7 +13,7 @@
 #include "drake/common/text_logging.h"
 #include "drake/systems/framework/cache.h"
 #include "drake/systems/framework/hybrid_automaton_context.h"
-#include "drake/systems/framework/diagram_context.h"
+//#include "drake/systems/framework/diagram_context.h"
 #include "drake/systems/framework/leaf_context.h"
 #include "drake/systems/framework/state.h"
 #include "drake/systems/framework/subvector.h"
@@ -183,7 +183,7 @@ class HybridAutomaton : public System<T> {
   /// Returns true if any modal subsystem has direct feedthrough.
   bool has_any_direct_feedthrough() const override {
     for (const auto& modal_subsystem : modal_subsystems_) {
-      const System<T>* system = std::get<0>(modal_subsystem);
+      auto system = get_subsystem(modal_subsystem);
       if (!system->has_any_direct_feedthrough()) {
         return false;
       }
@@ -198,9 +198,9 @@ class HybridAutomaton : public System<T> {
 
     // Add each constituent system to the Context in the correct order.
     for (ModeId i = 0; i < num_systems; ++i) {
-      const System<T>* const sys = std::get<0>(modal_subsystems_[i]);
-      auto modal_context = sys->CreateDefaultContext();
-      auto modal_output = sys->AllocateOutput(*modal_context);
+      auto system = get_subsystem(modal_subsystems_[i]);
+      auto modal_context = system->CreateDefaultContext();
+      auto modal_output = system->AllocateOutput(*modal_context);
       context->AddModalSubsystem(i,
                           std::move(modal_context), std::move(modal_output));
     }
@@ -248,7 +248,8 @@ class HybridAutomaton : public System<T> {
 
   std::unique_ptr<ContinuousState<T>> AllocateTimeDerivatives() const override {
     std::vector<std::unique_ptr<ContinuousState<T>>> sub_derivatives;
-    for (const System<T>* const system : sorted_systems_) {
+    for (const ModalSubsystem modal_subsystem : modal_subsystems_) {
+      auto system = get_subsystem(modal_subsystem);
       sub_derivatives.push_back(system->AllocateTimeDerivatives());
     }
     return std::unique_ptr<ContinuousState<T>>(
@@ -265,14 +266,15 @@ class HybridAutomaton : public System<T> {
         dynamic_cast<DiagramContinuousState<T>*>(derivatives);
     DRAKE_DEMAND(diagram_derivatives != nullptr);
     const int n = diagram_derivatives->get_num_substates();
-    DRAKE_DEMAND(static_cast<int>(sorted_systems_.size()) == n);
 
     // Evaluate the derivatives of each constituent system.
     for (int i = 0; i < n; ++i) {
-      const Context<T>* subcontext = diagram_context->GetSubsystemContext(i);
+      const Context<T>* subcontext
+        = diagram_context->GetSubsystemContext(context);
       ContinuousState<T>* subderivatives =
           diagram_derivatives->get_mutable_substate(i);
-      sorted_systems_[i]->EvalTimeDerivatives(*subcontext, subderivatives);
+      auto system = get_subsystem(modal_subsystems_[i]);
+      system->EvalTimeDerivatives(*subcontext, subderivatives);
     }
   }
 
@@ -295,9 +297,9 @@ class HybridAutomaton : public System<T> {
       = dynamic_cast<const HybridAutomatonContext<T>*>(&context);
     DRAKE_DEMAND(diagram_context != nullptr);
 
-    for (const System<T>* const system : sorted_systems_) {
-      const int i = GetSystemIndexOrAbort(system);
-      system->Publish(*diagram_context->GetSubsystemContext(i));
+    for (const ModalSubsystem modal_subsystem : modal_subsystems_) {
+      auto system = get_subsystem(modal_subsystem);
+      system->Publish(*diagram_context->GetSubsystemContext(context));
     }
   }
 
@@ -308,18 +310,8 @@ class HybridAutomaton : public System<T> {
     std::vector<PortIdentifier> input_port_ids;
     // The ordered subsystem ports that are outputs of the entire diagram.
     std::vector<PortIdentifier> output_port_ids;
-    // A map from the input ports of constituent systems to the output ports
-    // on which they depend. This graph is possibly cyclic, but must not
-    // contain an algebraic loop.
-    std::map<PortIdentifier, PortIdentifier> dependency_graph;
-    // A list of the systems in the dependency graph in a valid, sorted
-    // execution order, such that if EvalOutput is called on each system in
-    // succession, every system will have valid inputs by the time its turn
-    // comes.
-    std::vector<const System<T>*> sorted_systems;
 
     std::vector<ModalSubsystem> modal_subsystems;
-
     std::vector<ModeTransition> mode_transitions;
 
   };
@@ -337,40 +329,22 @@ class HybridAutomaton : public System<T> {
   // calling function?
   void Initialize(const StateMachine& state_machine) {
     // The Diagram must not already be initialized.
-    DRAKE_DEMAND(sorted_systems_.empty());
-    // The initialization must be nontrivial.
-    DRAKE_DEMAND(!state_machine.sorted_systems.empty());
+    DRAKE_DEMAND(modal_subsystems_.empty());
 
     // Copy the data from the state_machine into private member variables.
-    dependency_graph_ = state_machine.dependency_graph;
-    sorted_systems_ = state_machine.sorted_systems;
     input_port_ids_ = state_machine.input_port_ids;
     output_port_ids_ = state_machine.output_port_ids;
     //modal_subsystems_ = state_machine.modal_subsystems;
-
-    // Generate a map from the System pointer to its index in the sort order.
-    for (int i = 0; i < static_cast<int>(sorted_systems_.size()); ++i) {
-      sorted_systems_map_[sorted_systems_[i]] = i;
-    }
-
-    // Every system must appear in the sort order exactly once.
-    DRAKE_DEMAND(sorted_systems_.size() == sorted_systems_map_.size());
   }
 
   // Takes ownership of the @p registered_systems from DiagramBuilder.
+
   // TODO: need?
   void Own(std::vector<std::unique_ptr<System<T>>> registered_systems) {
     // We must be given something to own.
     DRAKE_DEMAND(!registered_systems.empty());
     // We must not already own any subsystems.
     DRAKE_DEMAND(registered_systems_.empty());
-    // The subsystems we are being given to own must be exactly the set of
-    // subsystems for which we have an execution order.
-    DRAKE_DEMAND(registered_systems.size() == sorted_systems_.size());
-    for (const auto& system : registered_systems) {
-      const auto it = sorted_systems_map_.find(system.get());
-      DRAKE_DEMAND(it != sorted_systems_map_.end());
-    }
     // All of those checks having passed, take ownership of the subsystems.
     registered_systems_ = std::move(registered_systems);
     // Inform the constituent system that it's bound to this Diagram.
@@ -381,35 +355,16 @@ class HybridAutomaton : public System<T> {
     //}
   }
 
-  // Returns the index of the given @p sys in the sorted order of this diagram,
-  // or aborts if @p sys is not a member of the diagram.
-  // TODO: deprecate this.
-  int GetSystemIndexOrAbort(const System<T>* sys) const {
-    auto it = sorted_systems_map_.find(sys);
-    DRAKE_DEMAND(it != sorted_systems_map_.end());
-    return it->second;
-  }
-
-  // Returns the index of the given @p ModalSubsystem
+  // Returns the index of the given @p ModalSubsystem.
   ModeId GetModeId(const ModalSubsystem* sys) const {
     auto pos = find(modal_subsystems_.begin(), modal_subsystems_.end(), *sys);
     DRAKE_DEMAND(pos != modal_subsystems_.end());
     return std::distance(modal_subsystems_.begin(), pos);
   }
 
-  // Converts a PortIdentifier to a
-  // HybridAutomatonContext::PortIdentifier.  The
-  // HybridAutomatonContext::PortIdentifier contains the index of the
-  // System in the sorted order of the diagram, instead of an actual
-  // pointer to the System.
-  // TODO: deprecate this.
-  typename HybridAutomatonContext<T>::PortIdentifier
-    ConvertToContextPortIdentifier(
-      const PortIdentifier& id) const {
-    typename HybridAutomatonContext<T>::PortIdentifier output;
-    output.first = GetSystemIndexOrAbort(id.first);
-    output.second = id.second;
-    return output;
+  // Returns the system of the given @p ModalSubsystem.
+  const System<T>* get_subsystem(const ModalSubsystem& modal_subsystem) const {
+    return std::get<0>(modal_subsystem);
   }
 
   // Sets up the OutputPort pointers in @p output to point to the subsystem
@@ -426,9 +381,8 @@ class HybridAutomaton : public System<T> {
       // For each configured output port ID, obtain from the
       // HybridAutomatonContext the actual OutputPort that produces
       // it.
-      const int sys_index = GetSystemIndexOrAbort(id.first);
       const int port_index = id.second;
-      SystemOutput<T>* subsystem_output = context.GetSubsystemOutput(sys_index);
+      SystemOutput<T>* subsystem_output = context.GetSubsystemOutput(context);
       OutputPort* output_port = subsystem_output->get_mutable_port(port_index);
 
       // Then, put a pointer to that OutputPort in the DiagramOutput.
@@ -441,6 +395,7 @@ class HybridAutomaton : public System<T> {
   /// method in order to pass their constituent subsystems the
   /// apropriate subcontext. Aborts if @p subsystem is not actually a
   /// subsystem of this diagram.
+
   // TODO: need?
   Context<T>* GetMutableSubsystemContext(Context<T>* context,
                                const ModalSubsystem* modal_subsystem) const {
@@ -449,8 +404,9 @@ class HybridAutomaton : public System<T> {
     auto modal_context
       = dynamic_cast<HybridAutomatonContext<T>*>(context);
     DRAKE_DEMAND(modal_context != nullptr);
-    const ModeId id = GetModeId(modal_subsystem);
-    return modal_context->GetMutableSubsystemContext(id);
+    // const ModeId id = GetModeId(modal_subsystem);
+    return modal_context->GetMutableSubsystemContext(*context);
+    // TODO: isn't dereferencing args bad practice? -- check.
   }
 
   /// Retrieves the state for a particular subsystem from the context
@@ -460,6 +416,7 @@ class HybridAutomaton : public System<T> {
   ///
   /// TODO(david-german-tri): Provide finer-grained accessors for
   /// finer-grained invalidation.
+
   // TODO: need?
   State<T>* GetMutableSubsystemState(Context<T>* context,
                            const ModalSubsystem* modal_subsystem) const {
@@ -474,20 +431,11 @@ class HybridAutomaton : public System<T> {
   HybridAutomaton(HybridAutomaton<T>&& other) = delete;
   HybridAutomaton& operator=(HybridAutomaton<T>&& other) = delete;
 
-  // A map from the input ports of constituent systems, to the output ports of
-  // the systems on which they depend.
-  std::map<PortIdentifier, PortIdentifier> dependency_graph_;
-
-  // The topologically sorted list of Systems in this Diagram.
-  std::vector<const System<T>*> sorted_systems_;
-
   // The Systems in this Diagram, which are owned by this Diagram, in the order
   // they were registered.
-  std::vector<std::unique_ptr<System<T>>> registered_systems_;
 
-  // For fast conversion queries: what is the index of this System in the
-  // sorted order?
-  std::map<const System<T>*, int> sorted_systems_map_;
+  // TODO: deprecate.
+  std::vector<std::unique_ptr<System<T>>> registered_systems_;
 
   // The ordered inputs and outputs of this Diagram.
   std::vector<PortIdentifier> input_port_ids_;
