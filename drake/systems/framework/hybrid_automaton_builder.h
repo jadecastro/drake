@@ -56,14 +56,17 @@ class HybridAutomatonBuilder {
   ModalSubsystem* AddModalSubsystem(std::unique_ptr<S> sys) {
     // Initialize the invariant to True.
     // TODO: check if conjunctions can be done via std::vector.
-    std::vector<symbolic::Formula> true_invariant;
-    true_invariant[0] = symbolic::Formula::True();
+    // TODO: Specialize the type for symbolic::Formula as a container
+    // class to ensure that the variables used are consistent with the
+    // underlying state vector for a given subsystem.
+    std::vector<symbolic::Formula> invariant_function;
+    invariant_function[0] = symbolic::Formula::True();
     // Initialize the intial conditions to True.
-    std::vector<symbolic::Formula> true_init;
-    true_init[0] = symbolic::Formula::True();
+    std::vector<symbolic::Formula> init_function;
+    init_function[0] = symbolic::Formula::True();
     // Populate a ModalSubsystem
     ModalSubsystem modal_subsystem
-      = std::make_tuple(sys.get(), &true_invariant, &true_init, 0);
+      = std::make_tuple(sys.get(), &invariant_function, &init_function, 0);
     modal_subsystems_->push_back(modal_subsystem);
     //return std::move(sys);  // TODO: How does ownership work here?
     return &modal_subsystem;

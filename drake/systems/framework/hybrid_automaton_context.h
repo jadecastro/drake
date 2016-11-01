@@ -48,9 +48,9 @@ class HybridAutomatonContext : public Context<T> {
     // System model.
     const System<T>*,
     // Formula representing the invariant for this mode.
-    const std::vector<symbolic::Formula>*,  // TODO: Eigen??
+    const std::vector<symbolic::Formula>*,  // TODO: std::list??
     // Formula representing the initial conditions for this mode.
-    const std::vector<symbolic::Formula>*,  // TODO: Eigen??
+    const std::vector<symbolic::Formula>*,  // TODO: std::list??
     // Index for this mode.
     ModeId> ModalSubsystem;
 
@@ -69,12 +69,14 @@ class HybridAutomatonContext : public Context<T> {
   void AddModalSubsystem(ModeId id,
                          std::unique_ptr<Context<T>> context,
                          std::unique_ptr<SystemOutput<T>> output) {
-    DRAKE_DEMAND(id <= contexts_.size() && contexts_.size() == outputs_.size());
+    //DRAKE_DEMAND(id <= contexts_.size() && contexts_.size() == outputs_.size());
+    // TODO: fix gcc-4.9 errors^
     DRAKE_DEMAND(contexts_[id] == nullptr);
     DRAKE_DEMAND(outputs_[id] == nullptr);
     context->set_parent(this);
     contexts_[id] = std::move(context);
     outputs_[id] = std::move(output);
+    symbolic_states_[id] = std::move();
 
     // Create a state for this particular mode @p id.
     MakeHybridAutomatonState(id);
@@ -210,6 +212,11 @@ class HybridAutomatonContext : public Context<T> {
     //EXPECT_EQ(1, context.get_mutable_modal_state()->size());
     // ^ compiler no likey?
     return context.template get_modal_state<ModeId>(0);
+  }
+
+  unique_ptr<symbolic::Variable>
+  MakeSymbolicVariableFromState() {
+    
   }
 
   std::vector<std::vector<std::unique_ptr<InputPort>>> inputs_;

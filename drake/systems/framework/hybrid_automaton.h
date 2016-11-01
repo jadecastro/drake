@@ -21,6 +21,7 @@
 #include "drake/systems/framework/system_port_descriptor.h"
 #include "drake/systems/framework/modal_state.h"
 #include "drake/common/symbolic_formula.h"
+#include "drake/common/symbolic_environment.h"
 
 namespace drake {
 namespace systems {
@@ -132,34 +133,34 @@ class ModalSubsystem : public System<T> {
 template <typename T>
 class HybridAutomaton : public System<T> {
  public:
-    typedef int ModeId;
+  typedef int ModeId;
 
-    // TODO: Should we have fields of ModalSubsystem in System<T> instead?
-    // Pro: Tighter coupling between System and its attributes.
-    // Con: These attributes are really a property of hybrid automata and
-    //   are (mostly) meaningless on a standalone basis.
-    typedef typename std::tuple<
-      // System model.
-      const System<T>*,
-      // Formula representing the invariant for this mode.
-      const std::vector<symbolic::Formula>*,  // TODO: Eigen??
-      // Formula representing the initial conditions for this mode.
-      const std::vector<symbolic::Formula>*,  // TODO: Eigen??
-      // Index for this mode.
-      ModeId> ModalSubsystem;
+  // TODO: Should we have fields of ModalSubsystem in System<T> instead?
+  // Pro: Tighter coupling between System and its attributes.
+  // Con: These attributes are really a property of hybrid automata and
+  //   are (mostly) meaningless on a standalone basis.
+  typedef typename std::tuple<
+    // System model.
+    const System<T>*,
+    // Formula representing the invariant for this mode.
+    const std::vector<symbolic::Formula>*,  // TODO: Eigen??
+    // Formula representing the initial conditions for this mode.
+    const std::vector<symbolic::Formula>*,  // TODO: Eigen??
+    // Index for this mode.
+    ModeId> ModalSubsystem;
 
-    typedef typename std::tuple<
-      // Modal subsystem pair.
-      const std::pair<ModalSubsystem*, ModalSubsystem*>*,  //TODO: nested ptrs?
-      // Formula representing the guard for this transition.
-      const std::vector<symbolic::Formula>*> ModeTransition;  // TODO: Eigen??
-      // Formula representing the reset map for this transition.
-      // TODO: Do we want a formula with limited symantics here, or something?
-      //const std::vector<symbolic::Formula>*
+  typedef typename std::tuple<
+    // Modal subsystem pair.
+    const std::pair<ModalSubsystem*, ModalSubsystem*>*,  //TODO: nested ptrs?
+    // Formula representing the guard for this transition.
+    const std::vector<symbolic::Formula>*> ModeTransition;  // TODO: Eigen??
+  // Formula representing the reset map for this transition.
+  // TODO: Do we want a formula with limited symantics here, or something?
+  //const std::vector<symbolic::Formula>*
 
-    //typedef typename std::pair<const ModalSubsystem*,
-    //const ModalSubsystem*> ModalSubsystemPair;
-    typedef typename std::pair<const System<T>*, int> PortIdentifier;
+  //typedef typename std::pair<const ModalSubsystem*,
+  //const ModalSubsystem*> ModalSubsystemPair;
+  typedef typename std::pair<const System<T>*, int> PortIdentifier;
 
   ~HybridAutomaton() override {}
 
@@ -285,6 +286,23 @@ class HybridAutomaton : public System<T> {
   // TODO: need?
   void GetPath(std::stringstream* output) const override {
     return System<T>::GetPath(output);
+  }
+
+  /// ======= Hybrid Automaton Execution Methods ======
+  /// Evaluate the guard at the current valuation of the state vector.
+  template <typename T>
+  T EvalGuard(const systems::Context<T>& context) const {
+    DRAKE_ASSERT_VOID(systems::System<T>::CheckValidContext(context));
+    // TODO: add ^this check to all other context-consuming methods as well.
+
+    // Evaluate the guard function.
+    const systems::VectorBase<T>& state =
+      context.get_continuous_state_vector();
+
+    // The guard is satisfied (returns a non-positive value) when
+    // the ball's position is less than or equal to zero and its
+    // velocity is non-positive.
+    return ;
   }
 
  protected:
