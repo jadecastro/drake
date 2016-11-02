@@ -37,7 +37,6 @@ class HybridAutomatonBuilder {
   HybridAutomatonBuilder() {}
   virtual ~HybridAutomatonBuilder() {}
 
-  // TODO: Is it okay for this to be public?
   typedef typename HybridAutomaton<T>::ModalSubsystem ModalSubsystem;
   typedef typename HybridAutomaton<T>::ModeTransition ModeTransition;
 

@@ -306,8 +306,7 @@ class HybridAutomaton : public System<T> {
     // TODO: add ^this check to all other context-consuming methods as well.
 
     // Evaluate the guard function.
-    const systems::VectorBase<T>& state =
-      context.get_continuous_state_vector();
+    const systems::VectorBase<T>& state = context.get_continuous_state_vector();
     symbolic::Environment state_env;
     for (int i = 0; i < state.size(); i++) {
       //if ( state[i] == double ) {
@@ -327,6 +326,49 @@ class HybridAutomaton : public System<T> {
     // the ball's position is less than or equal to zero and its
     // velocity is non-positive.
     return (invariant_formula.at(0)).Evaluate(state_env);
+  }
+
+  // ====== Accessors ======
+
+  /// Returns the subcontext that corresponds to the moda_subsystem.
+  /// Classes inheriting from HybridAutomaton need access to this
+  /// method in order to pass their constituent subsystems the
+  /// apropriate subcontext.
+
+  // TODO: need?
+
+  Context<T>* GetMutableSubsystemContext(Context<T>* context,
+                               const ModalSubsystem* modal_subsystem) const {
+    DRAKE_DEMAND(context != nullptr);
+    DRAKE_DEMAND(modal_subsystem != nullptr);
+    auto modal_context
+      = dynamic_cast<HybridAutomatonContext<T>*>(context);
+    DRAKE_DEMAND(modal_context != nullptr);
+    // const ModeId id = get_mode_id(modal_subsystem);
+    return modal_context->GetMutableSubsystemContext(*context);
+    // TODO: isn't dereferencing args bad practice? -- check.
+  }
+
+  /// Retrieves the state for a particular modal_subsystem.
+
+  // TODO: need?
+  State<T>* GetMutableSubsystemState(Context<T>* context,
+                           const ModalSubsystem* modal_subsystem) const {
+    Context<T>* subcontext
+      = GetMutableSubsystemContext(context, modal_subsystem);
+    return subcontext->get_mutable_state();
+  }
+
+  // Returns the index of the given @p ModalSubsystem.
+  ModeId get_mode_id(const ModalSubsystem* sys) const {
+    auto pos = find(modal_subsystems_.begin(), modal_subsystems_.end(), *sys);
+    DRAKE_DEMAND(pos != modal_subsystems_.end());
+    return std::distance(modal_subsystems_.begin(), pos);
+  }
+
+  // Returns the system of the given @p ModalSubsystem.
+  const System<T>* get_subsystem(const ModalSubsystem& modal_subsystem) const {
+    return std::get<0>(modal_subsystem);
   }
 
  protected:
@@ -395,18 +437,6 @@ class HybridAutomaton : public System<T> {
     //}
   }
 
-  // Returns the index of the given @p ModalSubsystem.
-  ModeId get_mode_id(const ModalSubsystem* sys) const {
-    auto pos = find(modal_subsystems_.begin(), modal_subsystems_.end(), *sys);
-    DRAKE_DEMAND(pos != modal_subsystems_.end());
-    return std::distance(modal_subsystems_.begin(), pos);
-  }
-
-  // Returns the system of the given @p ModalSubsystem.
-  const System<T>* get_subsystem(const ModalSubsystem& modal_subsystem) const {
-    return std::get<0>(modal_subsystem);
-  }
-
   // Sets up the OutputPort pointers in @p output to point to the subsystem
   // outputs, found in @p context.
   void ExposeSubsystemOutputs(const HybridAutomatonContext<T>& context,
@@ -428,35 +458,6 @@ class HybridAutomaton : public System<T> {
       // Make a pointer to the ith OutputPort.
       (*output->get_mutable_ports())[i] = output_port;
     }
-  }
-
-  /// Returns the subcontext that corresponds to the moda_subsystem.
-  /// Classes inheriting from HybridAutomaton need access to this
-  /// method in order to pass their constituent subsystems the
-  /// apropriate subcontext.
-
-  // TODO: need?
-
-  Context<T>* GetMutableSubsystemContext(Context<T>* context,
-                               const ModalSubsystem* modal_subsystem) const {
-    DRAKE_DEMAND(context != nullptr);
-    DRAKE_DEMAND(modal_subsystem != nullptr);
-    auto modal_context
-      = dynamic_cast<HybridAutomatonContext<T>*>(context);
-    DRAKE_DEMAND(modal_context != nullptr);
-    // const ModeId id = get_mode_id(modal_subsystem);
-    return modal_context->GetMutableSubsystemContext(*context);
-    // TODO: isn't dereferencing args bad practice? -- check.
-  }
-
-  /// Retrieves the state for a particular modal_subsystem.
-
-  // TODO: need?
-  State<T>* GetMutableSubsystemState(Context<T>* context,
-                           const ModalSubsystem* modal_subsystem) const {
-    Context<T>* subcontext
-      = GetMutableSubsystemContext(context, modal_subsystem);
-    return subcontext->get_mutable_state();
   }
 
   // HybridAutomaton objects are neither copyable nor moveable.
