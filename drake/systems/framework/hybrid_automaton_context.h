@@ -14,7 +14,6 @@
 #include "drake/systems/framework/diagram_continuous_state.h"
 #include "drake/systems/framework/input_port_evaluator_interface.h"
 #include "drake/systems/framework/state.h"
-//#include "drake/systems/framework/supervector.h"
 #include "drake/systems/framework/system_input.h"
 #include "drake/systems/framework/system_output.h"
 #include "drake/systems/framework/modal_state.h"
@@ -26,11 +25,11 @@ namespace systems {
 /// The HybridAutomatonContext is a container for all of the data
 /// necessary to uniquely determine the computations performed by a
 /// HybridAutomaton. Specifically, a HybridAutomatonContext contains
-/// contexts and outputs for all the constituent Systems, wired up as
-/// specified by calls to `HybridAutomatonContext::Connect`.
+/// contexts and outputs for all modal subsystems in the finite-state
+/// machine.
 ///
-/// In the context, the size of the context vector may change, as can the inputs
-/// and outputs.
+/// In the context, the size of the state vector may change, but the
+/// inputs and outputs must be of fixed size.
 ///
 /// In general, users should not need to interact with a
 /// HybridAutomatonContext directly. Use the accessors on Hybrid
@@ -76,7 +75,7 @@ class HybridAutomatonContext : public Context<T> {
     context->set_parent(this);
     contexts_[id] = std::move(context);
     outputs_[id] = std::move(output);
-    symbolic_states_[id] = std::move();
+    //symbolic_states_[id] = std::move();
 
     // Create a state for this particular mode @p id.
     MakeHybridAutomatonState(id);
@@ -107,7 +106,6 @@ class HybridAutomatonContext : public Context<T> {
   SystemOutput<T>* GetSubsystemOutput(const Context<T>& context) const {
     const int num_outputs = static_cast<int>(outputs_.size());
     ModeId id = this->get_mode_id(context);
-    //ModeId id = 1;
     DRAKE_DEMAND(id >= 0 && id < num_outputs);
     DRAKE_DEMAND(outputs_[id] != nullptr);
     return outputs_[id].get();
@@ -116,11 +114,9 @@ class HybridAutomatonContext : public Context<T> {
   /// Returns the context structure for a given constituent system @p
   /// index.  Aborts if @p index is out of bounds, or if no system has
   /// been added to the HybridAutomatonContext at that index.
-  /// TODO(david-german-tri): Rename to get_subsystem_context.
   const Context<T>* GetSubsystemContext(const Context<T>& context) const {
     const int num_contexts = static_cast<int>(contexts_.size());
-    //ModeId id = this->get_mode_id(context);
-    ModeId id = 1;
+    ModeId id = this->get_mode_id(context);
     DRAKE_DEMAND(id >= 0 && id < num_contexts);
     DRAKE_DEMAND(contexts_[id] != nullptr);
     return contexts_[id].get();
@@ -129,11 +125,9 @@ class HybridAutomatonContext : public Context<T> {
   /// Returns the context structure for a given subsystem @p index.
   /// Aborts if @p index is out of bounds, or if no system has been
   /// added to the HybridAutomatonContext at that index.
-  /// TODO(david-german-tri): Rename to get_mutable_subsystem_context.
   Context<T>* GetMutableSubsystemContext(const Context<T>& context) {
     const int num_contexts = static_cast<int>(contexts_.size());
-    //ModeId id = this->get_mode_id(context);
-    ModeId id = 1;
+    ModeId id = this->get_mode_id(context);
     // TODO: needs mode, which is incompatible with `System` API!!
     DRAKE_DEMAND(id >= 0 && id < num_contexts);
     DRAKE_DEMAND(contexts_[id] != nullptr);
@@ -141,7 +135,7 @@ class HybridAutomatonContext : public Context<T> {
   }
 
   /// Recursively sets the time on this context and all subcontexts.
-  // TODO: should we only update time for the current active subsystem?
+  // TODO: should we only advance time for the current active subsystem?
   void set_time(const T& time_sec) override {
     Context<T>::set_time(time_sec);
     for (auto& subcontext : contexts_) {
@@ -157,9 +151,14 @@ class HybridAutomatonContext : public Context<T> {
 
   void SetInputPort(int index, std::unique_ptr<InputPort> port) override {
     DRAKE_ASSERT(index >= 0 && index < get_num_input_ports());
-    // TODO(david-german-tri): Set invalidation callbacks.
     ModeId id = 1;
     inputs_[id][index] = std::move(port);
+  }
+
+  ModeId get_mode_id(const Context<T>& context) const {
+    //EXPECT_EQ(1, context.get_mutable_modal_state()->size());
+    //                     ^ fix
+    return context.template get_modal_state<ModeId>(0);
   }
 
   // Mandatory overrides.
@@ -208,15 +207,9 @@ class HybridAutomatonContext : public Context<T> {
   }
 
  private:
-  ModeId get_mode_id(const Context<T>& context) const {
-    //EXPECT_EQ(1, context.get_mutable_modal_state()->size());
-    // ^ compiler no likey?
-    return context.template get_modal_state<ModeId>(0);
-  }
-
-  unique_ptr<symbolic::Variable>
+  std::unique_ptr<symbolic::Variable>
   MakeSymbolicVariableFromState() {
-    
+
   }
 
   std::vector<std::vector<std::unique_ptr<InputPort>>> inputs_;

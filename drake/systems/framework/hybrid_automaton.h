@@ -31,14 +31,19 @@ class HybridAutomatonBuilder;
 
 namespace internal {
 
+
+  // TODO: the following two should be removed.
+
 /// DiagramOutput is an implementation of SystemOutput that holds
 /// unowned OutputPort pointers. It is used to expose the outputs of
 /// constituent systems as outputs of a Diagram.
 ///
 /// @tparam T The type of the output data. Must be a valid Eigen scalar.
 template <typename T>
-class DiagramOutput: public SystemOutput<T> {
+class HybridAutomatonOutput: public SystemOutput<T> {
  public:
+
+  // Required virtual member functions.
   int get_num_ports() const override { return static_cast<int>(ports_.size()); }
 
   OutputPort* get_mutable_port(int index) override {
@@ -55,8 +60,8 @@ class DiagramOutput: public SystemOutput<T> {
 
  protected:
   // Returns a clone that has the same number of output ports, set to nullptr.
-  DiagramOutput<T>* DoClone() const override {
-    DiagramOutput<T>* clone = new DiagramOutput<T>();
+  HybridAutomatonOutput<T>* DoClone() const override {
+    HybridAutomatonOutput<T>* clone = new HybridAutomatonOutput<T>();
     clone->ports_.resize(get_num_ports());
     return clone;
   }
@@ -90,6 +95,7 @@ class DiagramTimeDerivatives : public DiagramContinuousState<T> {
   std::vector<std::unique_ptr<ContinuousState<T>>> substates_;
 };
 
+
 }  // namespace internal
 
 /*
@@ -109,11 +115,7 @@ class ModalSubsystem : public System<T> {
 };
 */
 
-/// Diagram is a System composed of one or more constituent Systems,
-/// arranged in a directed graph where the vertices are the
-/// constituent Systems themselves, and the edges connect the output
-/// of one constituent System to the input of another. To construct a
-/// Diagram, use a DiagramBuilder.
+/// Hybrid Automaton.
 
 /// Limitations:
 ///  1) modal_subsystems can be Diagrams or (Leaf)Systems, but cannot themselves
@@ -171,7 +173,7 @@ class HybridAutomaton : public System<T> {
   //  return data_[index];
   //}
 
-  /// Returns the list of contained Systems.
+  /// Returns the list of modal subsystems.
   std::vector<const systems::System<T>*> GetSystems() const {
     std::vector<const systems::System<T>*> result;
     result.reserve(registered_systems_.size());
@@ -194,7 +196,7 @@ class HybridAutomaton : public System<T> {
 
   std::unique_ptr<Context<T>> CreateDefaultContext() const override {
     const int num_systems = static_cast<int>(modal_subsystems_.size());
-    // Reserve inputs as specified during Diagram initialization.
+    // Reserve inputs as specified during initialization.
     auto context = std::make_unique<HybridAutomatonContext<T>>(num_systems);
 
     // Add each constituent system to the Context in the correct order.
@@ -209,35 +211,51 @@ class HybridAutomaton : public System<T> {
     return std::unique_ptr<Context<T>>(context.release());
   }
 
+  std::unique_ptr<BasicVector<T>> AllocateOutputVector(
+      const SystemPortDescriptor<T>& descriptor) const {
+    return std::make_unique<BasicVector<T>>(descriptor.get_size());
+  }
+
   std::unique_ptr<SystemOutput<T>> AllocateOutput(
       const Context<T>& context) const override {
+
     auto hybrid_context
       = dynamic_cast<const HybridAutomatonContext<T>*>(&context);
-    DRAKE_DEMAND(hybrid_context != nullptr);
 
-    // The output ports of this Diagram are output ports of its constituent
-    // systems. Create a DiagramOutput with that many ports.
-    auto output = std::make_unique<internal::DiagramOutput<T>>();
-    output->get_mutable_ports()->resize(output_port_ids_.size());
-    ExposeSubsystemOutputs(*hybrid_context, output.get());
+    DRAKE_DEMAND(hybrid_context != nullptr);
+    ModeId id = hybrid_context->get_mode_id(context);
+    const System<T>* subsystem = get_subsystem(modal_subsystems_[id]);
+
+    //auto output = std::make_unique<internal::HybridAutomatonOutput<T>*>(
+    //                               new internal::HybridAutomatonOutput<T>);
+    auto output = std::make_unique<internal::HybridAutomatonOutput<T>>();
+
+    for (const auto& descriptor : subsystem->get_output_ports()) {
+      output->get_mutable_ports()->
+        emplace_back(new OutputPort(AllocateOutputVector(descriptor)));
+    }
+
+    //return std::move(output);
     return std::unique_ptr<SystemOutput<T>>(output.release());
   }
 
+  /// ======= Hybrid Automaton Execution Methods ======
   void EvalOutput(const Context<T>& context,
                   SystemOutput<T>* output) const override {
     // Down-cast the context and output to HybridAutomatonContext and
     // DiagramOutput.
-    auto diagram_context
+    auto hybrid_context
       = dynamic_cast<const HybridAutomatonContext<T>*>(&context);
-    DRAKE_DEMAND(diagram_context != nullptr);
-    auto diagram_output = dynamic_cast<internal::DiagramOutput<T>*>(output);
-    DRAKE_DEMAND(diagram_output != nullptr);
+    DRAKE_DEMAND(hybrid_context != nullptr);
+    auto hybrid_output
+      = dynamic_cast<internal::HybridAutomatonOutput<T>*>(output);
+    DRAKE_DEMAND(hybrid_output != nullptr);
 
     // Populate the output with pointers to the appropriate subsystem
     // outputs in the HybridAutomatonContext. We do this on every call
     // to EvalOutput, so that the diagram_context and diagram_output
     // are not tightly coupled.
-    ExposeSubsystemOutputs(*diagram_context, diagram_output);
+    ExposeSubsystemOutputs(*hybrid_context, hybrid_output);
 
     // Since the diagram output now contains pointers to the subsystem
     // outputs, all we need to do is ask those subsystem outputs to
@@ -279,18 +297,8 @@ class HybridAutomaton : public System<T> {
     }
   }
 
-  /// Returns the full path of this Diagram in the tree of
-  /// Diagrams. Implemented here to satisfy
-  /// InputPortEvaluatorInterface, although we want the exact same
-  /// behavior as in System.
-  // TODO: need?
-  void GetPath(std::stringstream* output) const override {
-    return System<T>::GetPath(output);
-  }
-
-  /// ======= Hybrid Automaton Execution Methods ======
+  /*
   /// Evaluate the guard at the current valuation of the state vector.
-  template <typename T>
   T EvalGuard(const systems::Context<T>& context) const {
     DRAKE_ASSERT_VOID(systems::System<T>::CheckValidContext(context));
     // TODO: add ^this check to all other context-consuming methods as well.
@@ -304,29 +312,29 @@ class HybridAutomaton : public System<T> {
     // velocity is non-positive.
     return ;
   }
-
+  */
  protected:
-  /// Constructs an uninitialized Diagram. Subclasses that use this constructor
-  /// are obligated to call DiagramBuilder::BuildInto(this).
+
   HybridAutomaton() {}
 
   void DoPublish(const Context<T>& context) const override {
-    auto diagram_context
+    auto hybrid_context
       = dynamic_cast<const HybridAutomatonContext<T>*>(&context);
-    DRAKE_DEMAND(diagram_context != nullptr);
+    DRAKE_DEMAND(hybrid_context != nullptr);
 
     for (const ModalSubsystem modal_subsystem : modal_subsystems_) {
       auto system = get_subsystem(modal_subsystem);
-      system->Publish(*diagram_context->GetSubsystemContext(context));
+      system->Publish(*hybrid_context->GetSubsystemContext(context));
     }
   }
 
  private:
-  // A structural outline of a Diagram, produced by DiagramBuilder.
+  // The finite-state machine (automaton) whose modes are the modal
+  // subsystems and whose edges are the mode transitions.
   struct StateMachine {
-    // The ordered subsystem ports that are inputs to the entire diagram.
+    // The ordered subsystem ports that are inputs.
     std::vector<PortIdentifier> input_port_ids;
-    // The ordered subsystem ports that are outputs of the entire diagram.
+    // The ordered subsystem ports that are outputs.
     std::vector<PortIdentifier> output_port_ids;
 
     std::vector<ModalSubsystem> modal_subsystems;
@@ -334,19 +342,18 @@ class HybridAutomaton : public System<T> {
 
   };
 
-  // Constructs a Diagram from the StateMachine that a DiagramBuilder
-  // produces.  This constructor is private because only
-  // DiagramBuilder calls it.
+  // Constructor for the HybridAutomaton.
   explicit HybridAutomaton(const StateMachine& state_machine) {
     Initialize(state_machine);
   }
 
-  // Validates the given @p state_machine and sets up the Diagram
-  // accordingly.
+  // Validates the given @p state_machine and general set-up.
+
   // TODO: can we roll this up more cleanly, possibly within the
   // calling function?
   void Initialize(const StateMachine& state_machine) {
-    // The Diagram must not already be initialized.
+    // Expect the modal subsytems to be empty (this suffices to
+    // conclude that the list of mode transitions is also empty).
     DRAKE_DEMAND(modal_subsystems_.empty());
 
     // Copy the data from the state_machine into private member variables.
@@ -355,7 +362,7 @@ class HybridAutomaton : public System<T> {
     //modal_subsystems_ = state_machine.modal_subsystems;
   }
 
-  // Takes ownership of the @p registered_systems from DiagramBuilder.
+  // Takes ownership of the modal subsystems from HybridAutomatonBuilder.
 
   // TODO: need?
   void Own(std::vector<std::unique_ptr<System<T>>> registered_systems) {
@@ -365,7 +372,6 @@ class HybridAutomaton : public System<T> {
     DRAKE_DEMAND(registered_systems_.empty());
     // All of those checks having passed, take ownership of the subsystems.
     registered_systems_ = std::move(registered_systems);
-    // Inform the constituent system that it's bound to this Diagram.
 
     // TODO: decide whether or not the systems need to know who their parent is.
     //for (auto& system : registered_systems_) {
@@ -374,7 +380,7 @@ class HybridAutomaton : public System<T> {
   }
 
   // Returns the index of the given @p ModalSubsystem.
-  ModeId GetModeId(const ModalSubsystem* sys) const {
+  ModeId get_mode_id(const ModalSubsystem* sys) const {
     auto pos = find(modal_subsystems_.begin(), modal_subsystems_.end(), *sys);
     DRAKE_DEMAND(pos != modal_subsystems_.end());
     return std::distance(modal_subsystems_.begin(), pos);
@@ -386,9 +392,9 @@ class HybridAutomaton : public System<T> {
   }
 
   // Sets up the OutputPort pointers in @p output to point to the subsystem
-  // outputs, found in @p context, that are the outputs of this Diagram.
+  // outputs, found in @p context.
   void ExposeSubsystemOutputs(const HybridAutomatonContext<T>& context,
-                              internal::DiagramOutput<T>* output) const {
+                           internal::HybridAutomatonOutput<T>* output) const {
     // The number of output ports of this diagram must equal the number of
     // ports in the provided DiagramOutput.
     const int num_ports = static_cast<int>(output_port_ids_.size());
@@ -403,18 +409,18 @@ class HybridAutomaton : public System<T> {
       SystemOutput<T>* subsystem_output = context.GetSubsystemOutput(context);
       OutputPort* output_port = subsystem_output->get_mutable_port(port_index);
 
-      // Then, put a pointer to that OutputPort in the DiagramOutput.
+      // Make a pointer to the ith OutputPort.
       (*output->get_mutable_ports())[i] = output_port;
     }
   }
 
-  /// Returns the subcontext that corresponds to the system @p
-  /// subsystem.  Classes inheriting from %Diagram need access to this
+  /// Returns the subcontext that corresponds to the moda_subsystem.
+  /// Classes inheriting from HybridAutomaton need access to this
   /// method in order to pass their constituent subsystems the
-  /// apropriate subcontext. Aborts if @p subsystem is not actually a
-  /// subsystem of this diagram.
+  /// apropriate subcontext.
 
   // TODO: need?
+
   Context<T>* GetMutableSubsystemContext(Context<T>* context,
                                const ModalSubsystem* modal_subsystem) const {
     DRAKE_DEMAND(context != nullptr);
@@ -422,18 +428,12 @@ class HybridAutomaton : public System<T> {
     auto modal_context
       = dynamic_cast<HybridAutomatonContext<T>*>(context);
     DRAKE_DEMAND(modal_context != nullptr);
-    // const ModeId id = GetModeId(modal_subsystem);
+    // const ModeId id = get_mode_id(modal_subsystem);
     return modal_context->GetMutableSubsystemContext(*context);
     // TODO: isn't dereferencing args bad practice? -- check.
   }
 
-  /// Retrieves the state for a particular subsystem from the context
-  /// for the entire diagram. Invalidates all entries in that
-  /// subsystem's cache that depend on State. Aborts if @p subsystem
-  /// is not actually a subsystem of this diagram.
-  ///
-  /// TODO(david-german-tri): Provide finer-grained accessors for
-  /// finer-grained invalidation.
+  /// Retrieves the state for a particular modal_subsystem.
 
   // TODO: need?
   State<T>* GetMutableSubsystemState(Context<T>* context,
@@ -443,19 +443,16 @@ class HybridAutomaton : public System<T> {
     return subcontext->get_mutable_state();
   }
 
-  // Diagram objects are neither copyable nor moveable.
+  // HybridAutomaton objects are neither copyable nor moveable.
   HybridAutomaton(const HybridAutomaton<T>& other) = delete;
   HybridAutomaton& operator=(const HybridAutomaton<T>& other) = delete;
   HybridAutomaton(HybridAutomaton<T>&& other) = delete;
   HybridAutomaton& operator=(HybridAutomaton<T>&& other) = delete;
 
-  // The Systems in this Diagram, which are owned by this Diagram, in the order
-  // they were registered.
-
   // TODO: deprecate.
   std::vector<std::unique_ptr<System<T>>> registered_systems_;
 
-  // The ordered inputs and outputs of this Diagram.
+  // The ordered inputs and outputs.
   std::vector<PortIdentifier> input_port_ids_;
   std::vector<PortIdentifier> output_port_ids_;
 

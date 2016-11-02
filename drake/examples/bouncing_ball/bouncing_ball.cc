@@ -18,12 +18,12 @@ BouncingBall<T>::BouncingBall() : systems::HybridAutomaton<T>() {
 
   ball_subsystem_ = builder.AddModalSubsystem(
     std::unique_ptr<Ball<T>>());
-  symbolic::Expression x = get_symbolic_state_vector(ball_subsystem_);
-  symbolic::Formula invariant_formula_ball = ;
+  //symbolic::Expression x = get_symbolic_state_vector(ball_subsystem_);
+  symbolic::Formula invariant_formula_ball = symbolic::Formula::True();
   builder.AddInvariant(ball_subsystem_, invariant_formula_ball);
 
   ball_to_ball_ = builder.AddModeTransition(*ball_subsystem_);
-  symbolic::Formula guard_formula_bounce = ;
+  //symbolic::Formula guard_formula_bounce = symbolic::Formula::True();
   // TODO: add the guard.
   // TODO: add the reset map.
 

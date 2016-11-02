@@ -139,7 +139,7 @@ class HybridAutomatonBuilder {
     //true_reset[0] = symbolic::Formula::True();
     ModeTransition mode_transition = std::make_tuple(&pair, &guard);
     mode_transitions_->push_back(mode_transition);
-    return &mode_transition;  // TODO: should we make use of smart ptrs?
+    return &mode_transition;  // TODO: should we make better use of smart ptrs?
     // TODO: fix warnings^
   }
 
