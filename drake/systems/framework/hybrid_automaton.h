@@ -7,6 +7,7 @@
 #include <set>
 #include <stdexcept>
 #include <vector>
+#include <fstream>
 
 // TODO: triage this list.
 #include "drake/common/drake_assert.h"
@@ -297,22 +298,37 @@ class HybridAutomaton : public System<T> {
     }
   }
 
-  /*
+  // ====== Modal State Processing Functions ======
+
   /// Evaluate the guard at the current valuation of the state vector.
-  T EvalGuard(const systems::Context<T>& context) const {
+  T EvalInvariant(const systems::HybridAutomatonContext<T>& context) const {
     DRAKE_ASSERT_VOID(systems::System<T>::CheckValidContext(context));
     // TODO: add ^this check to all other context-consuming methods as well.
 
     // Evaluate the guard function.
     const systems::VectorBase<T>& state =
       context.get_continuous_state_vector();
+    symbolic::Environment state_env;
+    for (int i = 0; i < state.size(); i++) {
+      //if ( state[i] == double ) {
+      std::ostringstream key;
+      key  << "x" << i;
+      symbolic::Variable state_var{ key.str() };
+      state_env.insert(state_var, state[i]);
+      //} else {
+      // throw std::runtime_error("types other than double not implemented.");
+      //}
+    }
 
+    ModeId id = context.get_mode_id(context);
+    auto invariant_formula
+      = *std::get<1>(modal_subsystems_[id]);  // invariant (TODO: make a getter)
     // The guard is satisfied (returns a non-positive value) when
     // the ball's position is less than or equal to zero and its
     // velocity is non-positive.
-    return ;
+    return (invariant_formula.at(0)).Evaluate(state_env);
   }
-  */
+
  protected:
 
   HybridAutomaton() {}

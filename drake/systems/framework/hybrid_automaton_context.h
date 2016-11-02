@@ -207,11 +207,12 @@ class HybridAutomatonContext : public Context<T> {
   }
 
  private:
+  /*
   std::unique_ptr<symbolic::Variable>
   MakeSymbolicVariableFromState() {
 
   }
-
+  */
   std::vector<std::vector<std::unique_ptr<InputPort>>> inputs_;
   std::vector<std::unique_ptr<SystemOutput<T>>> outputs_;
   std::vector<std::unique_ptr<Context<T>>> contexts_;

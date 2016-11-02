@@ -35,7 +35,8 @@ bool BouncingBall<T>::has_any_direct_feedthrough() const {
 }
 
 template class BouncingBall<double>;
-template class BouncingBall<AutoDiffXd>;
+  //template class BouncingBall<AutoDiffXd>;
+  // comment for now till we work out the symbolic environment stuff..
 
 }  // namespace bouncing_ball
 }  // namespace drake
