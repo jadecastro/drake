@@ -2,6 +2,10 @@
 
 #include <memory>
 
+<<<<<<< HEAD
+=======
+#include "drake/systems/framework/hybrid_automaton.h"
+>>>>>>> Update with recent system changes, namely ModalState -> AbstractState
 #include "drake/examples/bouncing_ball/ball.h"
 
 namespace drake {

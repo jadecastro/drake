@@ -26,7 +26,6 @@ BouncingBall<T>::BouncingBall() : systems::HybridAutomaton<T>() {
   //symbolic::Formula guard_formula_bounce = symbolic::Formula::True();
   // TODO: add the guard.
   // TODO: add the reset map.
-
 }
 
 template <typename T>

@@ -11,7 +11,10 @@
 
 // TODO: triage this list.
 #include "drake/common/drake_assert.h"
+#include "drake/common/symbolic_environment.h"
+#include "drake/common/symbolic_formula.h"
 #include "drake/common/text_logging.h"
+#include "drake/systems/framework/abstract_state.h"
 #include "drake/systems/framework/cache.h"
 #include "drake/systems/framework/hybrid_automaton_context.h"
 //#include "drake/systems/framework/diagram_context.h"
@@ -20,9 +23,6 @@
 #include "drake/systems/framework/subvector.h"
 #include "drake/systems/framework/system.h"
 #include "drake/systems/framework/system_port_descriptor.h"
-#include "drake/systems/framework/modal_state.h"
-#include "drake/common/symbolic_formula.h"
-#include "drake/common/symbolic_environment.h"
 
 namespace drake {
 namespace systems {
@@ -71,9 +71,6 @@ class HybridAutomatonOutput: public SystemOutput<T> {
   std::vector<OutputPort*> ports_;
 };
 
-/// DiagramTimeDerivatives is a version of DiagramContinuousState that
-/// owns the constituent continuous states. As the name implies, it is
-/// only useful for the time derivatives.
 template <typename T>
 class DiagramTimeDerivatives : public DiagramContinuousState<T> {
  public:
