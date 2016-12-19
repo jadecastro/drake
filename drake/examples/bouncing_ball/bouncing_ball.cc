@@ -12,7 +12,7 @@ template <typename T>
 //  systems::HybridAutomaton<T>(), ball_subsystem_(mss) {
 BouncingBall<T>::BouncingBall() : systems::HybridAutomaton<T>() {
 //BouncingBall<T>::BouncingBall(const ModalSubsystem& mss) :
-//  ball_subsystem_(mss) {
+  //  ball_subsystem_(mss) {
 
   systems::HybridAutomatonBuilder<T> builder;
 
