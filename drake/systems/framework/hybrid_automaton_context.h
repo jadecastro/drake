@@ -21,22 +21,22 @@
 namespace drake {
 namespace systems {
 
-// TODO(jadecastro): How to concatenate abstract states from
-// subsystems to the parent hybrid system.
+// TODO(jadecastro): How to concatenate abstract states from subsystems to the
+// parent hybrid system.
 //
-// TODO(jadecastro): Better use of unique pointers for memory
-// management and ownership hierarchy.  See, e.g.:
+// TODO(jadecastro): Better use of unique pointers for memory management and
+// ownership hierarchy.  See, e.g.:
 // https://github.com/ToyotaResearchInstitute/drake-maliput/commit/ ...
 //    cc29ae0c2ea265150a4d37554c4e63bf0751d30e
 //
 // TODO(jadecastro): Implement and test capability to capture hybrid
 // system-of-hybrid-systems functionality.
 //
-// TODO(jadecastro): Consistent naming modalsubsystems
-// vs. modal_subsystems, id vs. mode_id, ....
+// TODO(jadecastro): Consistent naming modalsubsystems vs. modal_subsystems, id
+// vs. mode_id, ....
 
-/// HybridAutomatonSubsystemState is a State, annotated with un-owned
-/// pointers to all the mutable subsystem states that it spans.
+/// HybridAutomatonSubsystemState is a State, annotated with un-owned pointers
+/// to all the mutable subsystem states that it spans.
 template <typename T>
   class HybridAutomatonState : public State<T> {
  public:
@@ -51,8 +51,8 @@ template <typename T>
     return modal_substates_[index];
   }
 
-  /// Sets the substate at @p index to @p substate, or aborts if @p index is
-  /// out of bounds.
+  /// Sets the substate at @p index to @p substate, or aborts if @p index is out
+  /// of bounds.
   void set_substate(const int index, State<T>* modal_substate) {
     DRAKE_DEMAND(index >= 0 && index < modal_substates_.size());
     modal_substates_[index] = modal_substates;
@@ -77,33 +77,47 @@ class ModalSubsystem {
       ModeId mode_id, System<T>* system)
       : modal_id_(mode_id), system_(system) {}
 
-  ModeId get_mode_id() { return mode_id_; }
-  System<T>* get_system() {return system_; }
+  ModeId get_mode_id() const { return mode_id_; }
+  System<T>* get_system() const {return system_; }
+  std::vector<PortIdentifier> get_input_port_ids() const {
+    return input_port_ids_;
+  }
+  std::vector<PortIdentifier> get_output_port_ids() const {
+    return output_port_ids_;
+  }
+  PortIdentifier get_input_port_id(const int index) const {
+    DRAKE_DEMAND(index >=0 && index < input_port_ids_.size())
+    return input_port_ids_(index);
+  }
+  PortIdentifier get_output_port_id(const int index) const {
+    DRAKE_DEMAND(index >=0 && index < output_port_ids_.size())
+    return output_port_ids_(index);
+  }
  private:
   // Index for this mode.
   ModeId mode_id_;
   // TODO(jadecastro): Attach a string name too (how does Diagram do this?)
   // System model.
   const System<T>* system_;
+  // The ordered inputs and outputs.
+  std::vector<PortIdentifier> input_port_ids_;
+  std::vector<PortIdentifier> output_port_ids_;
   // Formula representing the invariant for this mode.
   const std::vector<symbolic::Formula>* invariant_;  // TODO: Eigen??
   // Formula representing the initial conditions for this mode.
   const std::vector<symbolic::Formula>* initial_conditions_;  // TODO: Eigen??
-};
+}
 
-
-/// The HybridAutomatonContext is a container for all of the data
-/// necessary to uniquely determine the computations performed by a
-/// HybridAutomaton (HA). Specifically, a HybridAutomatonContext contains
-/// contexts and outputs for all modal subsystems in the finite-state
-/// machine.
+/// The HybridAutomatonContext is a container for all of the data necessary to
+/// uniquely determine the computations performed by a HybridAutomaton
+/// (HA). Specifically, a HybridAutomatonContext contains contexts and outputs
+/// for all modal subsystems in the finite-state machine.
 ///
-/// In the context, the size of the state vector may change, but the
-/// inputs and outputs must be of fixed size.
+/// In the context, the size of the state vector may change, but the inputs and
+/// outputs must be of fixed size.
 ///
-/// In general, users should not need to interact with a
-/// HybridAutomatonContext directly. Use the accessors on Hybrid
-/// Automaton instead.
+/// In general, users should not need to interact with a HybridAutomatonContext
+/// directly. Use the accessors on Hybrid Automaton instead.
 ///
 /// @tparam T The mathematical type of the context, which must be a valid Eigen
 ///           scalar.
@@ -112,18 +126,16 @@ class HybridAutomatonContext : public Context<T> {
  public:
   typedef int ModeId;
 
-  /// Constructs a HybridAutomatonContext with a fixed number @p
-  /// num_subsystems in a way that allows for dynamic re-sizing during
-  /// discrete events.
+  /// Constructs a HybridAutomatonContext with a fixed number @p num_subsystems
+  /// in a way that allows for dynamic re-sizing during discrete events.
   explicit HybridAutomatonContext(const int num_subsystems)
       : outputs_(num_subsystems), contexts_(num_subsystems) {}
 
-  /// Declares a new subsystem in the HybridAutomatonContext.
-  /// Subsystems are identified by number. If the subsystem has
-  /// already been declared, aborts.
+  /// Declares a new subsystem in the HybridAutomatonContext.  Subsystems are
+  /// identified by number. If the subsystem has already been declared, aborts.
   ///
-  /// User code should not call this method. It is for use during Hybrid
-  /// context allocation only.
+  /// User code should not call this method. It is for use during Hybrid context
+  /// allocation only.
   void AddModalSubsystem(ModalSubsystem modal_subsystem,
                          std::unique_ptr<Context<T>> context,
                          std::unique_ptr<SystemOutput<T>> output) {
@@ -172,9 +184,9 @@ class HybridAutomatonContext : public Context<T> {
     this->set_abstract_state(std::make_unique<AbstractState>(hybrid_xm));
   }
 
-  /// Returns the output structure for a given constituent system at
-  /// @p index.  Aborts if @p index is out of bounds, or if no system
-  /// has been added to the HybridAutomatonContext at that index.
+  /// Returns the output structure for a given constituent system at @p index.
+  /// Aborts if @p index is out of bounds, or if no system has been added to the
+  /// HybridAutomatonContext at that index.
   SystemOutput<T>* GetSubsystemOutput() const {
     const int num_outputs = static_cast<int>(outputs_.size());
     ModeId id = this->get_mode_id();
@@ -183,9 +195,9 @@ class HybridAutomatonContext : public Context<T> {
     return outputs_[id].get();
   }
 
-  /// Returns the context structure for a given constituent system @p
-  /// index.  Aborts if @p index is out of bounds, or if no system has
-  /// been added to the HybridAutomatonContext at that index.
+  /// Returns the context structure for a given constituent system @p index.
+  /// Aborts if @p index is out of bounds, or if no system has been added to the
+  /// HybridAutomatonContext at that index.
   const Context<T>* GetSubsystemContext() const {
     const int num_contexts = static_cast<int>(contexts_.size());
     ModeId id = this->get_mode_id();
@@ -194,9 +206,9 @@ class HybridAutomatonContext : public Context<T> {
     return contexts_[id].get();
   }
 
-  /// Returns the context structure for a given subsystem @p index.
-  /// Aborts if @p index is out of bounds, or if no system has been
-  /// added to the HybridAutomatonContext at that index.
+  /// Returns the context structure for a given subsystem @p index.  Aborts if
+  /// @p index is out of bounds, or if no system has been added to the
+  /// HybridAutomatonContext at that index.
   Context<T>* GetMutableSubsystemContext() {
     const int num_contexts = static_cast<int>(contexts_.size());
     ModeId id = this->get_mode_id();
@@ -265,11 +277,11 @@ class HybridAutomatonContext : public Context<T> {
     HybridAutomatonContext<T>* clone
       = new HybridAutomatonContext(num_subsystems);
 
-    // Clone all the subsystem contexts and outputs.  This basically
-    // repeats everything in CreateDefaultContext.
+    // Clone all the subsystem contexts and outputs.  This basically repeats
+    // everything in CreateDefaultContext.
 
-    // TODO: Would a simple call to that function still do the
-    // trick with less overhead?
+    // TODO: Would a simple call to that function still do the trick with less
+    // overhead?
     for (ModeId i = 0; i < num_subsystems; ++i) {
       DRAKE_DEMAND(contexts_[i] != nullptr);
       DRAKE_DEMAND(outputs_[i] != nullptr);
@@ -304,6 +316,8 @@ class HybridAutomatonContext : public Context<T> {
 
   }
   */
+
+  // Containers for all the registered modal subsystems.
   std::vector<std::vector<std::unique_ptr<InputPort>>> inputs_;
   std::vector<std::unique_ptr<SystemOutput<T>>> outputs_;
   std::vector<std::unique_ptr<Context<T>>> contexts_;
