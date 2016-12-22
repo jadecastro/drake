@@ -358,6 +358,21 @@ class HybridAutomaton : public System<T> {
     return (invariant_formula.at(0)).Evaluate(state_env);
   }
 
+  // TODO(jadecastro): Implement PerformTransition:
+  // The idea is as follows:
+  //
+  //  1) Updates the modal_state.
+  //
+  //  2) Performs a reset mapping that takes the states from the current context
+  //  and maps it to the a valid initial state for the successor mode.
+  //
+  //  3) Re-points the input and output ports to the correct place.
+  //  Essentially, does ExposeInput and ExposeOutput again.  And, I imagine,
+  //  eveything else required to make EvaluateOutputPort happy.
+
+
+
+
   /// @name Context-Related Accessors
   /// Returns the subcontext that corresponds to the moda_subsystem.  Classes
   /// inheriting from HybridAutomaton need access to this method in order to
