@@ -224,6 +224,9 @@ class HybridAutomatonContext : public Context<T> {
   ///
   /// User code should not call this method. It is for use during
   /// HybridAutomaton context allocation only.
+  //
+  // TODO(jadecastro): This and DoClone has changed a bit in master... we'll
+  // have to refactor it slightly.
   void MakeState(const ModeId mode_id) {
     //const int num_subsystems = static_cast<int>(contexts_.size());
     std::vector<AbstractValue*> hybrid_xm;
@@ -262,22 +265,20 @@ class HybridAutomatonContext : public Context<T> {
     // is even needed -- c.f. LeafContext.
     this->set_discrete_state(std::make_unique<DiscreteState<T>>(hybrid_xd));
     this->set_abstract_state(std::make_unique<AbstractState>(hybrid_xm));
-  }
 
-  State<T>* MakeContinuousState() const override {
-    State<T>* clone = new State<T>();
-
-    // Make a deep copy of the continuous state using BasicVector::Clone().
-    if (this->get_continuous_state() != nullptr) {
-      const ContinuousState<T>& xc = *this->get_continuous_state();
+    if (context->get_continuous_state() != nullptr) {
+      const ContinuousState<T>& xc = *context->get_continuous_state();
       const int num_q = xc.get_generalized_position().size();
       const int num_v = xc.get_generalized_velocity().size();
       const int num_z = xc.get_misc_continuous_state().size();
       const BasicVector<T>& xc_vector =
           dynamic_cast<const BasicVector<T>&>(xc.get_vector());
-      clone->set_continuous_state(std::make_unique<ContinuousState<T>>(
+      this->set_continuous_state(std::make_unique<ContinuousState<T>>(
           xc_vector.Clone(), num_q, num_v, num_z));
     }
+  }
+  // TODO(jadecastro): Likely a temporary function 'till we wrangle with the API
+  // updates to Context<T>.
 
   /// Returns the output structure for a given constituent system at @p index.
   /// Aborts if @p index is out of bounds, or if no system has been added to the
