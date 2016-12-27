@@ -10,7 +10,6 @@
 
 // TODO: triage this list.
 #include "drake/common/symbolic_formula.h"
-#include "drake/systems/framework/abstract_state.h"
 #include "drake/systems/framework/basic_vector.h"
 #include "drake/systems/framework/context.h"
 #include "drake/systems/framework/input_port_evaluator_interface.h"
@@ -47,7 +46,7 @@ template <typename T>
 
   /// Returns the substate at @p index.
   State<T>* get_mutable_substate(const int index) {
-    DRAKE_DEMAND(index >= 0 && index < modal_substates_.size());
+    DRAKE_DEMAND(index >= 0 && index < (int)modal_substates_.size());
     return modal_substates_[index];
   }
 
@@ -107,8 +106,8 @@ class ModalSubsystem {
   const std::vector<PortIdentifier> get_input_port_ids() const {
     return input_port_ids_;
   }
-  std::vector<PortIdentifier>* get_mutable_input_port_ids() const {
-    return input_port_ids_;
+  std::vector<PortIdentifier>* get_mutable_input_port_ids() {
+    return &input_port_ids_;
   }
   const std::vector<PortIdentifier> get_output_port_ids() const {
     return output_port_ids_;
@@ -116,12 +115,12 @@ class ModalSubsystem {
   // TODO(jadecastro): Do we really need the following two getters?
   // TODO: const?
   PortIdentifier get_input_port_id(const int index) const {
-    DRAKE_DEMAND(index >=0 && index < input_port_ids_.size());
-    return input_port_ids_(index);
+    DRAKE_DEMAND(index >=0 && index < (int)input_port_ids_.size());
+    return input_port_ids_[index];
   }
   PortIdentifier get_output_port_id(const int index) const {
-    DRAKE_DEMAND(index >=0 && index < output_port_ids_.size());
-    return output_port_ids_(index);
+    DRAKE_DEMAND(index >=0 && index < (int)output_port_ids_.size());
+    return output_port_ids_[index];
   }
  private:
   // Index for this mode.
@@ -190,20 +189,20 @@ class HybridAutomatonContext : public Context<T> {
   ///
   /// User code should not call this method. It is for use during Hybrid context
   /// allocation only.
-  void AddModalSubsystem(ModalSubsystem modal_subsystem,
+  void AddModalSubsystem(ModalSubsystem<T>* modal_subsystem,
                          std::unique_ptr<Context<T>> context,
                          std::unique_ptr<SystemOutput<T>> output) {
     //DRAKE_DEMAND(id <= contexts_.size() &&
     //             contexts_.size() == outputs_.size());
     // TODO: fix gcc-4.9 errors^
-    ModeId id = modal_subsystem.get_mode_id();
-    DRAKE_DEMAND(contexts_[id] == nullptr);
-    DRAKE_DEMAND(outputs_[id] == nullptr);
+    const ModeId mode_id = modal_subsystem->get_mode_id();
+    DRAKE_DEMAND(contexts_[mode_id] == nullptr);
+    DRAKE_DEMAND(outputs_[mode_id] == nullptr);
     context->set_parent(this);
-    contexts_[id] = std::move(context);
-    outputs_[id] = std::move(output);
+    contexts_[mode_id] = std::move(context);
+    outputs_[mode_id] = std::move(output);
     modal_subsystems_.emplace_back(modal_subsystem);
-    //symbolic_states_[id] = std::move();
+    //symbolic_states_[mode_id] = std::move();
   }
 
   /// Declares that a particular input port of a particular subsystem is an
@@ -217,7 +216,7 @@ class HybridAutomatonContext : public Context<T> {
                                                   // exists.
     //DRAKE_ASSERT(!modal_subsystems_[mode_id]->get_input_port_ids().empty());
     modal_subsystems_[mode_id]->
-        get_mutable_input_port_ids->emplace_back(port_id);
+        get_mutable_input_port_ids()->emplace_back(port_id);
   }
 
   /// Generates the state vector for the entire diagram by wrapping the states
@@ -232,8 +231,9 @@ class HybridAutomatonContext : public Context<T> {
     Context<T>* context = contexts_[mode_id].get();
     state_.set_substate(mode_id, context->get_mutable_state());
     // Continuous
-    const ContinuousState<T>* hybrid_xc =
-        context->get_mutable_continuous_state();
+    //ContinuousState<T>* hybrid_xc =
+    //    context->get_mutable_continuous_state();
+    // TODO(jadecastro): Some hackiness to get this guy to compile.
     // Discrete
     const std::vector<BasicVector<T>*>& hybrid_xd =
         context->get_mutable_discrete_state()->get_data();
@@ -242,15 +242,42 @@ class HybridAutomatonContext : public Context<T> {
     for (int i_xm = 0; i_xm < subsystem_xm->size(); ++i_xm) {
       hybrid_xm.push_back(&subsystem_xm->get_mutable_abstract_state(i_xm));
     }
-    // The last abstract element corresponds to the modal state of the HA.
-    hybrid_xm.push_back(&modal_subsystems_[mode_id]);
+    // Append another, final element corresponding to the modal subsystem of the
+    // HA.
+    // ********** CHECK: other implementations of AbstractValue.
+    const auto xm_mode_id =
+        std::unique_ptr<AbstractValue>(
+            new Value<ModalSubsystem<T>>(*modal_subsystems_[mode_id]));
+    hybrid_xm.push_back(xm_mode_id.get());
+    // TODO(jadecastro): Should we store this paricular index?
 
     // The wrapper states do not own the constituent state.
-    this->set_continuous_state(
-        std::make_unique<ContinuousState<T>>(hybrid_xc));
+    //this->set_continuous_state(std::make_unique<ContinuousState<T>>(
+    //std::make_unique<BasicVector<T>>(hybrid_xc->get_mutable_vector()), 0, 0,
+    //hybrid_xc->size()));
+    //
+    // *************!!*#**($ TODO(jadecastro): Commenting it out for now:
+    // compilation errors when trying to contruct ContinuousState.
+    // TODO(jadecastro): This can be de-prioritized until we understand if this
+    // is even needed -- c.f. LeafContext.
     this->set_discrete_state(std::make_unique<DiscreteState<T>>(hybrid_xd));
     this->set_abstract_state(std::make_unique<AbstractState>(hybrid_xm));
   }
+
+  State<T>* MakeContinuousState() const override {
+    State<T>* clone = new State<T>();
+
+    // Make a deep copy of the continuous state using BasicVector::Clone().
+    if (this->get_continuous_state() != nullptr) {
+      const ContinuousState<T>& xc = *this->get_continuous_state();
+      const int num_q = xc.get_generalized_position().size();
+      const int num_v = xc.get_generalized_velocity().size();
+      const int num_z = xc.get_misc_continuous_state().size();
+      const BasicVector<T>& xc_vector =
+          dynamic_cast<const BasicVector<T>&>(xc.get_vector());
+      clone->set_continuous_state(std::make_unique<ContinuousState<T>>(
+          xc_vector.Clone(), num_q, num_v, num_z));
+    }
 
   /// Returns the output structure for a given constituent system at @p index.
   /// Aborts if @p index is out of bounds, or if no system has been added to the
@@ -260,7 +287,8 @@ class HybridAutomatonContext : public Context<T> {
     const ModeId mode_id = this->get_mode_id();
     DRAKE_DEMAND(mode_id >= 0 && mode_id < num_outputs);
     DRAKE_DEMAND(outputs_[mode_id] != nullptr);
-    return outputs_[mode_id].get();
+    // TODO(jadecastro): Implement `dynamic_cast_or_die`.
+     return outputs_[mode_id].get();
   }
 
   /// Returns the context structure for a given constituent system @p index.
@@ -271,6 +299,7 @@ class HybridAutomatonContext : public Context<T> {
     const ModeId id = this->get_mode_id();
     DRAKE_DEMAND(id >= 0 && id < num_contexts);
     DRAKE_DEMAND(contexts_[id] != nullptr);
+    // TODO(jadecastro): Implement `dynamic_cast_or_die`.
     return contexts_[id].get();
   }
 
@@ -344,15 +373,17 @@ class HybridAutomatonContext : public Context<T> {
         ->SetInputPort(subsystem_port_id, std::move(port));
   }
 
-  ModalSubsystem* get_modal_subsystem() const {
-    auto modal_subsystem = modal_subsystems_[this->get_mode_id()];
-    //DRAKE_DEMAND(modal_subsystem != nullptr);
-    return modal_subsystem;
+  ModalSubsystem<T>* get_modal_subsystem() const {
+    //const int num_xm = state_.get_abstract_state()->size();
+    const AbstractState* xm = this->get_state().get_abstract_state();
+    const int size_xm = xm->size();  // TODO(jadecastro): Seems a bit silly.
+    return xm->get_abstract_state(size_xm-1).GetValue<ModalSubsystem<T>*>();
   }
 
   ModeId get_mode_id() const {
-    const auto mode_id = this->get_abstract_state()->back();
-    return dynamic_cast<ModeId>(mode_id);
+    const ModalSubsystem<T>* modal_subsystem = this->get_modal_subsystem();
+    //DRAKE_DEMAND(modal_subsystem != nullptr);
+    return modal_subsystem->get_mode_id();
   }
 
   // Mandatory overrides.
@@ -375,11 +406,12 @@ class HybridAutomatonContext : public Context<T> {
     for (ModeId i = 0; i < num_subsystems; ++i) {
       DRAKE_DEMAND(contexts_[i] != nullptr);
       DRAKE_DEMAND(outputs_[i] != nullptr);
-      clone->AddModalSubsystem(i, contexts_[i]->Clone(), outputs_[i]->Clone());
+      clone->AddModalSubsystem(modal_subsystems_[i], contexts_[i]->Clone(),
+                               outputs_[i]->Clone());
     }
 
     // Clone the external input structure.
-    ModalSubsystem* modal_subsystem = get_modal_subsystem();
+    ModalSubsystem<T>* modal_subsystem = get_modal_subsystem();
     for (int i = 0; i < modal_subsystem->get_num_input_ports(); ++i) {
       clone->ExportInput(i, modal_subsystem->get_input_port_id(i));
     }
@@ -406,10 +438,10 @@ class HybridAutomatonContext : public Context<T> {
     DRAKE_DEMAND(contexts_[mode_id] != nullptr);
     // TODO(jadecastro): Consolidate the above into a separate function, to
     // avoid repitition.
-    DRAKE_ASSERT(mode_id >= 0);  // TODO:  && index < get_num_input_ports());
+    //DRAKE_ASSERT(mode_id >= 0);  // TODO:  && index < get_num_input_ports());
     PortIdentifier subsystem_port_id =
         modal_subsystems_[mode_id]->get_input_port_id(port_index);
-    return Context<T>::GetInputPort(*GetSubsystemContext(mode_id),
+    return Context<T>::GetInputPort(*GetSubsystemContext(),
                                     subsystem_port_id);
   }
 
@@ -431,7 +463,7 @@ class HybridAutomatonContext : public Context<T> {
 
   // ****************** Do we actually need this?
   // ******************* Contrarily, do we actually also need mode_transitions_?
-  std::vector<ModalSubsystem*> modal_subsystems_;
+  std::vector<ModalSubsystem<T>*> modal_subsystems_;
 };
 
 }  // namespace systems
