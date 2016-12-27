@@ -35,7 +35,7 @@ namespace systems {
 // TODO(jadecastro): Consistent naming modalsubsystems vs. modal_subsystems, id
 // vs. mode_id, ....
 
-/// HybridAutomatonSubsystemState is a State, annotated with un-owned pointers
+/// HybridAutomatonState is a State, annotated with un-owned pointers
 /// to all the mutable subsystem states that it spans.
 template <typename T>
   class HybridAutomatonState : public State<T> {
@@ -54,8 +54,8 @@ template <typename T>
   /// Sets the substate at @p index to @p substate, or aborts if @p index is out
   /// of bounds.
   void set_substate(const int index, State<T>* modal_substate) {
-    DRAKE_DEMAND(index >= 0 && index < modal_substates_.size());
-    modal_substates_[index] = modal_substates;
+    DRAKE_DEMAND(index >= 0 && index < (int)modal_substates_.size());
+    modal_substates_[index] = modal_substate;
   }
 
  private:
@@ -63,55 +63,107 @@ template <typename T>
 };
 
 
+// TODO(jadecastro): Some comments are in order.
 template <typename T>
 class ModalSubsystem {
  public:
+  typedef int ModeId;
+  typedef int PortIdentifier;
+
   explicit ModalSubsystem(
       ModeId mode_id, System<T>* system,
-      const std::vector<symbolic::Formula>* invariant,
-      const std::vector<symbolic::Formula>* initial_conditions)
-      : modal_id_(mode_id), system_(system), invariant_(invariant),
-        initial_conditions_(initial_conditions) {}
+      std::vector<symbolic::Formula>* invariant,
+      std::vector<symbolic::Formula>* initial_conditions,
+      std::vector<PortIdentifier> input_port_ids,
+      std::vector<PortIdentifier> output_port_ids)
+      : mode_id_(mode_id), system_(system), invariant_(invariant),
+        initial_conditions_(initial_conditions),
+        input_port_ids_(input_port_ids), output_port_ids_(output_port_ids) {}
+
+  explicit ModalSubsystem(
+      ModeId mode_id, System<T>* system,
+      std::vector<symbolic::Formula>* invariant,
+      std::vector<symbolic::Formula>* initial_conditions)
+      : mode_id_(mode_id), system_(system), invariant_(invariant),
+        initial_conditions_(initial_conditions) { SetDefaultPortIds(); }
+
+  explicit ModalSubsystem(
+      ModeId mode_id, System<T>* system,
+      std::vector<PortIdentifier> input_port_ids,
+      std::vector<PortIdentifier> output_port_ids)
+      : mode_id_(mode_id), system_(system), input_port_ids_(input_port_ids),
+        output_port_ids_(output_port_ids){ SetDefaultPortIds(); }
 
   explicit ModalSubsystem(
       ModeId mode_id, System<T>* system)
-      : modal_id_(mode_id), system_(system) {}
+      : mode_id_(mode_id), system_(system) { SetDefaultPortIds(); }
 
   ModeId get_mode_id() const { return mode_id_; }
   System<T>* get_system() const {return system_; }
-  std::vector<PortIdentifier> get_input_port_ids() const {
+  int get_num_input_ports() const {
+    return static_cast<int>(input_port_ids_.size());
+  }
+
+  const std::vector<PortIdentifier> get_input_port_ids() const {
     return input_port_ids_;
   }
-  std::vector<PortIdentifier> get_output_port_ids() const {
+  std::vector<PortIdentifier>* get_mutable_input_port_ids() const {
+    return input_port_ids_;
+  }
+  const std::vector<PortIdentifier> get_output_port_ids() const {
     return output_port_ids_;
   }
+  // TODO(jadecastro): Do we really need the following two getters?
+  // TODO: const?
   PortIdentifier get_input_port_id(const int index) const {
-    DRAKE_DEMAND(index >=0 && index < input_port_ids_.size())
+    DRAKE_DEMAND(index >=0 && index < input_port_ids_.size());
     return input_port_ids_(index);
   }
   PortIdentifier get_output_port_id(const int index) const {
-    DRAKE_DEMAND(index >=0 && index < output_port_ids_.size())
+    DRAKE_DEMAND(index >=0 && index < output_port_ids_.size());
     return output_port_ids_(index);
   }
  private:
   // Index for this mode.
   ModeId mode_id_;
-  // TODO(jadecastro): Attach a string name too (how does Diagram do this?)
-  // System model.
+  // TODO(jadecastro): Allow ModeId to take on an `enum` here in place of the
+  // `int`.
+  // The system model.
   const System<T>* system_;
-  // The ordered inputs and outputs.
+  // Index set of the input and output ports.
   std::vector<PortIdentifier> input_port_ids_;
   std::vector<PortIdentifier> output_port_ids_;
   // Formula representing the invariant for this mode.
-  const std::vector<symbolic::Formula>* invariant_;  // TODO: Eigen??
+  std::vector<symbolic::Formula>* invariant_;  // TODO: Eigen??
   // Formula representing the initial conditions for this mode.
-  const std::vector<symbolic::Formula>* initial_conditions_;  // TODO: Eigen??
-}
+  std::vector<symbolic::Formula>* initial_conditions_;  // TODO: Eigen??
+
+  void SetDefaultPortIds() {
+    if (input_port_ids_.empty()) {
+      for (int id = 0; id < system_->get_num_input_ports(); ++id) {
+        input_port_ids_.emplace_back(id);
+      }
+    }
+    if (output_port_ids_.empty()) {
+      for (int id = 0; id < system_->get_num_output_ports(); ++id) {
+        output_port_ids_.emplace_back(id);
+      }
+    }
+    if (invariant_->empty()) {
+      invariant_->emplace_back(symbolic::Formula::False());
+    }
+    if (initial_conditions_->empty()) {
+      initial_conditions_->emplace_back(symbolic::Formula::True());
+    }
+  }
+};
 
 /// The HybridAutomatonContext is a container for all of the data necessary to
-/// uniquely determine the computations performed by a HybridAutomaton
-/// (HA). Specifically, a HybridAutomatonContext contains contexts and outputs
-/// for all modal subsystems in the finite-state machine.
+/// uniquely determine the computations performed by a HybridAutomaton (HA).
+/// Specifically, a HybridAutomatonContext contains contexts and outputs for all
+/// modal subsystems in the finite-state machine. In addition, it augments the
+/// subsystem contexts with an abstract (modal) state designating the current
+/// active ModalSubsystem.
 ///
 /// In the context, the size of the state vector may change, but the inputs and
 /// outputs must be of fixed size.
@@ -125,11 +177,13 @@ template <typename T>
 class HybridAutomatonContext : public Context<T> {
  public:
   typedef int ModeId;
+  typedef int PortIdentifier;
 
   /// Constructs a HybridAutomatonContext with a fixed number @p num_subsystems
   /// in a way that allows for dynamic re-sizing during discrete events.
   explicit HybridAutomatonContext(const int num_subsystems)
-      : outputs_(num_subsystems), contexts_(num_subsystems) {}
+      : outputs_(num_subsystems), contexts_(num_subsystems),
+        state_(num_subsystems) {}
 
   /// Declares a new subsystem in the HybridAutomatonContext.  Subsystems are
   /// identified by number. If the subsystem has already been declared, aborts.
@@ -152,17 +206,31 @@ class HybridAutomatonContext : public Context<T> {
     //symbolic_states_[id] = std::move();
   }
 
+  /// Declares that a particular input port of a particular subsystem is an
+  /// input to the entire Diagram that allocates this Context. Aborts if the
+  /// subsystem has not been added to the DiagramContext.
+  ///
+  /// User code should not call this method. It is for use during Diagram
+  /// context allocation only.
+  void ExportInput(const ModeId& mode_id, const PortIdentifier& port_id) {
+    DRAKE_DEMAND(contexts_[mode_id] != nullptr);  // Ensure that the context
+                                                  // exists.
+    //DRAKE_ASSERT(!modal_subsystems_[mode_id]->get_input_port_ids().empty());
+    modal_subsystems_[mode_id]->
+        get_mutable_input_port_ids->emplace_back(port_id);
+  }
+
   /// Generates the state vector for the entire diagram by wrapping the states
   /// of all the constituent diagrams.
   ///
   /// User code should not call this method. It is for use during
   /// HybridAutomaton context allocation only.
   void MakeState(const ModeId mode_id) {
-    const int num_subsystems = static_cast<int>(contexts_.size());
+    //const int num_subsystems = static_cast<int>(contexts_.size());
     std::vector<AbstractValue*> hybrid_xm;
 
     Context<T>* context = contexts_[mode_id].get();
-    state_.set_substate(id, context->get_mutable_state());
+    state_.set_substate(mode_id, context->get_mutable_state());
     // Continuous
     const ContinuousState<T>* hybrid_xc =
         context->get_mutable_continuous_state();
@@ -170,9 +238,9 @@ class HybridAutomatonContext : public Context<T> {
     const std::vector<BasicVector<T>*>& hybrid_xd =
         context->get_mutable_discrete_state()->get_data();
     // Abstract
-    AbstractState* xm = context->get_mutable_abstract_state();
-    for (int i_xm = 0; i_xm < xm->size(); ++i_xm) {
-      hybrid_xm.push_back(&xm->get_mutable_abstract_state(i_xm));
+    AbstractState* subsystem_xm = context->get_mutable_abstract_state();
+    for (int i_xm = 0; i_xm < subsystem_xm->size(); ++i_xm) {
+      hybrid_xm.push_back(&subsystem_xm->get_mutable_abstract_state(i_xm));
     }
     // The last abstract element corresponds to the modal state of the HA.
     hybrid_xm.push_back(&modal_subsystems_[mode_id]);
@@ -189,10 +257,10 @@ class HybridAutomatonContext : public Context<T> {
   /// HybridAutomatonContext at that index.
   SystemOutput<T>* GetSubsystemOutput() const {
     const int num_outputs = static_cast<int>(outputs_.size());
-    ModeId id = this->get_mode_id();
-    DRAKE_DEMAND(id >= 0 && id < num_outputs);
-    DRAKE_DEMAND(outputs_[id] != nullptr);
-    return outputs_[id].get();
+    const ModeId mode_id = this->get_mode_id();
+    DRAKE_DEMAND(mode_id >= 0 && mode_id < num_outputs);
+    DRAKE_DEMAND(outputs_[mode_id] != nullptr);
+    return outputs_[mode_id].get();
   }
 
   /// Returns the context structure for a given constituent system @p index.
@@ -200,7 +268,7 @@ class HybridAutomatonContext : public Context<T> {
   /// HybridAutomatonContext at that index.
   const Context<T>* GetSubsystemContext() const {
     const int num_contexts = static_cast<int>(contexts_.size());
-    ModeId id = this->get_mode_id();
+    const ModeId id = this->get_mode_id();
     DRAKE_DEMAND(id >= 0 && id < num_contexts);
     DRAKE_DEMAND(contexts_[id] != nullptr);
     return contexts_[id].get();
@@ -211,10 +279,12 @@ class HybridAutomatonContext : public Context<T> {
   /// HybridAutomatonContext at that index.
   Context<T>* GetMutableSubsystemContext() {
     const int num_contexts = static_cast<int>(contexts_.size());
-    ModeId id = this->get_mode_id();
+    const ModeId id = this->get_mode_id();
     // TODO: needs mode, which is incompatible with `System` API!!
     DRAKE_DEMAND(id >= 0 && id < num_contexts);
     DRAKE_DEMAND(contexts_[id] != nullptr);
+    // TODO(jadecastro): These lines have been repeated throughout... let's
+    // consolidate.
     return contexts_[id].get();
   }
 
@@ -245,24 +315,44 @@ class HybridAutomatonContext : public Context<T> {
   }
 
   int get_num_input_ports() const override {
-    return static_cast<int>(inputs_.size());
+    const int num_contexts = static_cast<int>(contexts_.size());
+    const ModeId mode_id = this->get_mode_id();
+    // TODO: needs mode, which is incompatible with `System` API!!
+    DRAKE_DEMAND(mode_id >= 0 && mode_id < num_contexts);
+    DRAKE_DEMAND(contexts_[mode_id] != nullptr);
+    // TODO(jadecastro): Consolidate the above into a separate function, to
+    // avoid repitition.
+    return modal_subsystems_[mode_id]->get_num_input_ports();
   }
 
-  void SetInputPort(int index, std::unique_ptr<InputPort> port) override {
-    DRAKE_ASSERT(index >= 0 && index < get_num_input_ports());
-    ModeId id = 1;
-    inputs_[id][index] = std::move(port);
+  void SetInputPort(int port_index, std::unique_ptr<InputPort> port) override {
+    // TODO(jadecastro): DependentInputPort? (i.e. eval some output to get the
+    // input?)
+    const int num_contexts = static_cast<int>(contexts_.size());
+    const ModeId mode_id = this->get_mode_id();
+    // TODO: needs mode, which is incompatible with `System` API!!
+    DRAKE_DEMAND(mode_id >= 0 && mode_id < num_contexts);
+    DRAKE_DEMAND(contexts_[mode_id] != nullptr);  // TODO: Make sure we actually
+                                                  // have a context to derive
+                                                  // the mode from!
+    // TODO(jadecastro): Consolidate the above into a separate function, to
+    // avoid repitition.
+    DRAKE_ASSERT(mode_id >= 0);  // TODO:  && index < get_num_input_ports());
+    PortIdentifier subsystem_port_id =
+        modal_subsystems_[mode_id]->get_input_port_id(port_index);
+    GetMutableSubsystemContext()
+        ->SetInputPort(subsystem_port_id, std::move(port));
   }
 
   ModalSubsystem* get_modal_subsystem() const {
-    return dynamic_cast_or_die<ModalSubsystem*>(modal_subsystem_state_);
-    // **********************************************************$^^*&(&*(&%^&$$
-    // ******** Get modal_subsystem_state_ from somewhere!!
+    auto modal_subsystem = modal_subsystems_[this->get_mode_id()];
+    //DRAKE_DEMAND(modal_subsystem != nullptr);
+    return modal_subsystem;
   }
 
   ModeId get_mode_id() const {
-    ModeId mode_id = get_modal_subsystem()->mode;
-    return mode_id;
+    const auto mode_id = this->get_abstract_state()->back();
+    return dynamic_cast<ModeId>(mode_id);
   }
 
   // Mandatory overrides.
@@ -289,12 +379,13 @@ class HybridAutomatonContext : public Context<T> {
     }
 
     // Clone the external input structure.
-    for (const PortIdentifier& id : input_ids_) {
-      clone->ExportInput(id);
+    ModalSubsystem* modal_subsystem = get_modal_subsystem();
+    for (int i = 0; i < modal_subsystem->get_num_input_ports(); ++i) {
+      clone->ExportInput(i, modal_subsystem->get_input_port_id(i));
     }
 
     // Build the state for the initially-activated subsystem in the HA.
-    mode_id = 0;   // TODO(jadecastro): Set this value externally.
+    const ModeId mode_id = 0;   // TODO(jadecastro): Set this value externally.
     clone->MakeState(mode_id);
 
     // Make deep copies of everything else using the default copy constructors.
@@ -303,13 +394,27 @@ class HybridAutomatonContext : public Context<T> {
     return clone;
   }
 
-  const InputPort* GetInputPort(int index) const override {
-    DRAKE_ASSERT(index >= 0 && index < get_num_input_ports());
-    ModeId id = 1;
-    return inputs_[id][index].get();
+  /// Returns the input port at the given @p index, whose subsystem is derived
+  /// from the context.
+  const InputPort* GetInputPort(int port_index) const override {
+    // TODO(jadecastro): DependentInputPort? (i.e. eval some output to get the
+    // input?)
+    const int num_contexts = static_cast<int>(contexts_.size());
+    const ModeId mode_id = this->get_mode_id();
+    // TODO: needs mode, which is incompatible with `System` API!!
+    DRAKE_DEMAND(mode_id >= 0 && mode_id < num_contexts);
+    DRAKE_DEMAND(contexts_[mode_id] != nullptr);
+    // TODO(jadecastro): Consolidate the above into a separate function, to
+    // avoid repitition.
+    DRAKE_ASSERT(mode_id >= 0);  // TODO:  && index < get_num_input_ports());
+    PortIdentifier subsystem_port_id =
+        modal_subsystems_[mode_id]->get_input_port_id(port_index);
+    return Context<T>::GetInputPort(*GetSubsystemContext(mode_id),
+                                    subsystem_port_id);
   }
 
  private:
+  // TODO(jadecastro): Implement this.
   /*
   std::unique_ptr<symbolic::Variable>
   MakeSymbolicVariableFromState() {
@@ -318,13 +423,14 @@ class HybridAutomatonContext : public Context<T> {
   */
 
   // Containers for all the registered modal subsystems.
-  std::vector<std::vector<std::unique_ptr<InputPort>>> inputs_;
   std::vector<std::unique_ptr<SystemOutput<T>>> outputs_;
   std::vector<std::unique_ptr<Context<T>>> contexts_;
 
   // The internal state of the System.
-  State<T> state_;
+  HybridAutomatonState<T> state_;
 
+  // ****************** Do we actually need this?
+  // ******************* Contrarily, do we actually also need mode_transitions_?
   std::vector<ModalSubsystem*> modal_subsystems_;
 };
 

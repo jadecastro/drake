@@ -1,10 +1,10 @@
 if(BUILD_TESTING)
-  add_subdirectory(test)
+  #add_subdirectory(test)
 endif()
 
 add_library_with_exports(LIB_NAME drakeBouncingBall SOURCE_FILES
   ball.cc
-  bouncing_ball.cc
+  #bouncing_ball.cc
   )
 target_link_libraries(drakeBouncingBall
   drakeCommon
@@ -12,8 +12,8 @@ target_link_libraries(drakeBouncingBall
   )
 drake_install_libraries(drakeBouncingBall)
 drake_install_headers(
-  bouncing_ball-inl.h
-  bouncing_ball.h
+  #bouncing_ball-inl.h
+  #bouncing_ball.h
   ball-inl.h
   ball.h
   )

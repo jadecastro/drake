@@ -13,8 +13,10 @@ set(sources
   input_port_evaluator_interface.cc
   leaf_context.cc
   leaf_system.cc
-  hybrid_test.cc
-  hybrid_builder_test.cc
+  #hybrid_automaton.cc
+  hybrid_automaton_context.cc
+  #hybrid_test.cc
+  #hybrid_builder_test.cc
   output_port_listener_interface.cc
   parameters.cc
   single_output_vector_source.cc
@@ -53,8 +55,10 @@ set(installed_headers
   input_port_evaluator_interface.h
   leaf_context.h
   leaf_system.h
-  hybrid_test.h
-  hybrid_builder_test.h
+  #hybrid_automaton.h
+  hybrid_automaton_context.h
+  #hybrid_test.h
+  #hybrid_builder_test.h
   output_port_listener_interface.h
   parameters.h
   single_output_vector_source.h
