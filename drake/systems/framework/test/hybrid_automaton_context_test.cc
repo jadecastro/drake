@@ -31,10 +31,14 @@ class HybridAutomatonContextTest : public ::testing::Test {
     context_.reset(new HybridAutomatonContext<double>(kNumSystems));
     context_->set_time(kTime);
 
-    ModalSubsystem<double>* ms0 = AddModalSubsystem(*integrator0_, 0);
-    ModalSubsystem<double>* ms1 = AddModalSubsystem(*integrator1_, 1);
-    DRAKE_DEMAND(ms0 != nullptr);
-    DRAKE_DEMAND(ms1 != nullptr);
+    const int mode_0 = 0;
+    ModalSubsystem<double> mss0 = ModalSubsystem<double>(
+        mode_0, integrator0_.get());
+    AddModalSubsystem(*integrator0_, &mss0, mode_0);
+    const int mode_1 = 1;
+    ModalSubsystem<double> mss1 = ModalSubsystem<double>(
+        mode_1, integrator1_.get());
+    AddModalSubsystem(*integrator1_, &mss1, mode_1);
 
     context_->ExportInput(0 /* either integrator's input */, 0 /* port 0 */);
 
@@ -46,19 +50,18 @@ class HybridAutomatonContextTest : public ::testing::Test {
     const int size_xa = xa->size();  // TODO(jadecastro): Seems a bit silly.
     // Sets the modal subsystem to be integrator0_.
     xa->get_mutable_abstract_state(size_xa-1).SetValue<
-      ModalSubsystem<double>*>(ms0);
+      ModalSubsystem<double>*>(&mss0);
   }
 
-  ModalSubsystem<double>*
-  AddModalSubsystem(System<double>& sys, int mode_id) {
+  void
+  AddModalSubsystem(const System<double>& sys,
+                    ModalSubsystem<double>* modal_subsystem, int mode_id) {
+    //const System<double> sys = modal_subsystem->get_system();
     auto subcontext = sys.CreateDefaultContext();
     auto suboutput = sys.AllocateOutput(*subcontext);
-    ModalSubsystem<double> modal_subsystem = ModalSubsystem<double>(
-        mode_id, &sys);
     context_->
         AddModalSubsystem(
-            &modal_subsystem, std::move(subcontext), std::move(suboutput));
-    return &modal_subsystem;
+            modal_subsystem, std::move(subcontext), std::move(suboutput));
   }
 
   // Mocks up a descriptor that's sufficient to read a FreestandingInputPort
@@ -79,8 +82,9 @@ class HybridAutomatonContextTest : public ::testing::Test {
 // HybridAutomatonContext.
 TEST_F(HybridAutomatonContextTest, RetrieveConstituents) {
   // The current active ModalSubsystem should be a leaf System.
+  auto subcontext = context_->GetSubsystemContext();
   auto context = dynamic_cast<const LeafContext<double>*>(
-      context_->GetSubsystemContext());
+      subcontext);
   EXPECT_TRUE(context != nullptr);
 
   auto output = dynamic_cast<const LeafSystemOutput<double>*>(

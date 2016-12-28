@@ -189,6 +189,8 @@ class HybridAutomatonContext : public Context<T> {
   ///
   /// User code should not call this method. It is for use during Hybrid context
   /// allocation only.
+  //
+  // TODO(jadecastro): Replace with const ModalSubsystem<T>&.
   void AddModalSubsystem(ModalSubsystem<T>* modal_subsystem,
                          std::unique_ptr<Context<T>> context,
                          std::unique_ptr<SystemOutput<T>> output) {
