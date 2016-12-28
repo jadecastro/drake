@@ -11,6 +11,7 @@
 #include "drake/systems/framework/leaf_context.h"
 #include "drake/systems/framework/system.h"
 #include "drake/systems/framework/system_input.h"
+#include "drake/systems/framework/test_utilities/pack_value.h"
 #include "drake/systems/primitives/integrator.h"
 #include "drake/systems/primitives/zero_order_hold.h"
 
@@ -31,14 +32,35 @@ class HybridAutomatonContextTest : public ::testing::Test {
     context_.reset(new HybridAutomatonContext<double>(kNumSystems));
     context_->set_time(kTime);
 
-    const int mode_0 = 0;
-    ModalSubsystem<double> mss0 = ModalSubsystem<double>(
-        mode_0, integrator0_.get());
-    AddModalSubsystem(*integrator0_, &mss0, mode_0);
-    const int mode_1 = 1;
-    ModalSubsystem<double> mss1 = ModalSubsystem<double>(
-        mode_1, integrator1_.get());
-    AddModalSubsystem(*integrator1_, &mss1, mode_1);
+    const int mode_0_ = 0;
+    std::unique_ptr<ModalSubsystem<double>> mss0_(new ModalSubsystem<double>(
+        mode_0_, integrator0_.get()));
+
+    std::unique_ptr<AbstractValue> abstract_state =
+        std::unique_ptr<AbstractValue>(
+            new Value<ModalSubsystem<double>>(*mss0_.get()));
+    std::vector<AbstractValue*> xm;
+    xm.push_back(abstract_state.get());
+    context_->
+        set_abstract_state(std::make_unique<AbstractState>(std::move(xm)));
+    std::cerr << " Abstract state: "
+              << context_->get_abstract_state<
+                 ModalSubsystem<double>>(0).get_mode_id() << std::endl;
+
+    //AddModalSubsystem(*integrator0_, std::move(mss0_));
+    auto subcontext0 = integrator1_->CreateDefaultContext();
+    auto suboutput0 = integrator1_->AllocateOutput(*subcontext0);
+    context_->AddModalSubsystem(std::move(mss0_),
+                                std::move(subcontext0), std::move(suboutput0));
+
+    const int mode_1_ = 1;
+    std::unique_ptr<ModalSubsystem<double>> mss1_(new ModalSubsystem<double>(
+        mode_1_, integrator1_.get()));
+    //AddModalSubsystem(*integrator1_, std::move(mss1_));
+    auto subcontext1 = integrator1_->CreateDefaultContext();
+    auto suboutput1 = integrator1_->AllocateOutput(*subcontext1);
+    context_->AddModalSubsystem(std::move(mss1_),
+                                std::move(subcontext1), std::move(suboutput1));
 
     context_->ExportInput(0 /* either integrator's input */, 0 /* port 0 */);
 
@@ -46,22 +68,21 @@ class HybridAutomatonContextTest : public ::testing::Test {
     context_->MakeState(0);
     ContinuousState<double>* xc = context_->get_mutable_continuous_state();
     xc->get_mutable_vector()->SetAtIndex(0, 42.0);
-    AbstractState* xa = context_->get_mutable_abstract_state();
-    const int size_xa = xa->size();  // TODO(jadecastro): Seems a bit silly.
-    // Sets the modal subsystem to be integrator0_.
-    xa->get_mutable_abstract_state(size_xa-1).SetValue<
-      ModalSubsystem<double>*>(&mss0);
+    std::cerr << " Continuous state: "
+              << context_->
+        get_continuous_state()->get_vector().GetAtIndex(0) << std::endl;
   }
 
   void
-  AddModalSubsystem(const System<double>& sys,
-                    ModalSubsystem<double>* modal_subsystem, int mode_id) {
+  AddModalSubsystem(const System<double>& sys,  // TODO: Nix `sys` argument or
+                                                // put ModalSubsystem ctor
+                                                // within the function.
+                    std::unique_ptr<ModalSubsystem<double>> modal_subsystem) {
     //const System<double> sys = modal_subsystem->get_system();
     auto subcontext = sys.CreateDefaultContext();
     auto suboutput = sys.AllocateOutput(*subcontext);
-    context_->
-        AddModalSubsystem(
-            modal_subsystem, std::move(subcontext), std::move(suboutput));
+    context_->AddModalSubsystem(std::move(modal_subsystem),
+                                std::move(subcontext), std::move(suboutput));
   }
 
   // Mocks up a descriptor that's sufficient to read a FreestandingInputPort
@@ -80,6 +101,8 @@ class HybridAutomatonContextTest : public ::testing::Test {
 
 // Tests that subsystems have outputs and contexts in the
 // HybridAutomatonContext.
+
+// TODO(jadecastro): Repurpose as
 TEST_F(HybridAutomatonContextTest, RetrieveConstituents) {
   // The current active ModalSubsystem should be a leaf System.
   auto subcontext = context_->GetSubsystemContext();
@@ -150,15 +173,6 @@ TEST_F(HybridAutomatonContextTest, HybridAutomatonState) {
     EXPECT_EQ(context_->GetMutableSubsystemContext(i)->get_mutable_state(),
               diagram_state->get_mutable_substate(i));
   }
-}
-
-// Tests that no exception is thrown when connecting a valid source
-// and destination port.
-TEST_F(HybridAutomatonContextTest, ConnectValid) {
-*/
-//  EXPECT_NO_THROW(context_->Connect({0 /* adder0_ */, 0 /* port 0 */},
-//                                    {1 /* adder1_ */, 1 /* port 1 */}));
-/*
 }
 
 // Tests that input ports can be assigned to the HybridAutomatonContext and then
