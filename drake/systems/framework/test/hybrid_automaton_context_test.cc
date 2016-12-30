@@ -28,6 +28,7 @@ class HybridAutomatonContextTest : public ::testing::Test {
   void SetUp() override {
     integrator0_.reset(new Integrator<double>(kSize));
     integrator1_.reset(new Integrator<double>(kSize));
+    integrator2_.reset(new Integrator<double>(kSize));
 
     context_.reset(new HybridAutomatonContext<double>());
     context_->set_time(kTime);
@@ -38,18 +39,17 @@ class HybridAutomatonContextTest : public ::testing::Test {
     //ModalSubsystem<double> mss0 = ModalSubsystem(mode_0_, integrator0_.get());
     auto subcontext0 = integrator0_->CreateDefaultContext();
     auto suboutput0 = integrator0_->AllocateOutput(*subcontext0);
-    context_->RegisterSubsystem(std::move(mss0),
-                                std::move(subcontext0), std::move(suboutput0));
-
-    /*
-    const int mode_1_ = 1;
-    std::unique_ptr<ModalSubsystem<double>> mss1_(new ModalSubsystem<double>(
-        mode_1_, integrator1_.get()));
+    context_->RegisterSubsystem(std::move(mss0), std::move(subcontext0),
+                                std::move(suboutput0));
+    context_->DeRegisterSubsystem();
+    const int mode_id = 1;
+    std::unique_ptr<ModalSubsystem<double>> mss1(new ModalSubsystem<double>(
+        mode_id, integrator1_.get()));
+    //ModalSubsystem<double> mss0 = ModalSubsystem(mode_0_, integrator0_.get());
     auto subcontext1 = integrator1_->CreateDefaultContext();
     auto suboutput1 = integrator1_->AllocateOutput(*subcontext1);
-    context_->AddModalSubsystem(std::move(mss1_),
-                                std::move(subcontext1), std::move(suboutput1));
-    */
+    context_->RegisterSubsystem(std::move(mss1), std::move(subcontext1),
+                                std::move(suboutput1));
 
     context_->ExportInput({0 /* port 0 */});
 
@@ -83,6 +83,7 @@ class HybridAutomatonContextTest : public ::testing::Test {
   std::unique_ptr<HybridAutomatonContext<double>> context_;
   std::unique_ptr<Integrator<double>> integrator0_;
   std::unique_ptr<Integrator<double>> integrator1_;
+  std::unique_ptr<Integrator<double>> integrator2_;
 };
 
 // Tests that subsystems have outputs and contexts in the
@@ -117,32 +118,31 @@ TEST_F(HybridAutomatonContextTest, Time) {
 // Tests that state variables appear in the diagram context, and write
 // transparently through to the constituent system contexts.
 TEST_F(HybridAutomatonContextTest, State) {
-  // Each integrator has a single continuous state variable.
+  // The integrator has a single continuous state variable.
   ContinuousState<double>* xc = context_->get_mutable_continuous_state();
   EXPECT_EQ(1, xc->size());
   EXPECT_EQ(0, xc->get_generalized_position().size());
   EXPECT_EQ(0, xc->get_generalized_velocity().size());
   EXPECT_EQ(1, xc->get_misc_continuous_state().size());
 
-  // The zero-order hold has a difference state vector of length 1.
   DiscreteState<double>* xd = context_->get_mutable_discrete_state();
-  EXPECT_EQ(1, xd->size());
-  EXPECT_EQ(1, xd->get_discrete_state(0)->size());
+  EXPECT_EQ(0, xd->size());
 
-  // Changes to the diagram state write through to constituent system states.
-  // - Continuous
+  AbstractState* xa = context_->get_mutable_abstract_state();
+  EXPECT_EQ(1, xa->size());
+
+  // Changes to the continuous state write through to constituent system state.
   ContinuousState<double>* integrator0_xc =
       context_->GetMutableSubsystemContext()->get_mutable_continuous_state();
   EXPECT_EQ(42.0, integrator0_xc->get_vector().GetAtIndex(0));
 
-  // Changes to constituent system states appear in the diagram state.
-  // - Continuous
+  // Changes to constituent system state appears in the HA state.
   integrator0_xc->get_mutable_vector()->SetAtIndex(0, 1000.0);
   EXPECT_EQ(1000.0, xc->get_vector().GetAtIndex(0));
 }
 
 // Tests that the pointers to substates in the HybridAutomatonState are equal to
-// the substates in the subsystem contexts.
+// the substates in the subsystem context.
 TEST_F(HybridAutomatonContextTest, HybridAutomatonState) {
   auto hybrid_state = dynamic_cast<State<double>*>(
       context_->get_mutable_state());
@@ -151,22 +151,32 @@ TEST_F(HybridAutomatonContextTest, HybridAutomatonState) {
             hybrid_state);
 }
 
-/*
+// Tests that a change in the ModalSubsystem is reflected in the AbstractState.
+TEST_F(HybridAutomatonContextTest, HybridAutomatonMode) {
+  const int mode_id = 5;
+  std::unique_ptr<ModalSubsystem<double>> mss(new ModalSubsystem<double>(
+      mode_id, integrator2_.get()));
+  //ModalSubsystem<double> mss1 = ModalSubsystem(mode_id, integrator1_.get());
+  auto subcontext1 = integrator2_->CreateDefaultContext();
+  auto suboutput1 = integrator2_->AllocateOutput(*subcontext1);
+  context_->DeRegisterSubsystem();
+  context_->RegisterSubsystem(std::move(mss), std::move(subcontext1),
+                              std::move(suboutput1));
+  context_->SetModalState();
+
+  EXPECT_EQ(5, context_->template get_abstract_state<int>(0));
+}
+
 // Tests that input ports can be assigned to the HybridAutomatonContext and then
 // retrieved.
 TEST_F(HybridAutomatonContextTest, SetAndGetInputPorts) {
-  ASSERT_EQ(2, context_->get_num_input_ports());
+  ASSERT_EQ(1, context_->get_num_input_ports());
   context_->FixInputPort(0, BasicVector<double>::Make({128}));
   EXPECT_EQ(128, ReadVectorInputPort(*context_, 0)->get_value()[0]);
-  EXPECT_EQ(256, ReadVectorInputPort(*context_, 1)->get_value()[0]);
 }
 
 TEST_F(HybridAutomatonContextTest, Clone) {
-*/
-  //context_->Connect({0 /* adder0_ */, 0 /* port 0 */},
-  //                  {1 /* adder1_ */, 1 /* port 1 */});
-/*
-  AttachInputPorts();
+  context_->FixInputPort(0, BasicVector<double>::Make({128}));
 
   std::unique_ptr<HybridAutomatonContext<double>> clone(
       dynamic_cast<HybridAutomatonContext<double>*>(
@@ -177,26 +187,18 @@ TEST_F(HybridAutomatonContextTest, Clone) {
   EXPECT_EQ(kTime, clone->get_time());
 
   // Verify that the state was copied.
-  // - Continuous
   const ContinuousState<double>* xc = clone->get_continuous_state();
   EXPECT_EQ(42.0, xc->get_vector().GetAtIndex(0));
-  EXPECT_EQ(43.0, xc->get_vector().GetAtIndex(1));
-  // - Discrete
-  const BasicVector<double>* xd_vec = clone->get_discrete_state(0);
-  EXPECT_EQ(44.0, xd_vec->GetAtIndex(0));
 
-  // Verify that the cloned input ports contain the same data,
-  // but are different pointers.
-  EXPECT_EQ(2, clone->get_num_input_ports());
-  for (int i = 0; i < 2; ++i) {
-    const BasicVector<double>* orig_port = ReadVectorInputPort(*context_, i);
-    const BasicVector<double>* clone_port = ReadVectorInputPort(*clone, i);
-    EXPECT_NE(orig_port, clone_port);
-    EXPECT_TRUE(CompareMatrices(orig_port->get_value(), clone_port->get_value(),
-                                1e-8, MatrixCompareType::absolute));
-  }
+  // Verify that the cloned input port contains the same data,
+  // but with a different pointer.
+  EXPECT_EQ(1, clone->get_num_input_ports());
+  const BasicVector<double>* orig_port = ReadVectorInputPort(*context_, 0);
+  const BasicVector<double>* clone_port = ReadVectorInputPort(*clone, 0);
+  EXPECT_NE(orig_port, clone_port);
+  EXPECT_TRUE(CompareMatrices(orig_port->get_value(), clone_port->get_value(),
+                              1e-8, MatrixCompareType::absolute));
 }
-*/
 
 }  // namespace
 }  // namespace systems

@@ -185,6 +185,12 @@ class HybridAutomatonContext : public Context<T> {
     modal_subsystem_ = std::move(modal_subsystem);
   }
 
+  void DeRegisterSubsystem() {
+    context_.release();
+    output_.release();
+    modal_subsystem_.release();
+  }
+
   /// Declares that a particular input port of a particular subsystem is an
   /// input to the entire Diagram that allocates this Context. Aborts if the
   /// subsystem has not been added to the DiagramContext.
