@@ -33,13 +33,17 @@ class HybridAutomatonContextTest : public ::testing::Test {
     context_->set_time(kTime);
 
     // Instantiate a new modal subsystem.
-    const int mode_0_ = 27;
-    std::unique_ptr<ModalSubsystem<double>> mss0(new ModalSubsystem<double>(
-        mode_0_, integrator0_.get()));
-    //ModalSubsystem<double> mss0 = ModalSubsystem(mode_0_, integrator0_.get());
+    const int mode_id = 27;
+    //std::unique_ptr<ModalSubsystem<double>> mss0(new ModalSubsystem<double>(
+    //    mode_id, integrator0_.get()));
+    const ModalSubsystem<double> mss0 =
+        ModalSubsystem<double>(mode_id, integrator0_.get());
+    //const ModalSubsystem<double> mss0 =
+    //    ModalSubsystem(mode_id, integrator0_.get());
     auto subcontext0 = integrator0_->CreateDefaultContext();
     auto suboutput0 = integrator0_->AllocateOutput(*subcontext0);
-    context_->RegisterSubsystem(std::move(mss0), std::move(subcontext0),
+    context_->RegisterSubsystem(std::make_unique<ModalSubsystem<double>>(mss0),
+                                std::move(subcontext0),
                                 std::move(suboutput0));
     context_->MakeState();
     context_->SetModalState();
@@ -68,7 +72,6 @@ class HybridAutomatonContextTest : public ::testing::Test {
   std::unique_ptr<HybridAutomatonContext<double>> context_;
   std::unique_ptr<Integrator<double>> integrator0_;
   std::unique_ptr<Integrator<double>> integrator1_;
-  std::unique_ptr<Integrator<double>> integrator2_;
 };
 
 // Tests that subsystems have outputs and contexts in the

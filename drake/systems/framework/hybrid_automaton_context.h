@@ -70,6 +70,9 @@ class ModalSubsystem {
   int get_num_input_ports() const {
     return static_cast<int>(input_port_ids_.size());
   }
+  int get_num_output_ports() const {
+    return static_cast<int>(output_port_ids_.size());
+  }
 
   const std::vector<PortIdentifier> get_input_port_ids() const {
     return input_port_ids_;
