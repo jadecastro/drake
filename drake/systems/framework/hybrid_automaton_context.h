@@ -88,6 +88,9 @@ class ModalSubsystem {
   const std::vector<PortIdentifier> get_output_port_ids() const {
     return output_port_ids_;
   }
+  std::vector<PortIdentifier>* get_mutable_output_port_ids() {
+    return &output_port_ids_;
+  }
   // TODO(jadecastro): Do we really need the following two getters?
   // TODO: const?
   PortIdentifier get_input_port_id(const int index) const {
@@ -127,16 +130,17 @@ class ModalSubsystem {
   std::vector<PortIdentifier> output_port_ids_;
 
   void SetDefaultPortIds() {
-    if (input_port_ids_.empty()) {
-      for (int id = 0; id < system_->get_num_input_ports(); ++id) {
-        input_port_ids_.emplace_back(id);
-      }
-    }
-    if (output_port_ids_.empty()) {
-      for (int id = 0; id < system_->get_num_output_ports(); ++id) {
-        output_port_ids_.emplace_back(id);
-      }
-    }
+    //if (input_port_ids_.empty()) {
+    //  for (int id = 0; id < system_->get_num_input_ports(); ++id) {
+    //    input_port_ids_.emplace_back(id);
+    //  }
+    //}
+    //if (output_port_ids_.empty()) {
+    //  for (int id = 0; id < system_->get_num_output_ports(); ++id) {
+    //    output_port_ids_.emplace_back(id);
+    //  }
+    //}
+
     // TODO(jadecastro): Address segfaulting in symbolic::Formula.
     //if (invariant_->empty()) {
     //invariant_->push_back(symbolic::Formula::False());
@@ -155,7 +159,9 @@ class ModalSubsystem {
 /// active ModalSubsystem.
 ///
 /// In the context, the size of the state vector may change, but the inputs and
-/// outputs must be of fixed size.
+/// outputs must be of fixed size.  If ModalSubsystems have inconsistent
+/// input/output dimensions, this is reconciled via ExportInput and
+/// ExportOutput.
 ///
 /// In general, users should not need to interact with a HybridAutomatonContext
 /// directly. Use the accessors on Hybrid Automaton instead.
@@ -198,7 +204,17 @@ class HybridAutomatonContext : public Context<T> {
   /// User code should not call this method. It is for use during Diagram
   /// context allocation only.
   void ExportInput(const PortIdentifier& port_id) {
-    modal_subsystem_-> get_mutable_input_port_ids()->emplace_back(port_id);
+    modal_subsystem_->get_mutable_input_port_ids()->emplace_back(port_id);
+  }
+
+  /// Declares that a particular input port of a particular subsystem is an
+  /// input to the entire Diagram that allocates this Context. Aborts if the
+  /// subsystem has not been added to the DiagramContext.
+  ///
+  /// User code should not call this method. It is for use during Diagram
+  /// context allocation only.
+  void ExportOutput(const PortIdentifier& port_id) {
+    modal_subsystem_->get_mutable_output_port_ids()->emplace_back(port_id);
   }
 
   /// Generates the state vector for the entire diagram by wrapping the states
@@ -372,13 +388,6 @@ class HybridAutomatonContext : public Context<T> {
     // everything in CreateDefaultContext.
     clone->RegisterSubsystem(
         modal_subsystem_->Clone(), context_->Clone(), output_->Clone());
-
-    // Clone the external input structure.
-    const ModalSubsystem<T>* modal_subsystem = GetModalSubsystem();
-    DRAKE_DEMAND(modal_subsystem != nullptr);
-    for (int i = 0; i < modal_subsystem->get_num_input_ports(); ++i) {
-      clone->ExportInput(modal_subsystem->get_input_port_id(i));
-    }
 
     // Build the state for the initially-activated subsystem in the HA.
     clone->MakeState();
