@@ -23,16 +23,8 @@
 namespace drake {
 namespace systems {
 
-// TODO(jadecastro): How to concatenate abstract states from subsystems to the
-// parent hybrid system.
-//
-// TODO(jadecastro): Better use of unique pointers for memory management and
-// ownership hierarchy.  See, e.g.:
-// https://github.com/ToyotaResearchInstitute/drake-maliput/commit/ ...
-//    cc29ae0c2ea265150a4d37554c4e63bf0751d30e
-//
-// TODO(jadecastro): Implement and test capability to capture hybrid
-// system-of-hybrid-systems functionality.
+// TODO(jadecastro): Test capability to capture hybrid system-of-hybrid-systems
+// functionality.
 //
 // TODO(jadecastro): Consistent naming modalsubsystems vs. modal_subsystems, id
 // vs. mode_id, ....
@@ -131,16 +123,10 @@ class ModalSubsystem {
 };
 
 /// The HybridAutomatonContext is a container for all of the data necessary to
-/// uniquely determine the computations performed by a HybridAutomaton (HA).
-/// Specifically, a HybridAutomatonContext contains contexts and outputs for all
-/// modal subsystems in the finite-state machine. In addition, it augments the
-/// subsystem contexts with an abstract (modal) state designating the current
-/// active ModalSubsystem.
-///
-/// In the context, the size of the state vector may change, but the inputs and
-/// outputs must be of fixed size.  If ModalSubsystems have inconsistent
-/// input/output dimensions, this is reconciled via ExportInput and
-/// ExportOutput.
+/// uniquely determine the state of a HybridAutomaton (HA).  It contains the
+/// context and output for active ModalSubsystem, as chosen by
+/// HybridAutomaton. In addition, it augments the subsystem contexts with an
+/// abstract state designating the active mode.
 ///
 /// In general, users should not need to interact with a HybridAutomatonContext
 /// directly. Use the accessors on Hybrid Automaton instead.
@@ -158,8 +144,6 @@ class HybridAutomatonContext : public Context<T> {
   explicit HybridAutomatonContext() {}
 
   // ADD COMMENTS
-  // ***** Call this something else; registered implies we only do it once.. we
-  // actually call this every time a new mode is triggered.
   void RegisterSubsystem(std::unique_ptr<ModalSubsystem<T>> modal_subsystem,
                          std::unique_ptr<Context<T>> subcontext,
                          std::unique_ptr<SystemOutput<T>> suboutput) {
@@ -170,6 +154,7 @@ class HybridAutomatonContext : public Context<T> {
     modal_subsystem_ = std::move(modal_subsystem);
   }
 
+  // ADD COMMENTS
   void DeRegisterSubsystem() {
     context_.release();
     output_.release();
