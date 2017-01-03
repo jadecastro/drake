@@ -28,11 +28,11 @@ class HybridAutomatonContextTest : public ::testing::Test {
   void SetUp() override {
     integrator0_.reset(new Integrator<double>(kSize));
     integrator1_.reset(new Integrator<double>(kSize));
-    integrator2_.reset(new Integrator<double>(kSize));
 
     context_.reset(new HybridAutomatonContext<double>());
     context_->set_time(kTime);
 
+    // Instantiate a new modal subsystem.
     const int mode_0_ = 27;
     std::unique_ptr<ModalSubsystem<double>> mss0(new ModalSubsystem<double>(
         mode_0_, integrator0_.get()));
@@ -43,40 +43,17 @@ class HybridAutomatonContextTest : public ::testing::Test {
                                 std::move(suboutput0));
     context_->MakeState();
     context_->SetModalState();
-    std::cerr << " Abstract state: "
-              << context_->get_abstract_state<int>(0) << std::endl;
 
-    context_->DeRegisterSubsystem();
-    const int mode_id = 17;
-    std::unique_ptr<ModalSubsystem<double>> mss1(new ModalSubsystem<double>(
-        mode_id, integrator1_.get()));
-    ////ModalSubsystem<double> mss0 = ModalSubsystem(mode_0_, integrator0_.get());
-    auto subcontext1 = integrator1_->CreateDefaultContext();
-    auto suboutput1 = integrator1_->AllocateOutput(*subcontext1);
-    context_->RegisterSubsystem(std::move(mss1), std::move(subcontext1),
-                                std::move(suboutput1));
-
+    // Explicitly export the ports.
     context_->ExportInput({0 /* export input port 0 */});
     context_->ExportOutput({0 /* export output port 0 */});
-    std::cerr << " Num input ports: " << context_->get_num_input_ports()
-              << std::endl;
-
-    // Default the initial active ModalSubsystem to be integrator0_.
-    context_->MakeState();
 
     // Set the continuous state.
     ContinuousState<double>* xc = context_->get_mutable_continuous_state();
     xc->get_mutable_vector()->SetAtIndex(0, 42.0);
-    //std::cerr << " Continuous state: "
-    //          << context_->
-    //    get_continuous_state()->get_vector().GetAtIndex(0) << std::endl;
-    //std::cerr << " Abstract state: "
-    //          << context_->get_abstract_state<int>(0) << std::endl;
 
-    // Set the abstract state.
+    // Set the abstract state with the ID of the current modal subsystem.
     context_->SetModalState();
-    std::cerr << " Abstract state: "
-              << context_->get_abstract_state<int>(0) << std::endl;
   }
 
   // Mocks up a descriptor that's sufficient to read a FreestandingInputPort
@@ -163,10 +140,10 @@ TEST_F(HybridAutomatonContextTest, HybridAutomatonState) {
 TEST_F(HybridAutomatonContextTest, HybridAutomatonMode) {
   const int mode_id = 555;
   std::unique_ptr<ModalSubsystem<double>> mss(new ModalSubsystem<double>(
-      mode_id, integrator2_.get()));
+      mode_id, integrator1_.get()));
   //ModalSubsystem<double> mss1 = ModalSubsystem(mode_id, integrator1_.get());
-  auto subcontext1 = integrator2_->CreateDefaultContext();
-  auto suboutput1 = integrator2_->AllocateOutput(*subcontext1);
+  auto subcontext1 = integrator1_->CreateDefaultContext();
+  auto suboutput1 = integrator1_->AllocateOutput(*subcontext1);
   context_->DeRegisterSubsystem();
   context_->RegisterSubsystem(std::move(mss), std::move(subcontext1),
                               std::move(suboutput1));

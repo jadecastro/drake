@@ -60,18 +60,18 @@ class ModalSubsystem {
       std::vector<symbolic::Formula>* invariant,
       std::vector<symbolic::Formula>* initial_conditions)
       : mode_id_(mode_id), system_(system), invariant_(invariant),
-        initial_conditions_(initial_conditions) { SetDefaultPortIds(); }
+        initial_conditions_(initial_conditions) {}
 
   explicit ModalSubsystem(
       const ModeId mode_id, const System<T>* system,
       std::vector<PortIdentifier> input_port_ids,
       std::vector<PortIdentifier> output_port_ids)
       : mode_id_(mode_id), system_(system), input_port_ids_(input_port_ids),
-        output_port_ids_(output_port_ids){ SetDefaultPortIds(); }
+        output_port_ids_(output_port_ids){}
 
   explicit ModalSubsystem(
       const ModeId mode_id, const System<T>* system)
-      : mode_id_(mode_id), system_(system) { SetDefaultPortIds(); }
+      : mode_id_(mode_id), system_(system) {}
 
   ModeId get_mode_id() const { return mode_id_; }
   System<T>* get_system() const {return system_; }
@@ -128,27 +128,6 @@ class ModalSubsystem {
   // Index set of the input and output ports.
   std::vector<PortIdentifier> input_port_ids_;
   std::vector<PortIdentifier> output_port_ids_;
-
-  void SetDefaultPortIds() {
-    //if (input_port_ids_.empty()) {
-    //  for (int id = 0; id < system_->get_num_input_ports(); ++id) {
-    //    input_port_ids_.emplace_back(id);
-    //  }
-    //}
-    //if (output_port_ids_.empty()) {
-    //  for (int id = 0; id < system_->get_num_output_ports(); ++id) {
-    //    output_port_ids_.emplace_back(id);
-    //  }
-    //}
-
-    // TODO(jadecastro): Address segfaulting in symbolic::Formula.
-    //if (invariant_->empty()) {
-    //invariant_->push_back(symbolic::Formula::False());
-    //}
-    //if (initial_conditions_->empty()) {
-    //initial_conditions_->push_back(symbolic::Formula::True());
-    //}
-  }
 };
 
 /// The HybridAutomatonContext is a container for all of the data necessary to
@@ -198,27 +177,24 @@ class HybridAutomatonContext : public Context<T> {
   }
 
   /// Declares that a particular input port of a particular subsystem is an
-  /// input to the entire Diagram that allocates this Context. Aborts if the
-  /// subsystem has not been added to the DiagramContext.
+  /// input to the entire HA that allocates this Context.
   ///
-  /// User code should not call this method. It is for use during Diagram
-  /// context allocation only.
+  /// User code should not call this method. It is for use during HA context
+  /// allocation only.
   void ExportInput(const PortIdentifier& port_id) {
     modal_subsystem_->get_mutable_input_port_ids()->emplace_back(port_id);
   }
 
   /// Declares that a particular input port of a particular subsystem is an
-  /// input to the entire Diagram that allocates this Context. Aborts if the
-  /// subsystem has not been added to the DiagramContext.
+  /// input to the entire HA that allocates this Context.
   ///
-  /// User code should not call this method. It is for use during Diagram
-  /// context allocation only.
+  /// User code should not call this method. It is for use during HA context
+  /// allocation only.
   void ExportOutput(const PortIdentifier& port_id) {
     modal_subsystem_->get_mutable_output_port_ids()->emplace_back(port_id);
   }
 
-  /// Generates the state vector for the entire diagram by wrapping the states
-  /// of all the constituent diagrams.
+  /// Generates the state vector for the HA.
   ///
   /// User code should not call this method. It is for use during
   /// HybridAutomaton context allocation only.
@@ -242,16 +218,6 @@ class HybridAutomatonContext : public Context<T> {
       hybrid_xm.push_back(
           subsystem_xm->get_mutable_abstract_state(i_xm).Clone());
     }
-    // Append another, final element corresponding to the modal subsystem of the
-    // HA.
-    // TODO(jadecastro): Use the utility SetModalState() instead?
-    //const auto mss = std::unique_ptr<AbstractValue>(
-    //    new Value<ModalSubsystem<T>>(*modal_subsystem_.get()));
-    // TODO(jadecastro): Decide whether the abstract state shoudl be an int or
-    // ModalSubsystem<T>.
-    //auto mss = std::unique_ptr<AbstractValue>(new Value<int>(
-    //    modal_subsystem_->get_mode_id()));
-
     hybrid_xm.push_back(std::unique_ptr<AbstractValue>(new Value<int>(
         modal_subsystem_->get_mode_id())));
 
@@ -260,7 +226,7 @@ class HybridAutomatonContext : public Context<T> {
     this->set_abstract_state(std::make_unique<AbstractState>(
         std::move(hybrid_xm)));
 
-    // Create continuous state.
+    // Create the continuous state.
     if (subcontext->get_continuous_state() != nullptr) {
       const ContinuousState<T>& xc = *subcontext->get_continuous_state();
       const int num_q = xc.get_generalized_position().size();
@@ -271,9 +237,8 @@ class HybridAutomatonContext : public Context<T> {
       this->set_continuous_state(std::make_unique<ContinuousState<T>>(
           xc_vector.Clone(), num_q, num_v, num_z));
     }
-
-    std::cerr << " MakeState: Abstract state: "
-              << this->template get_abstract_state<int>(0) << std::endl;
+    //std::cerr << " MakeState: Abstract state: "
+    //          << this->template get_abstract_state<int>(0) << std::endl;
   }
   // TODO(jadecastro): Likely a temporary function 'till we wrangle with the API
   // updates to Context<T>.
@@ -292,17 +257,6 @@ class HybridAutomatonContext : public Context<T> {
   /// @p index is out of bounds, or if no system has been added to the
   /// HybridAutomatonContext at that index.
   Context<T>* GetMutableSubsystemContext() { return context_.get(); }
-
-  /*
-  // TODO(jadecastro): make the naming consistent.
-  /// Returns the substate at @p index.
-  State<T>* get_mutable_subsystem_state() {
-    // TODO(jadecastro): Ensure contexts_ has the same cardinality as
-    // substates_.
-    const ModeId id = this->get_mode_id();
-    return substates_[index];
-  }
-  */
 
   /// Recursively sets the time on this context and all subcontexts.
   // TODO: should we only advance time for the current active subsystem?
@@ -332,21 +286,6 @@ class HybridAutomatonContext : public Context<T> {
   }
 
   ModalSubsystem<T>* GetModalSubsystem() const {
-    //const int num_xm = state_.get_abstract_state()->size();
-    //const AbstractState* xm = this->get_state().get_abstract_state();
-    //const int size_xm = xm->size(); // TODO(jadecastro): Seems a bit
-                                     //silly. Use back() instead?
-    // *** Incorrect implementation. Leaving it because I can't decide if I
-    // *** could cannabilize it for other uses.
-    /*
-    std::cerr << " continuous state: "
-              << this->template
-        get_continuous_state()->get_vector().GetAtIndex(0) << std::endl;
-    std::cerr << " abstract state: "
-              << this->template get_abstract_state<
-                 ModalSubsystem<double>>(0).get_mode_id() << std::endl;
-    return &this->template get_abstract_state<ModalSubsystem<T>>(0);
-    */
     return modal_subsystem_.get();
   }
 
@@ -358,20 +297,12 @@ class HybridAutomatonContext : public Context<T> {
 
   // Updates the abstract value with the current active ModalSubsystem.
   void SetModalState() {
-    std::cerr << " SetModalState: Continuous state: "
-              << context_->get_continuous_state()->
-        get_vector().GetAtIndex(0) << std::endl;
-    std::cerr << " SetModalState: Abstract state: "
-              << this->template get_abstract_state<int>(0)
-              << std::endl;
-    //const ModalSubsystem<T>* modal_subsystem = GetModalSubsystem();
     const int mss_index = this->get_mutable_abstract_state()->size() - 1;
-    std::cerr << " mss_index: " << mss_index << std::endl;
+    //std::cerr << " mss_index: " << mss_index << std::endl;
     //ModalSubsystem<T> mss = this->
     //    template get_mutable_abstract_state<ModalSubsystem<T>>(mss_index);
     // TODO(jadecastro): int vs. ModalSubsystem<T>?
-    int mss = this->
-        template get_mutable_abstract_state<int>(mss_index);
+    int mss = this->template get_mutable_abstract_state<int>(mss_index);
     mss = GetModalSubsystem()->get_mode_id();
   }
 
