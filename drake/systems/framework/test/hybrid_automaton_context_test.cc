@@ -49,6 +49,7 @@ class HybridAutomatonContextTest : public ::testing::Test {
     context_->SetModalState();
 
     // Explicitly export the ports.
+    // TODO(jadecastro): We shouldn't need to set the port numbers.
     context_->ExportInput({0 /* export input port 0 */});
     context_->ExportOutput({0 /* export output port 0 */});
 

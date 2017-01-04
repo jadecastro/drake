@@ -25,6 +25,12 @@ namespace systems {
 
   // TODO(jadecastro): Verify that formulas given are valid.
 
+  // TODO(jadecastro): Verify the ports.
+
+  // TODO(jadecastro): Verify the resets given will yield unique initial
+  // conditions following the mode transition event.  Should live in
+  // AddModeTransition.
+
 
 /// HybridAutomatonBuilder is a factory class for HybridAutomaton. It collects
 /// the dependency graph of constituent systems, and topologically sorts
@@ -156,7 +162,8 @@ class HybridAutomatonBuilder {
     return mode_transitions_;
   };
 
-  // TODO: We want something that will yield modalsubsys.PushBackInvariant(...).
+  // TODO: We want something that will yield something like
+  // modalsubsystem.AddInvariant(...).
   void AddInvariant(ModalSubsystem<T>* modal_subsystem,
                     symbolic::Formula& new_invariant) const {
     DRAKE_ASSERT(modal_subsystem != nullptr);
@@ -164,7 +171,6 @@ class HybridAutomatonBuilder {
     // DRAKE_ASSERT_VOID(systems::System<T>::CheckValidContext(*context));
 
     // Define a pointer to the continuous state in the context.
-    // TODO: cleanup.
     (*modal_subsystem->get_mutable_invariant()).push_back(new_invariant);
   }
 

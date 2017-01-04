@@ -8,10 +8,6 @@
 #include "drake/systems/framework/hybrid_automaton_builder.h"
 #include "drake/systems/framework/leaf_system.h"
 #include "drake/examples/bouncing_ball/ball.h"
-#include "drake/systems/framework/primitives/adder.h"
-#include "drake/systems/framework/primitives/constant_vector_source.h"
-#include "drake/systems/framework/primitives/gain.h"
-#include "drake/systems/framework/primitives/integrator.h"
 #include "drake/systems/framework/system_port_descriptor.h"
 
 namespace drake {
@@ -26,6 +22,9 @@ std::unique_ptr<FreestandingInputPort> MakeInput(
   */
 /// Set up an example HybridAutomaton, consisting of a ball plant
 /// and two integrators.
+
+constexpr int kModeIdBall = 0;
+
 class ExampleHybridAutomaton : public HybridAutomaton<double> {
  public:
   explicit ExampleHybridAutomaton(int size) {
@@ -33,13 +32,14 @@ class ExampleHybridAutomaton : public HybridAutomaton<double> {
 
     ball_subsystem_
       = builder.AddModalSubsystem(
-                       std::unique_ptr<bouncing_ball::Ball<double>>());
+          std::unique_ptr<bouncing_ball::Ball<double>>(), kModeIdBall);
     ball_ = this->get_subsystem(*ball_subsystem_);
     //symbolic::Expression x = get_symbolic_state_vector(ball_subsystem_);
-    symbolic::Formula invariant_formula_ball = symbolic::Formula::True();
-    builder.AddInvariant(ball_subsystem_, invariant_formula_ball);
+    symbolic::Formula invariant_ball = symbolic::Formula::True();
+    builder.AddInvariant(ball_subsystem_, invariant_ball);
 
-    //ModeTransition* ball_to_ball_ = builder.AddModeTransition(*ball_subsystem_);
+    //ModeTransition* ball_to_ball_ =
+    //    builder.AddModeTransition(*ball_subsystem_);
     //symbolic::Formula guard_formula_bounce = symbolic::Formula::True();
 
     //builder.BuildInto(this);
@@ -54,6 +54,7 @@ class ExampleHybridAutomaton : public HybridAutomaton<double> {
   const System<double>* ball_ = nullptr;
 };
 
+/*
 class HybridAutomatonTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -80,6 +81,7 @@ class HybridAutomatonTest : public ::testing::Test {
       GetMutableSubsystemState(context_.get(), modal_subsystem)
       ->get_mutable_continuous_state();
   }
+*/
   /*
   void ExpectDefaultOutputs() {
     Eigen::Vector3d expected_output0;
@@ -116,7 +118,6 @@ class HybridAutomatonTest : public ::testing::Test {
     context_->SetInputPort(1, MakeInput(std::move(input1_)));
     context_->SetInputPort(2, MakeInput(std::move(input2_)));
   }
-  */
   const System<double>* ball() { return hybrid_aut_->ball(); }
   const ExampleHybridAutomaton::ModalSubsystem* ball_subsystem() {
     return hybrid_aut_->ball_subsystem();
@@ -129,7 +130,7 @@ class HybridAutomatonTest : public ::testing::Test {
   std::unique_ptr<Context<double>> context_;
   std::unique_ptr<SystemOutput<double>> output_;
 };
-
+  */
   /*
 // Tests that the diagram exports the correct topology.
 TEST_F(DiagramTest, Topology) {
