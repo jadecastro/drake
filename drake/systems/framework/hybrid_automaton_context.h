@@ -1,7 +1,7 @@
 #pragma once
 
 // TODO: triage this list.
-#include <map>
+//#include <map>
 #include <memory>
 #include <set>
 #include <stdexcept>
@@ -10,15 +10,15 @@
 
 // TODO: triage this list.
 #include "drake/common/symbolic_formula.h"
-#include "drake/systems/framework/basic_vector.h"
+//#include "drake/systems/framework/basic_vector.h"
 #include "drake/systems/framework/context.h"
 #include "drake/systems/framework/input_port_evaluator_interface.h"
-#include "drake/systems/framework/state.h"
-#include "drake/systems/framework/system_input.h"
-#include "drake/systems/framework/system_output.h"
+//#include "drake/systems/framework/state.h"
+//#include "drake/systems/framework/system_input.h"
+//#include "drake/systems/framework/system_output.h"
 
 // Debugging.
-#include "drake/systems/framework/test_utilities/pack_value.h"
+//#include "drake/systems/framework/test_utilities/pack_value.h"
 
 namespace drake {
 namespace systems {
@@ -39,8 +39,9 @@ class ModalSubsystem {
   // TODO(jadecastro): Use setters instead, like in RigidBody.
   explicit ModalSubsystem(
       const ModeId mode_id, System<T>* system,
-      std::vector<symbolic::Formula> invariant,
-      std::vector<symbolic::Formula> initial_conditions,
+      std::vector<symbolic::Formula> invariant,  // TODO(jadecastro): pointer?
+      std::vector<symbolic::Formula> initial_conditions,  // TODO(jadecastro):
+                                                          // pointer?
       std::vector<PortIdentifier> input_port_ids,
       std::vector<PortIdentifier> output_port_ids)
       : mode_id_(mode_id), system_(system), invariant_(invariant),
@@ -89,8 +90,14 @@ class ModalSubsystem {
   const std::vector<symbolic::Formula> get_invariant() const {
     return invariant_;
   }
+  std::vector<symbolic::Formula>* get_mutable_invariant() {
+    return &invariant_;
+  }
   const std::vector<symbolic::Formula> get_initial_conditions() const {
     return initial_conditions_;
+  }
+  std::vector<symbolic::Formula>* get_mutable_initial_conditions() {
+    return &initial_conditions_;
   }
   // TODO(jadecastro): Do we really need the following two getters?
   // TODO: const?

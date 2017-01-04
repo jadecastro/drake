@@ -1,11 +1,9 @@
 #pragma once
 
-#include <iostream>  //needed?
 #include <map>
 #include <memory>
 #include <set>
 #include <stdexcept>
-#include <tuple>  //needed?
 #include <utility>
 #include <vector>
 
@@ -18,78 +16,81 @@
 namespace drake {
 namespace systems {
 
-// TODO: Validate that the subsystem dimensions match wrt. the reset map,
-//       and that their inputs match.
-// TODO: Context stitching!! Also, time must be consistent across jumps.
-// TODO: Validate the state machine (all registered systems are connected).
-// Note: Simulator should be a secondary priority.
+  // TODO(jadecastro): Prune modal subsystem list if any are isolated from the
+  // tree.
+  //  - First pass: discard any modes that are either not initial nor immediate
+  // successors.
+  //  - Second pass: do a BFS to detect any that are not reachable from the
+  // initial modes.
 
-/// DiagramBuilder is a factory class for Diagram. It collects the dependency
-/// graph of constituent systems, and topologically sorts them. It is single
-/// use: after calling Build or BuildInto, DiagramBuilder gives up ownership
-/// of the constituent systems, and should therefore be discarded.
+  // TODO(jadecastro): Verify that formulas given are valid.
+
+
+/// HybridAutomatonBuilder is a factory class for HybridAutomaton. It collects
+/// the dependency graph of constituent systems, and topologically sorts
+/// them. It is single use: after calling Build or BuildInto,
+/// HybridAutomatonBuilder gives up ownership of the constituent systems, and
+/// should therefore be discarded.
 ///
-/// A system must be added to the DiagramBuilder with AddSystem before it can
-/// be wired up in any way.
+/// A system must be added to the HybridAutomatonBuilder with AddSystem before
+/// it can be wired up in any way.
 template <typename T>
 class HybridAutomatonBuilder {
  public:
   HybridAutomatonBuilder() {}
   virtual ~HybridAutomatonBuilder() {}
 
-  typedef typename HybridAutomaton<T>::ModalSubsystem ModalSubsystem;
-  typedef typename HybridAutomaton<T>::ModeTransition ModeTransition;
+  typedef int ModeId;
 
   /// Takes ownership of @p system and adds it to the builder. Returns a bare
   /// pointer to the System, which will remain valid for the lifetime of the
-  /// Diagram built by this builder.
+  /// HybridAutomaton built by this builder.
   ///
   /// @code
-  ///   DiagramBuilder<T> builder;
+  ///   HybridAutomatonBuilder<T> builder;
   ///   auto foo = builder.AddSystem(std::make_unique<Foo<T>>());
   /// @endcode
   ///
   /// @tparam S The type of system to add.
   template <class S>
-  // std::unique_ptr<S> AddModalSubsystem(std::unique_ptr<S> sys) {
-  ModalSubsystem* AddModalSubsystem(std::unique_ptr<S> sys) {
+      ModalSubsystem<S>* AddModalSubsystem(std::unique_ptr<S> system,
+                                           const ModeId mode_id) {
     // Initialize the invariant to True.
     // TODO: check if conjunctions can be done via std::vector.
     // TODO: Specialize the type for symbolic::Formula as a container
     // class to ensure that the variables used are consistent with the
     // underlying state vector for a given subsystem.
-    std::vector<symbolic::Formula> invariant_function;
-    invariant_function[0] = symbolic::Formula::True();
+    std::vector<symbolic::Formula> invariant;
+    invariant.push_back(symbolic::Formula::True());
     // Initialize the intial conditions to True.
-    std::vector<symbolic::Formula> init_function;
-    init_function[0] = symbolic::Formula::True();
+    std::vector<symbolic::Formula> init;
+    init.push_back(symbolic::Formula::True());
     // Populate a ModalSubsystem
-    ModalSubsystem modal_subsystem =
-        std::make_tuple(sys.get(), &invariant_function, &init_function, 0);
-    modal_subsystems_->push_back(modal_subsystem);
+    ModalSubsystem<S> modal_subsystem =
+        ModalSubsystem<S>(mode_id, system.get(), invariant, init);
+    modal_subsystems_->emplace_back(modal_subsystem);
     // return std::move(sys);  // TODO: How does ownership work here?
     return &modal_subsystem;
     // TODO: fix warnings^
   }
   /// Constructs a new system with the given @p args, and adds it to the
   /// builder, which retains ownership. Returns a bare pointer to the System,
-  /// which will remain valid for the lifetime of the Diagram built by this
-  /// builder.
+  /// which will remain valid for the lifetime of the HybridAutomaton built by
+  /// this builder.
   ///
   /// @code
-  ///   DiagramBuilder<double> builder;
+  ///   HybridAutomatonBuilder<double> builder;
   ///   auto foo = builder.AddSystem<Foo<double>>("name", 3.14);
   /// @endcode
   ///
   /// note that for dependent names you must use the template keyword:
   ///
   /// @code
-  ///   DiagramBuilder<T> builder;
+  ///   HybridAutomatonBuilder<T> builder;
   ///   auto foo = builder.template AddSystem<Foo<T>>("name", 3.14);
   /// @endcode
   ///
   /// You may prefer the `unique_ptr` variant instead.
-  ///
   ///
   /// @tparam S The type of System to construct. Must subclass System<T>.
   template <class S, typename... Args>
@@ -99,11 +100,11 @@ class HybridAutomatonBuilder {
 
   /// Constructs a new system with the given @p args, and adds it to the
   /// builder, which retains ownership. Returns a bare pointer to the System,
-  /// which will remain valid for the lifetime of the Diagram built by this
-  /// builder.
+  /// which will remain valid for the lifetime of the HybridAutomaton built by
+  /// this builder.
   ///
   /// @code
-  ///   DiagramBuilder<double> builder;
+  ///   HybridAutomatonBuilder<double> builder;
   ///   // Foo must be a template.
   ///   auto foo = builder.AddSystem<Foo>("name", 3.14);
   /// @endcode
@@ -111,7 +112,7 @@ class HybridAutomatonBuilder {
   /// Note that for dependent names you must use the template keyword:
   ///
   /// @code
-  ///   DiagramBuilder<T> builder;
+  ///   HybridAutomatonBuilder<T> builder;
   ///   auto foo = builder.template AddSystem<Foo>("name", 3.14);
   /// @endcode
   ///
@@ -125,35 +126,38 @@ class HybridAutomatonBuilder {
         std::make_unique<S<T>>(std::forward<Args>(args)...));
   }
 
-  ModeTransition* AddModeTransition(ModalSubsystem& sys_pre,
-                                    ModalSubsystem& sys_post) {
+  ModeTransition<T> AddModeTransition(ModalSubsystem<T>& sys_pre,
+                                       ModalSubsystem<T>& sys_post) {
     // TODO: some validation checks.
-    std::pair<ModalSubsystem*, ModalSubsystem*> pair;
-    pair.first = &sys_pre;
-    pair.second = &sys_post;
+    std::pair<ModalSubsystem<T>*, ModalSubsystem<T>*> edge;
+    edge.first = &sys_pre;
+    edge.second = &sys_post;
+    // Define the default guard.
     std::vector<symbolic::Formula> guard;
-    guard[0] = symbolic::Formula::True();
-    // Initialize the reset map to True.
+    guard.push_back(symbolic::Formula::True());
+    // Define the default reset map.
+    std::vector<symbolic::Formula> reset;
+    reset.push_back(symbolic::Formula::True());
+    // TODO(jadecastro): Initialize the reset map to True.
     // std::vector<symbolic::Formula> identity_reset;
-    // true_reset[0] = symbolic::Formula::True();
-    ModeTransition mode_transition = std::make_tuple(&pair, &guard);
-    mode_transitions_->push_back(mode_transition);
-    return &mode_transition;  // TODO: should we make better use of smart ptrs?
-    // TODO: fix warnings^
+    ModeTransition<T> mode_transition =
+        ModeTransition<T>(edge, &guard, &reset);
+    mode_transitions_.push_back(&mode_transition);
+    return mode_transition;
   }
 
   // A helper for self-transitions.
-  ModeTransition* AddModeTransition(ModalSubsystem& sys) {
+  ModeTransition<T> AddModeTransition(ModalSubsystem<T>& sys) {
     return this->AddModeTransition(sys, sys);
   }
 
   // Getter for the ordered list of mode transitions.
-  std::vector<ModeTransition>& get_mode_transitions() const {
-    return *mode_transitions_;
+  std::vector<ModeTransition<T>*> get_mode_transitions() const {
+    return mode_transitions_;
   };
 
   // TODO: We want something that will yield modalsubsys.PushBackInvariant(...).
-  void AddInvariant(ModalSubsystem* modal_subsystem,
+  void AddInvariant(ModalSubsystem<T>* modal_subsystem,
                     symbolic::Formula& new_invariant) const {
     DRAKE_ASSERT(modal_subsystem != nullptr);
     // TODO: validate, like in context.
@@ -161,28 +165,26 @@ class HybridAutomatonBuilder {
 
     // Define a pointer to the continuous state in the context.
     // TODO: cleanup.
-    auto mss = *modal_subsystem;
-    auto mss1 = *std::get<1>(mss);
-    mss1.push_back(new_invariant);
+    (*modal_subsystem->get_mutable_invariant()).push_back(new_invariant);
   }
 
   /// Returns the list of contained Systems.
   std::vector<systems::System<T>*> GetMutableSystems() {
     std::vector<systems::System<T>*> result;
-    result.reserve(registered_systems_.size());
-    for (const auto& system : registered_systems_) {
-      result.push_back(system.get());
+    result.reserve(modal_subsystems_.size());
+    for (const auto& mss : modal_subsystems_) {
+      result.push_back(mss->get_system());
     }
     return result;
   }
 
-  /// Builds the Diagram that has been described by the calls to Connect,
-  /// ExportInput, and ExportOutput. Throws std::logic_error if the graph is
-  /// not buildable.
+  /// Builds the HybridAutomaton that has been described by the calls to
+  /// Connect, ExportInput, and ExportOutput. Throws std::logic_error if the
+  /// graph is not buildable.
   std::unique_ptr<HybridAutomaton<T>> Build() {
     std::unique_ptr<HybridAutomaton<T>> hybrid_automaton(
         new HybridAutomaton<T>(Compile()));
-    hybrid_automaton->Own(std::move(registered_systems_));
+    hybrid_automaton->DumpInto(modal_subsystems_, mode_transitions_);
     return std::move(hybrid_automaton);
   }
 
@@ -190,62 +192,45 @@ class HybridAutomatonBuilder {
   /// the calls to Connect, ExportInput, and ExportOutput. Throws
   /// std::logic_error if the graph is not buildable.
   ///
-  /// Only Diagram subclasses should call this method. The target must not
-  /// already be initialized.
+  /// Only HybridAutomaton subclasses should call this method. The target must
+  /// not already be initialized.
   void BuildInto(HybridAutomaton<T>* target) {
     target->Initialize(Compile());
-    target->Own(std::move(registered_systems_));
+    target->DumpInto(modal_subsystems_, mode_transitions_);
   }
 
  private:
-  // TODO: leaving these two commented out for now.
-  // typedef typename HybridAutomaton<T>::ModalSubsystem ModalSubsystem;
-  // typedef typename HybridAutomaton<T>::ModeTransition ModeTransition;
-  typedef typename HybridAutomaton<T>::PortIdentifier PortIdentifier;
-
-  void ThrowIfSystemNotRegistered(const System<T>* system) const {
-    DRAKE_THROW_UNLESS(systems_.find(system) != systems_.end());
+  /*
+  void ThrowIfSystemNotRegistered(const ModalSubsystem<T>* modal_subsystem)
+      const {
+    DRAKE_THROW_UNLESS(
+        modal_subsystems_.find(modal_subsystem) != modal_subsystems_.end());
   }
+  */
 
   /// Produces the StateMachine that has been described by the calls to
   /// Connect, ExportInput, and ExportOutput. Throws std::logic_error if the
   /// graph is not buildable.
   typename HybridAutomaton<T>::StateMachine Compile() const {
-    if (registered_systems_.size() == 0) {
-      throw std::logic_error("Cannot Compile an empty DiagramBuilder.");
+    if (modal_subsystems_.size() == 0) {
+      throw std::logic_error("Cannot compile an empty HybridAutomatonBuilder.");
     }
     typename HybridAutomaton<T>::StateMachine state_machine;
-    state_machine.input_port_ids = input_port_ids_;
-    state_machine.output_port_ids = output_port_ids_;
-    state_machine.modal_subsystems = *modal_subsystems_;
-    state_machine.mode_transitions = *mode_transitions_;
+    state_machine.modal_subsystems = modal_subsystems_;
+    state_machine.mode_transitions = mode_transitions_;
     return state_machine;
   }
 
-  // DiagramBuilder objects are neither copyable nor moveable.
+  // HybridAutomatonBuilder objects are neither copyable nor moveable.
   HybridAutomatonBuilder(const HybridAutomatonBuilder<T>& other) = delete;
   HybridAutomatonBuilder& operator=(const HybridAutomatonBuilder<T>& other) =
       delete;
   HybridAutomatonBuilder(HybridAutomatonBuilder<T>&& other) = delete;
   HybridAutomatonBuilder& operator=(HybridAutomatonBuilder<T>&& other) = delete;
 
-  // The ordered inputs and outputs of the Diagram to be built.
-  std::vector<PortIdentifier> input_port_ids_;
-  std::vector<PortIdentifier> output_port_ids_;
-
-  // For fast membership queries: has this input port already been declared?
-  std::set<PortIdentifier> diagram_input_set_;
-
-  // The unsorted set of Systems in this DiagramBuilder. Used for fast
-  // membership queries.
-  std::set<const System<T>*> systems_;
-  // The Systems in this DiagramBuilder, in the order they were registered.
-  std::vector<std::unique_ptr<System<T>>> registered_systems_;
-
-  // TODO: map?
-  std::unique_ptr<std::vector<ModalSubsystem>> modal_subsystems_;
-  // TODO: map?
-  std::unique_ptr<std::vector<ModeTransition>> mode_transitions_;
+  // TODO(jadecastro): map or multimap?
+  std::vector<ModalSubsystem<T>*> modal_subsystems_;
+  std::vector<ModeTransition<T>*> mode_transitions_;
 };
 
 }  // namespace systems
