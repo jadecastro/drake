@@ -108,17 +108,17 @@ template <typename T>
 class ModeTransition {
  public:
   // TODO(jadecastro): Use setters instead, like in RigidBody.
-  explicit ModalSubsystem(
-      const std::pair<ModalSubsystem*, ModalSubsystem*> edge,
+  explicit ModeTransition(
+      const std::pair<ModalSubsystem<T>*, ModalSubsystem<T>*> edge,
       std::vector<symbolic::Formula>* guard,
       std::vector<symbolic::Formula>* reset)
       : edge_(edge), guard_(guard), reset_(reset) {}
 
-  explicit ModalSubsystem(
-      const std::pair<ModalSubsystem*, ModalSubsystem*> edge)
+  explicit ModeTransition(
+      const std::pair<ModalSubsystem<T>*, ModalSubsystem<T>*> edge)
       : edge_(edge) {}
 
-  const std::pair<ModalSubsystem*, ModalSubsystem*> get_edge() const {
+  const std::pair<ModalSubsystem<T>*, ModalSubsystem<T>*> get_edge() const {
     return edge_;
   }
 
@@ -127,14 +127,14 @@ class ModeTransition {
   // be unique_ptr, and hence need this function.
   std::unique_ptr<ModeTransition<T>> Clone() const {
     ModeTransition<T>* clone =
-        new <T>(edge_, guard_, reset_);
+        new ModeTransition<T>(edge_, guard_, reset_);
     DRAKE_DEMAND(clone != nullptr);
     return std::unique_ptr<ModeTransition<T>>(clone);
   }
 
  private:
   // Pair of ModalSubsystems representing the edge for this transition.
-  std::pair<ModalSubsystem*, ModalSubsystem*> edge_;
+  std::pair<ModalSubsystem<T>*, ModalSubsystem<T>*> edge_;
   // Formula representing the guard for this edge.
   std::vector<symbolic::Formula>* guard_;  // TODO: Eigen??
   // Formula representing the reset map for this edge.
@@ -182,7 +182,7 @@ class HybridAutomaton : public System<T> {
   //}
 
   /// Returns the list of modal subsystems.
-  std::vector<const ModalSubsystem<T>*> GetModalSubsystems() const {
+  //std::vector<const ModalSubsystem<T>*> GetModalSubsystems() const {
     /*
     std::vector<const ModalSubsystem<T>*> result;
     result.reserve(modal_subsystems_.size());
@@ -190,6 +190,7 @@ class HybridAutomaton : public System<T> {
       result.push_back(mss);
     }
     */
+  std::vector<ModalSubsystem<T>*> GetModalSubsystems() const {
     return modal_subsystems_;
   }
 
@@ -201,22 +202,23 @@ class HybridAutomaton : public System<T> {
 
   std::unique_ptr<Context<T>> AllocateContext() const override {
     // Reserve inputs as specified during initialization.
-    auto context = std::make_unique<HybridAutomatonContext<T>>(num_subystems());
+    auto context =
+        std::make_unique<HybridAutomatonContext<T>>();
 
     // TODO(jadecastro): Throw if a subsystem is already registered.
     // Add the initial ModalSubsystem to the Context.
-    const ModalSubsystem<T>* mss = modal_subsystems_[mode_id_init_];
-    const System<T>* subsystem = mss->get_system();
-    const auto modal_context = subsystem->AllocateContext();
-    const auto modal_output = subsystem->AllocateOutput(*modal_context);
+    ModalSubsystem<T>* mss = modal_subsystems_[mode_id_init_];
+    System<T>* subsystem = mss->get_system();
+    auto modal_context = subsystem->AllocateContext();
+    auto modal_output = subsystem->AllocateOutput(*modal_context);
     context->RegisterSubsystem(std::make_unique<ModalSubsystem<T>>(*mss),
                                std::move(modal_context),
                                std::move(modal_output));
 
     // Build the state for the initially-activated subsystem and register its
     // AbstractState.
-    context_->MakeState();
-    context_->SetModalState();
+    context->MakeState();
+    context->SetModalState();
 
     // Declare the HA-external inputs.
     for (const PortIdentifier& id : mss->get_input_port_ids()) {
@@ -230,28 +232,29 @@ class HybridAutomaton : public System<T> {
   // whenever AllocateTimeDervatives is called.
   void SetDefaultState(const Context<T>& context,
                        State<T>* state) const override {
-    const auto hybrid_context =
-        dynamic_cast_or_die<const HybridAutomatonContext<T>*>(&context);
+    auto hybrid_context =
+        dynamic_cast<const HybridAutomatonContext<T>*>(&context);
+    DRAKE_DEMAND(hybrid_context != nullptr);
     // TODO(jadecastro): Throw if the state is inconsistent with context.
 
     // Set the default state for the HA.
     const auto subcontext = hybrid_context->GetSubsystemContext();
     DRAKE_DEMAND(subcontext != nullptr);
     const ModeId mode_id = hybrid_context->get_mode_id();
-    DRAKE_DEMAND(id < num_systems);
-    auto subsystem = modal_subsystems_[mode_id].get_system();
+    DRAKE_DEMAND(mode_id < num_subsystems());
+    auto subsystem = modal_subsystems_[mode_id]->get_system();
     subsystem->SetDefaultState(*subcontext, state);
   }
 
   void SetDefaults(Context<T>* context) const final {
-    const auto hybrid_context =
-        dynamic_cast_or_die<const HybridAutomatonContext<T>*>(context);
+    auto hybrid_context =
+        dynamic_cast<HybridAutomatonContext<T>*>(context);
+    DRAKE_DEMAND(hybrid_context != nullptr);
 
     // Set defaults for the system.
-    const auto subcontext = hybrid_context->GetMutableSubsystemContext();
-    const ModeId mode_id = hybrid_context->get_mode_id();
-    auto subsystem = modal_subsystems_[mode_id].get_system();
-    subsystem.SetDefaults(subcontext);
+    auto subcontext = hybrid_context->GetMutableSubsystemContext();
+    auto subsystem = hybrid_context->GetModalSubsystem()->get_system();
+    subsystem->SetDefaults(subcontext);
   }
 
   // TODO(jadecastro): Check that the outputs really switch upon a
@@ -259,7 +262,8 @@ class HybridAutomaton : public System<T> {
   std::unique_ptr<SystemOutput<T>> AllocateOutput(
       const Context<T>& context) const override {
     const auto hybrid_context =
-        dynamic_cast_or_die<const HybridAutomatonContext<T>*>(&context);
+        dynamic_cast<const HybridAutomatonContext<T>*>(&context);
+    DRAKE_DEMAND(hybrid_context != nullptr);
     const ModalSubsystem<T>* modal_subsystem =
         hybrid_context->GetModalSubsystem();
 
@@ -277,9 +281,11 @@ class HybridAutomaton : public System<T> {
     // Down-cast the context and output to HybridAutomatonContext and
     // HybridAutomatonOutput.
     const auto hybrid_context =
-        dynamic_cast_or_die<const HybridAutomatonContext<T>*>(&context);
+        dynamic_cast<const HybridAutomatonContext<T>*>(&context);
+    DRAKE_DEMAND(hybrid_context != nullptr);
     const auto hybrid_output =
-        dynamic_cast_or_die<internal::HybridAutomatonOutput<T>*>(output);
+        dynamic_cast<internal::HybridAutomatonOutput<T>*>(output);
+    DRAKE_DEMAND(hybrid_output != nullptr);
 
     // Populate the output with pointers to the appropriate subsystem outputs in
     // the HybridAutomatonContext. We do this on every call to EvalOutput, so
@@ -287,8 +293,7 @@ class HybridAutomaton : public System<T> {
     ExposeSubsystemOutputs(*hybrid_context, hybrid_output);
 
     // Evaluate the subsystem output port.
-    modal_subsystem = hybrid_output->GetModalSubsystem();
-    EvaluateOutputPort(*diagram_context, modal_subsystem);
+    EvaluateOutputPort(*hybrid_context, *hybrid_context->GetModalSubsystem());
   }
 
   // TODO(jadecastro): This is a tricky one... no context from which to derive
@@ -297,9 +302,8 @@ class HybridAutomaton : public System<T> {
   // of ContinuousStates.
   std::unique_ptr<ContinuousState<T>> AllocateTimeDerivatives() const override {
     const ModeId temp_mode_id = 0;
-    const ModalSubsystem modal_subsystem = modal_subsystems_[temp_mode_id];
-    const auto system = get_subsystem(modal_subsystem);
-    return system->AllocateTimeDerivatives();
+    auto subsystem = modal_subsystems_[temp_mode_id]->get_system();
+    return subsystem->AllocateTimeDerivatives();
   }
 
   /// Aggregates the discrete update variables from each subsystem into a
@@ -307,19 +311,20 @@ class HybridAutomaton : public System<T> {
   std::unique_ptr<DiscreteState<T>> AllocateDiscreteVariables()
       const override {
     const ModeId temp_mode_id = 0;
-    const ModalSubsystem modal_subsystem = modal_subsystems_[temp_mode_id];
-    const auto system = get_subsystem(modal_subsystem);
-    return system->AllocateDiscreteVariables();
+    auto subsystem = modal_subsystems_[temp_mode_id]->get_system();
+    return subsystem->AllocateDiscreteVariables();
   }
 
   void EvalTimeDerivatives(const Context<T>& context,
                            ContinuousState<T>* derivatives) const override {
     const auto hybrid_context =
-        dynamic_cast_or_die<const HybridAutomatonContext<T>*>(&context);
+        dynamic_cast<const HybridAutomatonContext<T>*>(&context);
+    DRAKE_DEMAND(hybrid_context != nullptr);
     const Context<T>* subcontext =
         hybrid_context->GetSubsystemContext();
     // Evaluate the derivative of the current modal subsystem.
-    system->EvalTimeDerivatives(*subcontext, derivatives);
+    auto subsystem = hybrid_context->GetModalSubsystem()->get_system();
+    subsystem->EvalTimeDerivatives(*subcontext, derivatives);
   }
 
   /// @name Methods called upon at execution-time
@@ -342,9 +347,10 @@ class HybridAutomaton : public System<T> {
       //}
     }
 
-    const ModeId id = context.get_mode_id(context);
+    const ModeId mode_id = context.get_mode_id();
     const auto invariant_formula =
-        *std::get<1>(modal_subsystems_[id]);  // invariant (TODO: make a getter)
+        modal_subsystems_[mode_id]->get_invariant();  // invariant (TODO: make
+                                                       // a getter)
     // The guard is satisfied (returns a non-positive value) when
     // the ball's position is less than or equal to zero and its
     // velocity is non-positive.
@@ -365,12 +371,13 @@ class HybridAutomaton : public System<T> {
   //  3) Re-points the input and output ports to the correct place.
   //  Essentially, does ExposeInput and ExposeOutput again.  And, I imagine,
   //  eveything else required to make EvaluateOutputPort happy.
-  void PerformTransition(const std::unique_ptr<ModalSubsystem> mss,
+  void PerformTransition(std::unique_ptr<ModalSubsystem<T>>& mss,
                          Context<T>* context) {
-    const auto hybrid_context =
-        dynamic_cast_or_die<const HybridAutomatonContext<T>*>(context);
-    auto subcontext0 = mss->get_system()->CreateDefaultContext();
-    auto suboutput0 = mss->get_system()->AllocateOutput(*subcontext0);
+    auto hybrid_context =
+        dynamic_cast<HybridAutomatonContext<T>*>(context);
+    DRAKE_DEMAND(hybrid_context != nullptr);
+    auto subcontext = mss->get_system()->CreateDefaultContext();
+    auto suboutput = mss->get_system()->AllocateOutput(*subcontext);
 
     // Store any vital info about the modal subsystem we will be installing.
     active_has_any_direct_feedthrough_ =
@@ -427,11 +434,12 @@ class HybridAutomaton : public System<T> {
   /// pass their constituent subsystems the apropriate subcontext. Aborts if
   /// @p subsystem is not actually a subsystem of this diagram.
   Context<T>* GetMutableSubsystemContext(
-      Context<T>* context, const ModalSubsystem* modal_subsystem) const {
+      Context<T>* context, const ModalSubsystem<T>* modal_subsystem) const {
     DRAKE_DEMAND(context != nullptr);
     DRAKE_DEMAND(modal_subsystem != nullptr);
     auto hybrid_context =
-        dynamic_cast_or_die<const HybridAutomatonContext<T>*>(context);
+        dynamic_cast<HybridAutomatonContext<T>*>(context);
+    DRAKE_DEMAND(hybrid_context != nullptr);
     // const ModeId id = get_mode_id(modal_subsystem);
     return hybrid_context->GetMutableSubsystemContext();
   }
@@ -469,7 +477,8 @@ class HybridAutomaton : public System<T> {
 
   void DoPublish(const Context<T>& context) const override {
     auto hybrid_context =
-        dynamic_cast_or_die<const HybridAutomatonContext<T>*>(&context);
+        dynamic_cast<const HybridAutomatonContext<T>*>(&context);
+    DRAKE_DEMAND(hybrid_context != nullptr);
     const auto subsystem = hybrid_context->GetModalSubsystem()->get_system();
     subsystem->Publish(*hybrid_context->GetSubsystemContext());
   }
@@ -490,7 +499,7 @@ class HybridAutomaton : public System<T> {
   /// may wish to override to initialize additional member data, or to return a
   /// more specific covariant type.
   /// This is the NVI implementation of ToAutoDiffXd.
-  Diagram<AutoDiffXd>* DoToAutoDiffXd() const override {
+  HybridAutomaton<AutoDiffXd>* DoToAutoDiffXd() const override {
     // TODO(jadecastro): Implement ConvertScalarType. It involves hand-crafting
     // the StateMachine, input_port_ids, output_port_ids, and the list of
     // modal_subsystems in the new type.
@@ -512,13 +521,14 @@ class HybridAutomaton : public System<T> {
   typename std::enable_if<is_numeric<T1>::value>::type DoCalcNextUpdateTimeImpl(
       const Context<T1>& context, UpdateActions<T1>* actions) const {
     auto hybrid_context =
-        dynamic_cast_or_die<const DiagramContext<T1>*>(&context);
-    const Context<T1>* subcontext = diagram_context->GetSubsystemContext();
+        dynamic_cast<const HybridAutomatonContext<T1>*>(&context);
+    DRAKE_DEMAND(hybrid_context != nullptr);
+    const Context<T1>* subcontext = hybrid_context->GetSubsystemContext();
     DRAKE_DEMAND(subcontext != nullptr);
     const System<T1>* subsystem =
-        subcontext->GetModalSubsystem()->get_system();
+        hybrid_context->GetModalSubsystem()->get_system();
     DRAKE_DEMAND(subsystem != nullptr);
-    const ModeId id = subcontext->GetModalSubsystem()->get_mode_id();
+    const ModeId id = hybrid_context->GetModalSubsystem()->get_mode_id();
 
     // Retrieve the update time for this subsystem.
     UpdateActions<T1> sub_action;
@@ -548,7 +558,7 @@ class HybridAutomaton : public System<T> {
     if (!publisher) {
       DiscreteEvent<T1> event;
       event.action = DiscreteEvent<T1>::kPublishAction;
-      event.do_publish = std::bind(&Diagram<T1>::HandlePublish, this,
+      event.do_publish = std::bind(&HybridAutomaton<T1>::HandlePublish, this,
                                    std::placeholders::_1, /* context */
                                    publisher);
       actions->events.push_back(event);
@@ -558,7 +568,7 @@ class HybridAutomaton : public System<T> {
     if (!updater) {
       DiscreteEvent<T1> event;
       event.action = DiscreteEvent<T1>::kUpdateAction;
-      event.do_update = std::bind(&Diagram<T1>::HandleUpdate, this,
+      event.do_update = std::bind(&HybridAutomaton<T1>::HandleUpdate, this,
                                   std::placeholders::_1, /* context */
                                   std::placeholders::_2, /* difference state */
                                   updater);
@@ -585,7 +595,8 @@ class HybridAutomaton : public System<T> {
       const Context<T>& context,
       const std::pair<int, UpdateActions<T>>& sub_action) const {
     const auto hybrid_context =
-        dynamic_cast_or_die<const HybridAutomatonContext<T>*>(&context);
+        dynamic_cast<const HybridAutomatonContext<T>*>(&context);
+    DRAKE_DEMAND(hybrid_context != nullptr);
     //const int index = sub_action.first;
     const UpdateActions<T>& action_details = sub_action.second;
 
@@ -605,7 +616,8 @@ class HybridAutomaton : public System<T> {
       const Context<T>& context, DiscreteState<T>* discrete_update,
       const std::pair<int, UpdateActions<T>>& sub_action) const {
     const auto hybrid_context =
-        dynamic_cast_or_die<const HybridAutomatonContext<T>*>(&context);
+        dynamic_cast<const HybridAutomatonContext<T>*>(&context);
+    DRAKE_DEMAND(hybrid_context != nullptr);
 
     // As a baseline, initialize all the difference variables to their
     // current values.
@@ -638,8 +650,8 @@ class HybridAutomaton : public System<T> {
   // and whose edges are the mode transitions.
   // TODO(jadecastro): Add a set of initial modes.
   struct StateMachine {
-    std::vector<ModalSubsystem> modal_subsystems;
-    std::vector<ModeTransition> mode_transitions;
+    std::vector<ModalSubsystem<T>*> modal_subsystems;
+    std::vector<ModeTransition<T>*> mode_transitions;
   };
 
   // Constructor for the HybridAutomaton.
@@ -677,10 +689,10 @@ class HybridAutomaton : public System<T> {
     // HybridAutomatonContext.
     const ModeId mode_id = 0;
     const System<T>* subsystem = modal_subsystems_[mode_id]->get_system();
-    for (auto PortIdentifier id : subsystem->get_input_port_ids()) {
+    for (auto id : modal_subsystems_[mode_id]->get_input_port_ids()) {
       ExportInput(*subsystem, id);
     }
-    for (auto PortIdentifier id : subsystem->get_output_port_ids()) {
+    for (auto id : modal_subsystems_[mode_id]->get_output_port_ids()) {
       ExportOutput(*subsystem, id);
     }
   }
@@ -715,8 +727,8 @@ class HybridAutomaton : public System<T> {
   // within @p modal_subsystems_.
   bool PortsAreConsistent() const {
     for (const auto& modal_subsystem : modal_subsystems_) {
-      if (modal_subsystem->get_input_port_ids().size() != num_inports_ ||
-          modal_subsystem->get_output_port_ids().size() != num_outports_) {
+      if (modal_subsystem->get_num_input_ports() != num_inports_ ||
+          modal_subsystem->get_num_output_ports() != num_outports_) {
         return false;
       }
     }
@@ -725,7 +737,7 @@ class HybridAutomaton : public System<T> {
 
   // Takes ownership of the modal subsystems from HybridAutomatonBuilder. This
   // is only used when converting between scalar types.
-  void Own(std::vector<std::unique_ptr<System<T>>> modal_subsystems) {
+  void Own(std::vector<std::unique_ptr<ModalSubsystem<T>>> modal_subsystems) {
     // We must be given something to own.
     DRAKE_DEMAND(!modal_subsystems.empty());
     // We must not already own any subsystems.
@@ -735,7 +747,7 @@ class HybridAutomaton : public System<T> {
 
     // TODO: decide whether or not the systems need to know who their parent is.
     for (auto& modal_subsystem : modal_subsystems_) {
-      System<T>* subsystem = modal_subsystem.get_system();
+      System<T>* subsystem = modal_subsystem->get_system();
       subsystem->set_parent(this);
     }
   }
@@ -747,7 +759,7 @@ class HybridAutomaton : public System<T> {
     //GetSystemIndexOrAbort(sys);
 
     // Add this port to our externally visible topology.
-    const auto& subsystem_ports = subsystem->get_input_ports();
+    const auto& subsystem_ports = subsystem.get_input_ports();
     if (port_id < 0 || port_id >= static_cast<int>(subsystem_ports.size())) {
       throw std::out_of_range("Input port out of range.");
     }
@@ -765,7 +777,7 @@ class HybridAutomaton : public System<T> {
     //GetSystemIndexOrAbort(sys);
 
     // Add this port to our externally visible topology.
-    const auto& subsystem_ports = subsystem->get_output_ports();
+    const auto& subsystem_ports = subsystem.get_output_ports();
     if (port_id < 0 || port_id >= static_cast<int>(subsystem_ports.size())) {
       throw std::out_of_range("Output port out of range.");
     }
@@ -779,15 +791,15 @@ class HybridAutomaton : public System<T> {
   // Evaluates the value of the output port with the given @p id in the given
   // @p context.
   void EvaluateOutputPort(const HybridAutomatonContext<T>& context,
-                          const ModalSubsystem& modal_subsystem) const {
+                          const ModalSubsystem<T>& modal_subsystem) const {
     const System<T>* const subsystem =
-        context->GetModalSubsystem()->get_system();
+        context.GetModalSubsystem()->get_system();
     // TODO(jadecastro):   vvv Do we need this?
     //SPDLOG_TRACE(log(), "Evaluating output for subsystem {}, port {}",
     //             system->GetPath(), id.second);
     const Context<T>* subsystem_context = context.GetSubsystemContext();
     DRAKE_DEMAND(subsystem_context != nullptr);
-    const SystemOutput<T>* subsystem_output = context.GetSubsystemOutput();
+    SystemOutput<T>* subsystem_output = context.GetSubsystemOutput();
     DRAKE_DEMAND(subsystem_output != nullptr);
     subsystem->EvalOutput(*subsystem_context, subsystem_output);
   }
@@ -799,7 +811,7 @@ class HybridAutomaton : public System<T> {
       internal::HybridAutomatonOutput<T>* output) const {
     // The number of output ports of this diagram must equal the number of
     // ports in the provided DiagramOutput.
-    const ModalSubsystem* modal_subsystem =
+    const ModalSubsystem<T>* modal_subsystem =
         hybrid_context.GetModalSubsystem();
     const auto output_port_ids = modal_subsystem->get_output_port_ids();
     const int num_outports = modal_subsystem->get_num_output_ports();
@@ -838,7 +850,7 @@ class HybridAutomaton : public System<T> {
   // TODO(jadecastro): Better to store/access data as a map or a multimap?
   std::vector<ModalSubsystem<T>*> modal_subsystems_;
   std::vector<ModeTransition<T>*> mode_transitions_;
-  ModeId mode_id_init;
+  ModeId mode_id_init_;
 
   // Fixed input/output port dimensions for the HA.
   int num_inports_;

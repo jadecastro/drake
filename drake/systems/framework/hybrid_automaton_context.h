@@ -38,9 +38,9 @@ class ModalSubsystem {
 
   // TODO(jadecastro): Use setters instead, like in RigidBody.
   explicit ModalSubsystem(
-      const ModeId mode_id, const System<T>* system,
-      std::vector<symbolic::Formula>* invariant,
-      std::vector<symbolic::Formula>* initial_conditions,
+      const ModeId mode_id, System<T>* system,
+      std::vector<symbolic::Formula> invariant,
+      std::vector<symbolic::Formula> initial_conditions,
       std::vector<PortIdentifier> input_port_ids,
       std::vector<PortIdentifier> output_port_ids)
       : mode_id_(mode_id), system_(system), invariant_(invariant),
@@ -48,21 +48,21 @@ class ModalSubsystem {
         input_port_ids_(input_port_ids), output_port_ids_(output_port_ids) {}
 
   explicit ModalSubsystem(
-      const ModeId mode_id, const System<T>* system,
-      std::vector<symbolic::Formula>* invariant,
-      std::vector<symbolic::Formula>* initial_conditions)
+      const ModeId mode_id, System<T>* system,
+      std::vector<symbolic::Formula> invariant,
+      std::vector<symbolic::Formula> initial_conditions)
       : mode_id_(mode_id), system_(system), invariant_(invariant),
         initial_conditions_(initial_conditions) {}
 
   explicit ModalSubsystem(
-      const ModeId mode_id, const System<T>* system,
+      const ModeId mode_id, System<T>* system,
       std::vector<PortIdentifier> input_port_ids,
       std::vector<PortIdentifier> output_port_ids)
       : mode_id_(mode_id), system_(system), input_port_ids_(input_port_ids),
         output_port_ids_(output_port_ids){}
 
   explicit ModalSubsystem(
-      const ModeId mode_id, const System<T>* system)
+      const ModeId mode_id, System<T>* system)
       : mode_id_(mode_id), system_(system) {}
 
   ModeId get_mode_id() const { return mode_id_; }
@@ -85,6 +85,12 @@ class ModalSubsystem {
   }
   std::vector<PortIdentifier>* get_mutable_output_port_ids() {
     return &output_port_ids_;
+  }
+  const std::vector<symbolic::Formula> get_invariant() const {
+    return invariant_;
+  }
+  const std::vector<symbolic::Formula> get_initial_conditions() const {
+    return initial_conditions_;
   }
   // TODO(jadecastro): Do we really need the following two getters?
   // TODO: const?
@@ -115,11 +121,11 @@ class ModalSubsystem {
   // TODO(jadecastro): Allow ModeId to take on an `enum` here in place of the
   // `int`.
   // The system model.
-  const System<T>* system_;
+  System<T>* system_;
   // Formula representing the invariant for this mode.
-  std::vector<symbolic::Formula>* invariant_;  // TODO: Eigen??
+  std::vector<symbolic::Formula> invariant_;  // TODO: Eigen??
   // Formula representing the initial conditions for this mode.
-  std::vector<symbolic::Formula>* initial_conditions_;  // TODO: Eigen??
+  std::vector<symbolic::Formula> initial_conditions_;  // TODO: Eigen??
   // Index set of the input and output ports.
   std::vector<PortIdentifier> input_port_ids_;
   std::vector<PortIdentifier> output_port_ids_;
