@@ -34,7 +34,7 @@ template <typename T>
 class ModalSubsystem {
  public:
   typedef int ModeId;
-  typedef int PortIdentifier;
+  typedef int PortId;
 
   // TODO(jadecastro): Use setters instead, like in RigidBody.
   explicit ModalSubsystem(
@@ -42,8 +42,7 @@ class ModalSubsystem {
       std::vector<symbolic::Formula> invariant,  // TODO(jadecastro): pointer?
       std::vector<symbolic::Formula> initial_conditions,  // TODO(jadecastro):
                                                           // pointer?
-      std::vector<PortIdentifier> input_port_ids,
-      std::vector<PortIdentifier> output_port_ids)
+      std::vector<PortId> input_port_ids, std::vector<PortId> output_port_ids)
       : mode_id_(mode_id), system_(system), invariant_(invariant),
         initial_conditions_(initial_conditions),
         input_port_ids_(input_port_ids), output_port_ids_(output_port_ids) {}
@@ -57,8 +56,7 @@ class ModalSubsystem {
 
   explicit ModalSubsystem(
       const ModeId mode_id, System<T>* system,
-      std::vector<PortIdentifier> input_port_ids,
-      std::vector<PortIdentifier> output_port_ids)
+      std::vector<PortId> input_port_ids, std::vector<PortId> output_port_ids)
       : mode_id_(mode_id), system_(system), input_port_ids_(input_port_ids),
         output_port_ids_(output_port_ids){}
 
@@ -75,16 +73,16 @@ class ModalSubsystem {
     return static_cast<int>(output_port_ids_.size());
   }
 
-  const std::vector<PortIdentifier> get_input_port_ids() const {
+  const std::vector<PortId> get_input_port_ids() const {
     return input_port_ids_;
   }
-  std::vector<PortIdentifier>* get_mutable_input_port_ids() {
+  std::vector<PortId>* get_mutable_input_port_ids() {
     return &input_port_ids_;
   }
-  const std::vector<PortIdentifier> get_output_port_ids() const {
+  const std::vector<PortId> get_output_port_ids() const {
     return output_port_ids_;
   }
-  std::vector<PortIdentifier>* get_mutable_output_port_ids() {
+  std::vector<PortId>* get_mutable_output_port_ids() {
     return &output_port_ids_;
   }
   const std::vector<symbolic::Formula> get_invariant() const {
@@ -93,19 +91,25 @@ class ModalSubsystem {
   std::vector<symbolic::Formula>* get_mutable_invariant() {
     return &invariant_;
   }
+  void set_invariant(std::vector<symbolic::Formula> invariant) {
+    invariant_ = invariant;
+  }
   const std::vector<symbolic::Formula> get_initial_conditions() const {
     return initial_conditions_;
   }
   std::vector<symbolic::Formula>* get_mutable_initial_conditions() {
     return &initial_conditions_;
   }
+  void set_intial_conditions(std::vector<symbolic::Formula> init) {
+    initial_conditions_ = init;
+  }
   // TODO(jadecastro): Do we really need the following two getters?
   // TODO: const?
-  PortIdentifier get_input_port_id(const int index) const {
+  PortId get_input_port_id(const int index) const {
     DRAKE_DEMAND(index >=0 && index < (int)input_port_ids_.size());
     return input_port_ids_[index];
   }
-  PortIdentifier get_output_port_id(const int index) const {
+  PortId get_output_port_id(const int index) const {
     DRAKE_DEMAND(index >=0 && index < (int)output_port_ids_.size());
     return output_port_ids_[index];
   }
@@ -134,8 +138,8 @@ class ModalSubsystem {
   // Formula representing the initial conditions for this mode.
   std::vector<symbolic::Formula> initial_conditions_;  // TODO: Eigen??
   // Index set of the input and output ports.
-  std::vector<PortIdentifier> input_port_ids_;
-  std::vector<PortIdentifier> output_port_ids_;
+  std::vector<PortId> input_port_ids_;
+  std::vector<PortId> output_port_ids_;
 };
 
 /// The HybridAutomatonContext is a container for all of the data necessary to
@@ -153,7 +157,7 @@ template <typename T>
 class HybridAutomatonContext : public Context<T> {
  public:
   typedef int ModeId;
-  typedef int PortIdentifier;
+  typedef int PortId;
 
   /// Constructs a HybridAutomatonContext with a fixed number @p num_subsystems
   /// in a way that allows for dynamic re-sizing during discrete events.
@@ -182,7 +186,7 @@ class HybridAutomatonContext : public Context<T> {
   ///
   /// User code should not call this method. It is for use during HA context
   /// allocation only.
-  void ExportInput(const PortIdentifier& port_id) {
+  void ExportInput(const PortId& port_id) {
     modal_subsystem_->get_mutable_input_port_ids()->emplace_back(port_id);
   }
 
@@ -191,7 +195,7 @@ class HybridAutomatonContext : public Context<T> {
   ///
   /// User code should not call this method. It is for use during HA context
   /// allocation only.
-  void ExportOutput(const PortIdentifier& port_id) {
+  void ExportOutput(const PortId& port_id) {
     modal_subsystem_->get_mutable_output_port_ids()->emplace_back(port_id);
   }
 
@@ -280,8 +284,7 @@ class HybridAutomatonContext : public Context<T> {
     // input?)
     const ModalSubsystem<T>* modal_subsystem = GetModalSubsystem();
     DRAKE_DEMAND(modal_subsystem != nullptr);
-    PortIdentifier subsystem_port_id =
-        modal_subsystem->get_input_port_id(port_index);
+    PortId subsystem_port_id = modal_subsystem->get_input_port_id(port_index);
     GetMutableSubsystemContext()
         ->SetInputPort(subsystem_port_id, std::move(port));
   }
@@ -337,8 +340,7 @@ class HybridAutomatonContext : public Context<T> {
     // input?)
     const ModalSubsystem<T>* modal_subsystem = GetModalSubsystem();
     DRAKE_DEMAND(modal_subsystem != nullptr);
-    PortIdentifier subsystem_port_id =
-        modal_subsystem->get_input_port_id(port_index);
+    PortId subsystem_port_id = modal_subsystem->get_input_port_id(port_index);
     return Context<T>::GetInputPort(*GetSubsystemContext(),
                                     subsystem_port_id);
   }

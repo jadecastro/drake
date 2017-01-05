@@ -38,6 +38,11 @@ class HybridAutomatonContextTest : public ::testing::Test {
     //    mode_id, integrator0_.get()));
     const ModalSubsystem<double> mss0 =
         ModalSubsystem<double>(mode_id, integrator0_.get());
+
+    // Explicitly export the ports.
+    context_->ExportInput(0 /* export input port 0 */);
+    context_->ExportOutput(0 /* export output port 0 */);
+
     //const ModalSubsystem<double> mss0 =
     //    ModalSubsystem(mode_id, integrator0_.get());
     auto subcontext0 = integrator0_->CreateDefaultContext();
@@ -47,11 +52,6 @@ class HybridAutomatonContextTest : public ::testing::Test {
                                 std::move(suboutput0));
     context_->MakeState();
     context_->SetModalState();
-
-    // Explicitly export the ports.
-    // TODO(jadecastro): We shouldn't need to set the port numbers.
-    context_->ExportInput({0 /* export input port 0 */});
-    context_->ExportOutput({0 /* export output port 0 */});
 
     // Set the continuous state.
     ContinuousState<double>* xc = context_->get_mutable_continuous_state();

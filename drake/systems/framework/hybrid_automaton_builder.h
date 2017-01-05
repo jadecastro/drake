@@ -23,6 +23,9 @@ namespace systems {
   //  - Second pass: do a BFS to detect any that are not reachable from the
   // initial modes.
 
+  // TODO(jadecastro): Remove any transitions whose guards are disjoint from the
+  // intersection of the invariants of the pre and post modes.
+
   // TODO(jadecastro): Verify that formulas given are valid.
 
   // TODO(jadecastro): Verify the ports.
@@ -47,6 +50,7 @@ class HybridAutomatonBuilder {
   virtual ~HybridAutomatonBuilder() {}
 
   typedef int ModeId;
+  typedef int PortId;
 
   /// Takes ownership of @p system and adds it to the builder. Returns a bare
   /// pointer to the System, which will remain valid for the lifetime of the
@@ -59,25 +63,35 @@ class HybridAutomatonBuilder {
   ///
   /// @tparam S The type of system to add.
   template <class S>
-      ModalSubsystem<S>* AddModalSubsystem(std::unique_ptr<S> system,
-                                           const ModeId mode_id) {
+      ModalSubsystem<S>* AddModalSubsystem(
+          std::unique_ptr<S> system, std::vector<PortId>& inport_ids,
+          std::vector<PortId>& outport_ids, const ModeId mode_id) {
     // Initialize the invariant to True.
-    // TODO: check if conjunctions can be done via std::vector.
-    // TODO: Specialize the type for symbolic::Formula as a container
-    // class to ensure that the variables used are consistent with the
-    // underlying state vector for a given subsystem.
+
+    for (auto mss : modal_subsystems_) {
+      // Throw if the proposed mode_id exists.
+      DRAKE_ASSERT(mss->get_mode_id() != mode_id);
+    }
+    // TODO(jadecastro): Is std::vector the best data container?  Ultimately
+    // want set operations on elements (e.g. unions, intersections).
+
+    // TODO(jadecastro): Make sure that the variables used are consistent with
+    // the underlying continuous state.
     std::vector<symbolic::Formula> invariant;
-    invariant.push_back(symbolic::Formula::True());
+
     // Initialize the intial conditions to True.
     std::vector<symbolic::Formula> init;
-    init.push_back(symbolic::Formula::True());
+
     // Populate a ModalSubsystem
     ModalSubsystem<S> modal_subsystem =
         ModalSubsystem<S>(mode_id, system.get(), invariant, init);
     modal_subsystems_->emplace_back(modal_subsystem);
-    // return std::move(sys);  // TODO: How does ownership work here?
+
+    // Export the input and output ports.
+    hybrid_context->ExportInput({inport_ids});
+    hybrid_context->ExportOutput({outport_ids});
+
     return &modal_subsystem;
-    // TODO: fix warnings^
   }
   /// Constructs a new system with the given @p args, and adds it to the
   /// builder, which retains ownership. Returns a bare pointer to the System,
@@ -133,26 +147,22 @@ class HybridAutomatonBuilder {
   }
 
   ModeTransition<T> AddModeTransition(ModalSubsystem<T>& sys_pre,
-                                       ModalSubsystem<T>& sys_post) {
-    // TODO: some validation checks.
-    std::pair<ModalSubsystem<T>*, ModalSubsystem<T>*> edge;
-    edge.first = &sys_pre;
-    edge.second = &sys_post;
-    // Define the default guard.
+                                      ModalSubsystem<T>& sys_post) {
+    // TODO(jadecastro): Throw if pre and post have disjoint invariants.
+    std::pair<ModalSubsystem<T>*, ModalSubsystem<T>*> edge =
+        std::make_pair(&sys_pre, &sys_post);
+    // Define an empty guard.
     std::vector<symbolic::Formula> guard;
-    guard.push_back(symbolic::Formula::True());
-    // Define the default reset map.
+    // Define an empty reset mapping.
     std::vector<symbolic::Formula> reset;
-    reset.push_back(symbolic::Formula::True());
-    // TODO(jadecastro): Initialize the reset map to True.
-    // std::vector<symbolic::Formula> identity_reset;
-    ModeTransition<T> mode_transition =
-        ModeTransition<T>(edge, &guard, &reset);
+
+    ModeTransition<T> mode_transition = ModeTransition<T>(edge, &guard, &reset);
     mode_transitions_.push_back(&mode_transition);
+
     return mode_transition;
   }
 
-  // A helper for self-transitions.
+  // A helper for dealing with self-transitions.
   ModeTransition<T> AddModeTransition(ModalSubsystem<T>& sys) {
     return this->AddModeTransition(sys, sys);
   }
@@ -162,16 +172,104 @@ class HybridAutomatonBuilder {
     return mode_transitions_;
   };
 
-  // TODO: We want something that will yield something like
-  // modalsubsystem.AddInvariant(...).
+  // Adds an invariant formula for the specified ModalSubsystem.
   void AddInvariant(ModalSubsystem<T>* modal_subsystem,
-                    symbolic::Formula& new_invariant) const {
+                    const symbolic::Formula& invariant) const {
     DRAKE_ASSERT(modal_subsystem != nullptr);
     // TODO: validate, like in context.
     // DRAKE_ASSERT_VOID(systems::System<T>::CheckValidContext(*context));
 
+    (*modal_subsystem->get_mutable_invariant()).push_back(invariant);
+
+    // Check that the formula doesn't falsify the conjunction of the
+    // expressions.
+    // TODO(jadecastro): Implement this check.
+    // bool result = EvalInvariant();
+    // DRAKE_DEMAND(!result);
+  }
+
+  // Adds an initial condition formula for the specified ModalSubsystem.
+  void AddInitialCondition(ModalSubsystem<T>* modal_subsystem,
+                            const symbolic::Formula& init) const {
+    DRAKE_ASSERT(modal_subsystem != nullptr);
+    // TODO: validate, like in context.
+    // DRAKE_ASSERT_VOID(systems::System<T>::CheckValidContext(*context));
+
+    (*modal_subsystem->get_mutable_initial_condition()).push_back(init);
+
+    // Check that the formula doesn't falsify the conjunction of the
+    // expressions.
+    // TODO(jadecastro): Implement this check.
+    // bool result = EvalInvariant();
+    // DRAKE_DEMAND(!result);
+  }
+
+  // Adds a guard formula for the specified ModeTransition.
+  void AddGuard(ModeTransition<T>* mode_transition,
+                const symbolic::Formula& guard) const {
+    DRAKE_ASSERT(mode_transition != nullptr);
+    // TODO: validate, like in context.
+    // DRAKE_ASSERT_VOID(systems::System<T>::CheckValidContext(*context));
+
     // Define a pointer to the continuous state in the context.
-    (*modal_subsystem->get_mutable_invariant()).push_back(new_invariant);
+    (*mode_transition->get_mutable_invariant()).push_back(guard);
+
+    // Check that the formula doesn't falsify the conjunction of the guard
+    // expression.
+    // TODO(jadecastro): Implement this check.
+    // bool result = EvalInvariant();
+    // DRAKE_DEMAND(!result);
+  }
+
+  // Adds a vector of reset formulas to the specified ModeTransition. Because
+  // alignment with the continuous state vector is important, we require reset
+  // to be supplied as a vector of appropriate dimension.
+  void AddReset(ModeTransition<T>* mode_transition,
+                const std::vector<symbolic::Formula>& reset) {
+    // NB: symbolic::Formula::True() implements a 'fast' version of the identity
+    // mapping.
+
+    // TODO(jadecastro): Throw if non-trivial resets are not algebraic. Do
+    // something like AddConstraint in MathematicalProgram?
+    if (reset[0] == symbolic::Formula::True()) {
+      // Ensure that the continuous dimensions all match.
+      Context<T>* context_pre =
+          mode_transition->get_predecessor()->GetSubsystemContext();
+      Context<T>* context_post =
+          mode_transition->get_predecessor()->GetSubsystemContext();
+      const ContinuousState<T>& xc_pre = *context_pre->get_continuous_state();
+      const ContinuousState<T>& xc_post = *context_post->get_continuous_state();
+      DRAKE_DEMAND(xc_pre.get_generalized_position().size() ==
+                   xc_post.get_generalized_position().size());
+      DRAKE_DEMAND(xc_pre.get_generalized_velocity().size() ==
+                   xc_post.get_generalized_velocity().size());
+      DRAKE_DEMAND(xc_pre.get_misc_continuous_state().size() ==
+                   xc_post.get_misc_continuous_state().size());
+    }
+
+    mode_transition->set_reset_throw_if_incompatible(&reset);
+  }
+
+  // Adds the identity reset to the specified ModeTransition.
+  void AddReset(ModeTransition<T>* mode_transition) {
+    AddReset(mode_transition, symbolic::Formula::True());
+  }
+
+  // Adds a set of initial modes to the HA, replacing everything there already.
+  void AddInitialModes(std::set<ModeId> initial_modes) {
+    DRAKE_DEMAND(initial_modes_.empty());
+    DRAKE_DEMAND(!modal_subsystems_.empty()).
+    DRAKE_DEMAND(initial_modes.size() < modal_subsystems_.size());
+
+    // Require that all elements are valid.
+    // TODO(jadecastro): Do something other than exhaustive search here.
+    for (auto mss : modal_subsystems_) {
+      DRAKE_DEMAND(initial_modes.find(mss->get_mode_id()) !=
+                   initial_modes.end());  // TODO: <--- Obviously wrong. Revisit
+                                          // it.
+    }
+
+    initial_modes_ = initial_modes;
   }
 
   /// Returns the list of contained Systems.
@@ -188,6 +286,8 @@ class HybridAutomatonBuilder {
   /// Connect, ExportInput, and ExportOutput. Throws std::logic_error if the
   /// graph is not buildable.
   std::unique_ptr<HybridAutomaton<T>> Build() {
+    // TODO(jadecastro): Need some extensive verification here.
+    Finalize();
     std::unique_ptr<HybridAutomaton<T>> hybrid_automaton(
         new HybridAutomaton<T>(Compile()));
     hybrid_automaton->DumpInto(modal_subsystems_, mode_transitions_);
@@ -201,8 +301,30 @@ class HybridAutomatonBuilder {
   /// Only HybridAutomaton subclasses should call this method. The target must
   /// not already be initialized.
   void BuildInto(HybridAutomaton<T>* target) {
+    Finalize();
     target->Initialize(Compile());
     target->DumpInto(modal_subsystems_, mode_transitions_);
+  }
+
+  void Finalize() {
+    for (auto modal_subsystem : modal_subsystems_) {
+      if (modal_subsystem->get_invariant().empty()) {
+        auto invariant = modal_subsystem->get_mutable_invariant();
+        (*invariant).push_back(symbolic::Formula::True());
+      }
+      if (modal_subsystem->get_initial_condition().empty()) {
+        auto init = modal_subsystem->get_mutable_intial_conditions();
+        (*init).push_back(symbolic::Formula::True());
+      }
+    }
+    for (auto mode_transition : mode_transitions_) {
+      if (mode_transition->get_guard().empty()) {
+        auto guard = mode_transition->get_mutable_guard();
+        (*guard).push_back(symbolic::Formula::True());
+      }
+      // NB: We require resets to be explicitly specified by the user, since
+      // consistency checks are needed.
+    }
   }
 
  private:
@@ -224,6 +346,7 @@ class HybridAutomatonBuilder {
     typename HybridAutomaton<T>::StateMachine state_machine;
     state_machine.modal_subsystems = modal_subsystems_;
     state_machine.mode_transitions = mode_transitions_;
+    state_machine.initial_modes = initial_modes_;
     return state_machine;
   }
 
@@ -234,9 +357,10 @@ class HybridAutomatonBuilder {
   HybridAutomatonBuilder(HybridAutomatonBuilder<T>&& other) = delete;
   HybridAutomatonBuilder& operator=(HybridAutomatonBuilder<T>&& other) = delete;
 
-  // TODO(jadecastro): map or multimap?
+  // TODO(jadecastro): map?
   std::vector<ModalSubsystem<T>*> modal_subsystems_;
   std::vector<ModeTransition<T>*> mode_transitions_;
+  std::set<ModeId> initial_modes_;
 };
 
 }  // namespace systems
