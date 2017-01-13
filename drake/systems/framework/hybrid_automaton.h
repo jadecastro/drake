@@ -773,7 +773,8 @@ class HybridAutomaton : public System<T>,
   }
 
   std::vector<ModalSubsystem<T>*> GetSuccessors(ModeId mode_id_pre) {
-    
+
+    DRAKE_DEMAND(result.size() > 0);
     return result
   }
 

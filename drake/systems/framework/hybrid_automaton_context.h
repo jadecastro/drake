@@ -172,6 +172,9 @@ class HybridAutomatonContext : public Context<T> {
     context_ = std::move(subcontext);
     output_ = std::move(suboutput);
     modal_subsystem_ = std::move(modal_subsystem);
+
+    // TODO(jadecastro): Need to involve the simulator too.
+    //   `reset_context` along with `Initialize` and `release_context`?
   }
 
   // ADD COMMENTS
