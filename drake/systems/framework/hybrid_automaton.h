@@ -121,8 +121,8 @@ class ModeTransition {
   // TODO(jadecastro): Use setters instead, like in RigidBody.
   explicit ModeTransition(
       const std::pair<ModalSubsystem<T>*, ModalSubsystem<T>*> edge,
-      std::vector<symbolic::Formula>* guard,
-      std::vector<symbolic::Formula>* reset)
+      std::vector<symbolic::Formula> guard,
+      std::vector<symbolic::Formula> reset)
       : edge_(edge), guard_(guard), reset_(reset) {}
 
   explicit ModeTransition(
@@ -137,28 +137,26 @@ class ModeTransition {
 
   const ModalSubsystem<T>* get_successor() const { return edge_.second; }
 
-  const std::vector<symbolic::Formula> get_guard() const { return *guard_; }
+  const std::vector<symbolic::Formula> get_guard() const { return guard_; }
 
-  std::vector<symbolic::Formula>* get_mutable_guard() { return guard_; }
-
-  const std::vector<symbolic::Formula> get_reset() const { return *reset_; }
-
-  std::vector<symbolic::Formula>* get_mutable_reset() { return reset_; }
+  std::vector<symbolic::Formula>* get_mutable_guard() { return &guard_; }
 
   // Sets the vector of formulas representing the guard, wiping anything already
   // stored.
-  void set_guard(const symbolic::Formula guard) {
-    // TODO(jadecastro): Perform checks?
-    guard_ = guard;
-  }
+  // TODO(jadecastro): Perform checks?
+  void set_guard(std::vector<symbolic::Formula>& guard) { guard_ = guard; }
+
+  const std::vector<symbolic::Formula> get_reset() const { return reset_; }
+
+  std::vector<symbolic::Formula>* get_mutable_reset() { return &reset_; }
 
   // Sets the vector of formulas representing the reset, wiping anything already
   // stored.
+  // TODO(jadecastro): Check that dimensions are consistent.
+  //                   ^^^ Can we bypass context to extract these dims from
+  //                   System?
   void set_reset_throw_if_incompatible(std::vector<symbolic::Formula>& reset) {
-    // TODO(jadecastro): Check that dimensions are consistent.
-    //                   ^^^ Can we bypass context to extract these dims from
-    //                   System?
-    reset_ = &reset;
+    reset_ = reset;
   }
 
   /// Returns a clone that includes a deep copy of all the output ports.
@@ -175,9 +173,9 @@ class ModeTransition {
   // Pair of ModalSubsystems representing the edge for this transition.
   std::pair<ModalSubsystem<T>*, ModalSubsystem<T>*> edge_;
   // Formula representing the guard for this edge.
-  std::vector<symbolic::Formula>* guard_;  // TODO: Eigen??
+  std::vector<symbolic::Formula> guard_;  // TODO: Eigen??
   // Formula representing the reset map for this edge.
-  std::vector<symbolic::Formula>* reset_;  // TODO: Eigen??
+  std::vector<symbolic::Formula> reset_;  // TODO: Eigen??
 };
 
 /// HybridAutomaton collects all of the system-related data necessary for
@@ -812,6 +810,9 @@ class HybridAutomaton : public System<T>,
     modal_subsystems_ = state_machine.modal_subsystems;
     mode_transitions_ = state_machine.mode_transitions;
     initial_modes_ = state_machine.initial_modes;
+    //if (!mode_id_init_) {
+    //  throw std::logic_error("Unspecified initial mode.");
+    // }
     num_inports_ = modal_subsystems_[mode_id_init_]->get_num_input_ports();
     num_outports_ = modal_subsystems_[mode_id_init_]->get_num_input_ports();
     // TODO(jadecastro): Check reachability of subsystems from the initial
@@ -819,6 +820,9 @@ class HybridAutomaton : public System<T>,
 
     // Perform some checks to determine that each ModalSubsystem indeed
     // satisfies the invariants for the chosen input/output ports.
+    std::cerr << " mode_id:" << modal_subsystems_.front()->get_mode_id()
+              << std::endl;
+
     DRAKE_ASSERT(PortsAreValid());
     DRAKE_ASSERT(PortsAreConsistent());
 
@@ -851,7 +855,11 @@ class HybridAutomaton : public System<T>,
   bool PortsAreValid() const {
     for (const auto& modal_subsystem : modal_subsystems_) {
       const System<T>* subsystem = modal_subsystem->get_system();
+      DRAKE_DEMAND(subsystem != nullptr);
       for (const PortId& inport : modal_subsystem->get_input_port_ids()) {
+        std::cerr << " subsystem->get_num_input_ports(): "
+                  << subsystem->get_num_input_ports() << std::endl;
+        std::cerr << " inport: " << inport << std::endl;
         if (inport < 0 || inport >= subsystem->get_num_input_ports()) {
           return false;
         }
@@ -1004,7 +1012,7 @@ class HybridAutomaton : public System<T>,
   // TODO(jadecastro): The ModeId key is redundant with edge_.first in
   // ModeTransition<T>.
   std::multimap<ModeId, ModeTransition<T>*> mode_transitions_;
-  ModeId mode_id_init_;
+  ModeId mode_id_init_{0};  // TODO(jadecastro): <---Initialize this.
 
   // ************* This never gets intiialized....
   std::set<ModeId> initial_modes_;

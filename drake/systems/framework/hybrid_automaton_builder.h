@@ -67,8 +67,8 @@ class HybridAutomatonBuilder {
   // three functions.
   template <template <typename Scalar> class S, typename... Args>
   ModalSubsystem<T> AddModalSubsystem(
-      std::unique_ptr<S<T>> system, std::vector<PortId>* inport_ids,
-      std::vector<PortId>* outport_ids, const ModeId mode_id) {
+      std::unique_ptr<S<T>> system, std::vector<PortId>& inport_ids,
+      std::vector<PortId>& outport_ids, const ModeId mode_id) {
     // Initialize the invariant to True.
 
     for (auto mss : modal_subsystems_) {
@@ -108,9 +108,9 @@ class HybridAutomatonBuilder {
     std::pair<ModalSubsystem<T>*, ModalSubsystem<T>*> edge =
         std::make_pair(&sys_pre, &sys_post);
     // Define an empty guard.
-    std::vector<symbolic::Formula>* guard = nullptr;
+    std::vector<symbolic::Formula> guard;
     // Define an empty reset mapping.
-    std::vector<symbolic::Formula>* reset = nullptr;
+    std::vector<symbolic::Formula> reset;
 
     ModeTransition<T> mode_transition = ModeTransition<T>(edge, guard, reset);
     mode_transitions_.insert(std::make_pair(mode_transitions_.size(),

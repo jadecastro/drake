@@ -27,7 +27,7 @@ class ExampleHybridAutomaton : public HybridAutomaton<double> {
     inports.push_back(0);
     outports.push_back(0);
     ModalSubsystem<double> mss = builder.AddModalSubsystem(
-        std::unique_ptr<bouncing_ball::Ball<double>>(), &inports, &outports,
+        std::unique_ptr<bouncing_ball::Ball<double>>(), inports, outports,
         kModeIdBall);
     ball_subsystem_ = &mss;
     ball_ = ball_subsystem_->get_system();
@@ -35,8 +35,9 @@ class ExampleHybridAutomaton : public HybridAutomaton<double> {
     symbolic::Formula invariant_ball = symbolic::Formula::True();
     builder.AddInvariant(ball_subsystem_, invariant_ball);
 
-    //ModeTransition<double>* ball_to_ball_ =
-    //    builder.AddModeTransition(*ball_subsystem_);
+    ModeTransition<double> trans =
+        builder.AddModeTransition(*ball_subsystem_);
+    ball_to_ball_ = &trans;
     //symbolic::Formula guard_formula_bounce = symbolic::Formula::True();
 
     builder.BuildInto(this);
@@ -48,6 +49,7 @@ class ExampleHybridAutomaton : public HybridAutomaton<double> {
 
  private:
   ModalSubsystem<double>* ball_subsystem_ = nullptr;
+  ModeTransition<double>* ball_to_ball_ = nullptr;
   const System<double>* ball_ = nullptr;
 };
 
