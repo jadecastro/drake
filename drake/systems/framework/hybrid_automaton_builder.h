@@ -62,10 +62,13 @@ class HybridAutomatonBuilder {
   /// @endcode
   ///
   /// @tparam S The type of system to add.
-  template <class S>
-      ModalSubsystem<S>* AddModalSubsystem(
-          std::unique_ptr<S> system, std::vector<PortId>& inport_ids,
-          std::vector<PortId>& outport_ids, const ModeId mode_id) {
+
+  // TODO(jadecastro): I think we can get rid of these two of the following
+  // three functions.
+  template <template <typename Scalar> class S, typename... Args>
+  ModalSubsystem<T> AddModalSubsystem(
+      std::unique_ptr<S<T>> system, std::vector<PortId>* inport_ids,
+      std::vector<PortId>* outport_ids, const ModeId mode_id) {
     // Initialize the invariant to True.
 
     for (auto mss : modal_subsystems_) {
@@ -83,69 +86,20 @@ class HybridAutomatonBuilder {
     std::vector<symbolic::Formula> init;
 
     // Populate a ModalSubsystem
-    ModalSubsystem<S> modal_subsystem =
-        ModalSubsystem<S>(mode_id, system.get(), invariant, init);
-    modal_subsystems_->emplace_back(modal_subsystem);
+    ModalSubsystem<T> modal_subsystem =
+        ModalSubsystem<T>(mode_id, system.get(), invariant, init,
+                          inport_ids, outport_ids);
+    modal_subsystems_.emplace_back(&modal_subsystem);
 
     // Export the input and output ports.
     // *****************************************************************
-    // *************** TODO!!
+    // ********************************************************
+    // ******************************** TODO!!
+    // *****************************
     //hybrid_context->ExportInput({inport_ids});
     //hybrid_context->ExportOutput({outport_ids});
 
-    return &modal_subsystem;
-  }
-  /// Constructs a new system with the given @p args, and adds it to the
-  /// builder, which retains ownership. Returns a bare pointer to the System,
-  /// which will remain valid for the lifetime of the HybridAutomaton built by
-  /// this builder.
-  ///
-  /// @code
-  ///   HybridAutomatonBuilder<double> builder;
-  ///   auto foo = builder.AddSystem<Foo<double>>("name", 3.14);
-  /// @endcode
-  ///
-  /// note that for dependent names you must use the template keyword:
-  ///
-  /// @code
-  ///   HybridAutomatonBuilder<T> builder;
-  ///   auto foo = builder.template AddSystem<Foo<T>>("name", 3.14);
-  /// @endcode
-  ///
-  /// You may prefer the `unique_ptr` variant instead.
-  ///
-  /// @tparam S The type of System to construct. Must subclass System<T>.
-  template <class S, typename... Args>
-  std::unique_ptr<S> AddModalSubsystem(Args&&... args) {
-    return AddModalSubsystem(std::make_unique<S>(std::forward<Args>(args)...));
-  }
-
-  /// Constructs a new system with the given @p args, and adds it to the
-  /// builder, which retains ownership. Returns a bare pointer to the System,
-  /// which will remain valid for the lifetime of the HybridAutomaton built by
-  /// this builder.
-  ///
-  /// @code
-  ///   HybridAutomatonBuilder<double> builder;
-  ///   // Foo must be a template.
-  ///   auto foo = builder.AddSystem<Foo>("name", 3.14);
-  /// @endcode
-  ///
-  /// Note that for dependent names you must use the template keyword:
-  ///
-  /// @code
-  ///   HybridAutomatonBuilder<T> builder;
-  ///   auto foo = builder.template AddSystem<Foo>("name", 3.14);
-  /// @endcode
-  ///
-  /// You may prefer the `unique_ptr` variant instead.
-  ///
-  /// @tparam S A template for the type of System to construct. The template
-  /// will be specialized on the scalar type T of this builder.
-  template <template <typename Scalar> class S, typename... Args>
-  std::unique_ptr<S<T>> AddModalSubsystem(Args&&... args) {
-    return AddModalSubsystem(
-        std::make_unique<S<T>>(std::forward<Args>(args)...));
+    return modal_subsystem;
   }
 
   ModeTransition<T> AddModeTransition(ModalSubsystem<T>& sys_pre,
@@ -154,11 +108,11 @@ class HybridAutomatonBuilder {
     std::pair<ModalSubsystem<T>*, ModalSubsystem<T>*> edge =
         std::make_pair(&sys_pre, &sys_post);
     // Define an empty guard.
-    std::vector<symbolic::Formula> guard;
+    std::vector<symbolic::Formula>* guard = nullptr;
     // Define an empty reset mapping.
-    std::vector<symbolic::Formula> reset;
+    std::vector<symbolic::Formula>* reset = nullptr;
 
-    ModeTransition<T> mode_transition = ModeTransition<T>(edge, &guard, &reset);
+    ModeTransition<T> mode_transition = ModeTransition<T>(edge, guard, reset);
     mode_transitions_.insert(std::make_pair(mode_transitions_.size(),
                                             &mode_transition));
 

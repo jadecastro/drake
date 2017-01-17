@@ -39,8 +39,8 @@ class ModalSubsystem {
   // TODO(jadecastro): Use setters instead, like in RigidBody.
   explicit ModalSubsystem(
       ModeId mode_id, System<T>* system,
-      std::vector<symbolic::Formula>* invariant,  // TODO(jadecastro): pointer?
-      std::vector<symbolic::Formula>* initial_conditions,  // TODO(jadecastro):
+      std::vector<symbolic::Formula> invariant,  // TODO(jadecastro): pointer?
+      std::vector<symbolic::Formula> initial_conditions,  // TODO(jadecastro):
                                                           // pointer?
       std::vector<PortId>* input_port_ids, std::vector<PortId>* output_port_ids)
       : mode_id_(mode_id), system_(system), invariant_(invariant),
@@ -49,8 +49,8 @@ class ModalSubsystem {
 
   explicit ModalSubsystem(
       ModeId mode_id, System<T>* system,
-      std::vector<symbolic::Formula>* invariant,
-      std::vector<symbolic::Formula>* initial_conditions)
+      std::vector<symbolic::Formula> invariant,
+      std::vector<symbolic::Formula> initial_conditions)
       : mode_id_(mode_id), system_(system), invariant_(invariant),
         initial_conditions_(initial_conditions) {}
 
@@ -63,6 +63,8 @@ class ModalSubsystem {
   explicit ModalSubsystem(
       ModeId mode_id, System<T>* system)
       : mode_id_(mode_id), system_(system) {}
+
+  //explicit ModalSubsystem() = default;  // TODO(jadecastro): Revisit..
 
   ModeId get_mode_id() const { return mode_id_; }
   System<T>* get_system() const {return system_; }
@@ -86,22 +88,22 @@ class ModalSubsystem {
     return output_port_ids_;
   }
   const std::vector<symbolic::Formula> get_invariant() const {
-    return *invariant_;
-  }
-  std::vector<symbolic::Formula>* get_mutable_invariant() {
     return invariant_;
   }
-  void set_invariant(std::vector<symbolic::Formula> invariant) {
-    invariant_ = &invariant;
+  std::vector<symbolic::Formula>* get_mutable_invariant() {
+    return &invariant_;
+  }
+  void set_invariant(std::vector<symbolic::Formula>& invariant) {
+    invariant_ = invariant;
   }
   const std::vector<symbolic::Formula> get_initial_conditions() const {
-    return *initial_conditions_;
-  }
-  std::vector<symbolic::Formula>* get_mutable_initial_conditions() {
     return initial_conditions_;
   }
-  void set_intial_conditions(std::vector<symbolic::Formula> init) {
-    initial_conditions_ = &init;
+  std::vector<symbolic::Formula>* get_mutable_initial_conditions() {
+    return &initial_conditions_;
+  }
+  void set_intial_conditions(std::vector<symbolic::Formula>& init) {
+    initial_conditions_ = init;
   }
   // TODO(jadecastro): Do we really need the following two getters?
   // TODO: const?
@@ -134,9 +136,9 @@ class ModalSubsystem {
   // The system model.
   System<T>* system_;
   // Formula representing the invariant for this mode.
-  std::vector<symbolic::Formula>* invariant_;  // TODO: Eigen??
+  std::vector<symbolic::Formula> invariant_;  // TODO: Eigen??
   // Formula representing the initial conditions for this mode.
-  std::vector<symbolic::Formula>* initial_conditions_;  // TODO: Eigen??
+  std::vector<symbolic::Formula> initial_conditions_;  // TODO: Eigen??
   // Index set of the input and output ports.
   std::vector<PortId>* input_port_ids_;
   std::vector<PortId>* output_port_ids_;

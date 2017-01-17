@@ -432,9 +432,6 @@ class HybridAutomaton : public System<T>,
     // TODO(jadecastro): How to apply the inverse mapping to satisfy the ODE
     // solver?
     if (mode_transition.get_reset()[0].EqualTo(symbolic::Formula::True())) {
-      //Context<T>* context_pre = mss_pre->GetSubsystemContext();
-      //Context<T>* context_post =
-      //       mss_post->get_system()->CreateDefaultContext();
       PerformReset(context, mode_transition);
     }
   }
@@ -482,13 +479,10 @@ class HybridAutomaton : public System<T>,
   /// Classes inheriting from %Diagram need access to this method in order to
   /// pass their constituent subsystems the apropriate subcontext. Aborts if
   /// @p subsystem is not actually a subsystem of this diagram.
-  Context<T>* GetMutableSubsystemContext(
-      Context<T>* context, const ModalSubsystem<T>* modal_subsystem) const {
+  Context<T>* GetMutableSubsystemContext(Context<T>* context) const {
     DRAKE_DEMAND(context != nullptr);
-    DRAKE_DEMAND(modal_subsystem != nullptr);
     auto hybrid_context =
         dynamic_cast_or_die<HybridAutomatonContext<T>*>(context);
-    // const ModeId id = get_mode_id(modal_subsystem);
     return hybrid_context->GetMutableSubsystemContext();
   }
 
