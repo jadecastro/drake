@@ -38,80 +38,80 @@ class ModalSubsystem {
 
   // TODO(jadecastro): Use setters instead, like in RigidBody.
   explicit ModalSubsystem(
-      const ModeId mode_id, System<T>* system,
-      std::vector<symbolic::Formula> invariant,  // TODO(jadecastro): pointer?
-      std::vector<symbolic::Formula> initial_conditions,  // TODO(jadecastro):
+      ModeId mode_id, System<T>* system,
+      std::vector<symbolic::Formula>* invariant,  // TODO(jadecastro): pointer?
+      std::vector<symbolic::Formula>* initial_conditions,  // TODO(jadecastro):
                                                           // pointer?
-      std::vector<PortId> input_port_ids, std::vector<PortId> output_port_ids)
+      std::vector<PortId>* input_port_ids, std::vector<PortId>* output_port_ids)
       : mode_id_(mode_id), system_(system), invariant_(invariant),
         initial_conditions_(initial_conditions),
         input_port_ids_(input_port_ids), output_port_ids_(output_port_ids) {}
 
   explicit ModalSubsystem(
-      const ModeId mode_id, System<T>* system,
-      std::vector<symbolic::Formula> invariant,
-      std::vector<symbolic::Formula> initial_conditions)
+      ModeId mode_id, System<T>* system,
+      std::vector<symbolic::Formula>* invariant,
+      std::vector<symbolic::Formula>* initial_conditions)
       : mode_id_(mode_id), system_(system), invariant_(invariant),
         initial_conditions_(initial_conditions) {}
 
   explicit ModalSubsystem(
-      const ModeId mode_id, System<T>* system,
-      std::vector<PortId> input_port_ids, std::vector<PortId> output_port_ids)
+      ModeId mode_id, System<T>* system,
+      std::vector<PortId>* input_port_ids, std::vector<PortId>* output_port_ids)
       : mode_id_(mode_id), system_(system), input_port_ids_(input_port_ids),
         output_port_ids_(output_port_ids){}
 
   explicit ModalSubsystem(
-      const ModeId mode_id, System<T>* system)
+      ModeId mode_id, System<T>* system)
       : mode_id_(mode_id), system_(system) {}
 
   ModeId get_mode_id() const { return mode_id_; }
   System<T>* get_system() const {return system_; }
   int get_num_input_ports() const {
-    return static_cast<int>(input_port_ids_.size());
+    return static_cast<int>(input_port_ids_->size());
   }
   int get_num_output_ports() const {
-    return static_cast<int>(output_port_ids_.size());
+    return static_cast<int>(output_port_ids_->size());
   }
 
   const std::vector<PortId> get_input_port_ids() const {
-    return input_port_ids_;
+    return *input_port_ids_;
   }
   std::vector<PortId>* get_mutable_input_port_ids() {
-    return &input_port_ids_;
+    return input_port_ids_;
   }
   const std::vector<PortId> get_output_port_ids() const {
-    return output_port_ids_;
+    return *output_port_ids_;
   }
   std::vector<PortId>* get_mutable_output_port_ids() {
-    return &output_port_ids_;
+    return output_port_ids_;
   }
   const std::vector<symbolic::Formula> get_invariant() const {
-    return invariant_;
+    return *invariant_;
   }
   std::vector<symbolic::Formula>* get_mutable_invariant() {
-    return &invariant_;
+    return invariant_;
   }
   void set_invariant(std::vector<symbolic::Formula> invariant) {
-    invariant_ = invariant;
+    invariant_ = &invariant;
   }
   const std::vector<symbolic::Formula> get_initial_conditions() const {
-    return initial_conditions_;
+    return *initial_conditions_;
   }
   std::vector<symbolic::Formula>* get_mutable_initial_conditions() {
-    return &initial_conditions_;
+    return initial_conditions_;
   }
   void set_intial_conditions(std::vector<symbolic::Formula> init) {
-    initial_conditions_ = init;
+    initial_conditions_ = &init;
   }
   // TODO(jadecastro): Do we really need the following two getters?
   // TODO: const?
   PortId get_input_port_id(const int index) const {
-    DRAKE_DEMAND(index >=0 && index < (int)input_port_ids_.size());
-    return input_port_ids_[index];
+    DRAKE_DEMAND(index >=0 && index < (int)input_port_ids_->size());
+    return (*input_port_ids_)[index];
   }
   PortId get_output_port_id(const int index) const {
-    DRAKE_DEMAND(index >=0 && index < (int)output_port_ids_.size());
-    return output_port_ids_[index];
+    DRAKE_DEMAND(index >=0 && index < (int)output_port_ids_->size());
+    return (*output_port_ids_)[index];
   }
 
   /// Returns a clone that includes a deep copy of all the output ports.
@@ -134,12 +134,12 @@ class ModalSubsystem {
   // The system model.
   System<T>* system_;
   // Formula representing the invariant for this mode.
-  std::vector<symbolic::Formula> invariant_;  // TODO: Eigen??
+  std::vector<symbolic::Formula>* invariant_;  // TODO: Eigen??
   // Formula representing the initial conditions for this mode.
-  std::vector<symbolic::Formula> initial_conditions_;  // TODO: Eigen??
+  std::vector<symbolic::Formula>* initial_conditions_;  // TODO: Eigen??
   // Index set of the input and output ports.
-  std::vector<PortId> input_port_ids_;
-  std::vector<PortId> output_port_ids_;
+  std::vector<PortId>* input_port_ids_;
+  std::vector<PortId>* output_port_ids_;
 };
 
 /// The HybridAutomatonContext is a container for all of the data necessary to

@@ -2,6 +2,7 @@
 
 // TODO: triage this list.
 #include <algorithm>
+#include <functional>
 #include <fstream>
 #include <functional>
 #include <map>
@@ -132,13 +133,17 @@ class ModeTransition {
     return edge_;
   }
 
-  const ModalSubsystem<T>* get_predecessor() const { return edge_.first(); }
+  const ModalSubsystem<T>* get_predecessor() const { return edge_.first; }
 
-  const ModalSubsystem<T>* get_successor() const { return edge_.second(); }
+  const ModalSubsystem<T>* get_successor() const { return edge_.second; }
 
-  const std::vector<symbolic::Formula>* get_guard() const { return guard_; }
+  const std::vector<symbolic::Formula> get_guard() const { return *guard_; }
 
-  const std::vector<symbolic::Formula>* get_reset() const { return reset_; }
+  std::vector<symbolic::Formula>* get_mutable_guard() { return guard_; }
+
+  const std::vector<symbolic::Formula> get_reset() const { return *reset_; }
+
+  std::vector<symbolic::Formula>* get_mutable_reset() { return reset_; }
 
   // Sets the vector of formulas representing the guard, wiping anything already
   // stored.
@@ -149,11 +154,11 @@ class ModeTransition {
 
   // Sets the vector of formulas representing the reset, wiping anything already
   // stored.
-  void set_reset_throw_if_incompatible(const symbolic::Formula* reset) {
+  void set_reset_throw_if_incompatible(std::vector<symbolic::Formula>& reset) {
     // TODO(jadecastro): Check that dimensions are consistent.
     //                   ^^^ Can we bypass context to extract these dims from
     //                   System?
-    reset_ = reset;
+    reset_ = &reset;
   }
 
   /// Returns a clone that includes a deep copy of all the output ports.
@@ -356,7 +361,7 @@ class HybridAutomaton : public System<T>,
     // Evaluate the invariant.
     std::vector<T> result;
     for (auto formula : invariant) {
-      result.push_back(EvalFormula(formula));
+      result.emplace_back(EvalFormula(context, formula));
     }
     return result;
   }
@@ -367,12 +372,12 @@ class HybridAutomaton : public System<T>,
       const HybridAutomatonContext<T>& context) const {
     DRAKE_ASSERT_VOID(systems::System<T>::CheckValidContext(context));
     const ModeId mode_id = context.get_mode_id();
-    const auto init = modal_subsystems_[mode_id]->get_initial_condition();
+    const auto init = modal_subsystems_[mode_id]->get_initial_conditions();
 
     // Evaluate the initial conditions.
     std::vector<T> result;
     for (auto formula : init) {
-      result.push_back(EvalFormula(formula));
+      result.emplace_back(EvalFormula(context, formula));
     }
     return result;
   }
@@ -385,15 +390,16 @@ class HybridAutomaton : public System<T>,
     DRAKE_ASSERT_VOID(systems::System<T>::CheckValidContext(context));
     const ModeId mode_id = context.get_mode_id();
 
-    std::vector<ModalSubsystems<T>*> mss_post_list = GetSuccessors(mode_id);
+    std::vector<ModeTransition<T>*> mode_transitions =
+        GetPossibleTransitions(mode_id);
     std::vector<std::vector<T>> result;
-    for (auto mss_post : mss_post_list) {
+    for (auto mode_transition : mode_transitions) {
       // Evaluate the guard conditions.
       std::vector<T> sub_result;
-      for (auto formula : mss_post->get_guard()) {
-        sub_result.push_back(EvalFormula(formula));
+      for (auto formula : mode_transition->get_guard()) {
+        sub_result.emplace_back(EvalFormula(context, formula));
       }
-      result.push_back(sub_result);
+      result.emplace_back(sub_result);
     }
     return result;
   }
@@ -412,7 +418,6 @@ class HybridAutomaton : public System<T>,
   /// TODO(jadecastro): Disable calling with other scalar types?
   void PerformTransition(const ModeTransition<T>& mode_transition,
                          Context<T>* context) const {
-    const ModalSubsystem<T>* mss_pre = mode_transition.get_predecessor();
     const ModalSubsystem<T>* mss_post = mode_transition.get_successor();
 
     auto hybrid_context =
@@ -426,10 +431,11 @@ class HybridAutomaton : public System<T>,
     // Apply non-identity reset maps to the continuous states for the successor.
     // TODO(jadecastro): How to apply the inverse mapping to satisfy the ODE
     // solver?
-    if (mode_transition.get_reset() != symbolic::Formula::True()) {
-      Context<T>* context_pre = mss_pre->GetSubsystemContext();
-      Context<T>* context_post = mss_post->GetSubsystemContext();
-      void PerformReset(context_post, &context_pre, mode_transition);
+    if (mode_transition.get_reset()[0].EqualTo(symbolic::Formula::True())) {
+      //Context<T>* context_pre = mss_pre->GetSubsystemContext();
+      //Context<T>* context_post =
+      //       mss_post->get_system()->CreateDefaultContext();
+      PerformReset(context, mode_transition);
     }
   }
 
@@ -619,7 +625,7 @@ class HybridAutomaton : public System<T>,
         event.do_publish = std::bind(&HybridAutomaton<T1>::HandlePublish, this,
                                      std::placeholders::_1, /* context */
                                      publisher);
-        actions->events.push_back(event);
+        actions->events.emplace_back(event);
       }
       if (internal::HasEvent(sub_action,
                              DiscreteEvent<T1>::kUpdateAction)) {
@@ -633,7 +639,7 @@ class HybridAutomaton : public System<T>,
                                     std::placeholders::_2, /* difference
                                                             * state */
                                     updater);
-        actions->events.push_back(event);
+        actions->events.emplace_back(event);
       }
     }
   }
@@ -707,7 +713,7 @@ class HybridAutomaton : public System<T>,
   }
 
   // Evaluate a symbolic formula at a particular continuous state.
-  T EvalFormula(const HybridAutomatonContext<T>& context,
+  T EvalFormula(const Context<T>& context,
                 symbolic::Formula formula) const {
     DRAKE_ASSERT_VOID(systems::System<T>::CheckValidContext(context));
     // TODO(jadecastro): add ^this to all other context-consuming methods as
@@ -728,16 +734,13 @@ class HybridAutomaton : public System<T>,
       //}
     }
 
-    return (formula.at(0)).Evaluate(state_env);
+    return formula.Evaluate(state_env);
   }
 
   // Modifies the HybridAutomatonContext according to the reset map.
-  void PerformReset(Context<T>* context_post, const Context<T>& context_pre,
+  void PerformReset(Context<T>* context,
                     const ModeTransition<T>& mode_transition) const {
-    ContinuousState<double>* xc_pre =
-        context_pre->get_mutable_continuous_state();
-    ContinuousState<double>* xc_post =
-        context_post->get_mutable_continuous_state();
+    ContinuousState<double>* xc = context->get_mutable_continuous_state();
 
     // Process the reset function.
     const std::vector<symbolic::Formula> reset = mode_transition.get_reset();
@@ -745,37 +748,43 @@ class HybridAutomaton : public System<T>,
     // Set the continuous state. Note that the update for the discrete and
     // abstract states should already have been made in
     // HybridAutomatonContext<T>::MakeState().
-    for (auto state : xc_post->get_mutable_vector()) {
-      state = symbolic::Eval(reset, {xc_pre->get_vector()});
+    VectorX<T> values(xc->get_mutable_vector()->size());
+    for (int i = 0; i < xc->get_mutable_vector()->size(); ++i) {
+      values(i) = EvalFormula(*context, reset[i]);
     }
+    xc->get_mutable_vector()->SetFromVector(values);
   }
 
-  void CreateAndRegisterSystem(ModalSubsystem<T>* mss_new,
-                               HybridAutomatonContext<T>* hybrid_context) {
+  void CreateAndRegisterSystem(const ModalSubsystem<T>* mss,
+                               HybridAutomatonContext<T>* hybrid_context)
+      const {
     // Create a pointer to a deepcopy of the 'post' subsystem.
-    std::unique_ptr<ModalSubsystem<T>> mss;
-    mss = std::make_unique<ModalSubsystem<T>>(new ModalSubsystem(
-        mss_new->get_mode_id(), mss_new->get_system(),
-        mss_new->get_invariant(), mss_new->get_initial_conditions(),
-        mss_new->get_input_port_ids(), mss_new->get_output_port_ids()));
-
-    auto subcontext = mss->get_system()->CreateDefaultContext();
-    auto suboutput = mss->get_system()->AllocateOutput(*subcontext);
+    std::unique_ptr<ModalSubsystem<T>> mss_new = mss->Clone();
+    auto subcontext = mss_new->get_system()->CreateDefaultContext();
+    auto suboutput = mss_new->get_system()->AllocateOutput(*subcontext);
 
     // Store any vital info about the modal subsystem we will be installing.
-    active_has_any_direct_feedthrough_ =
-        mss->get_system()->has_any_direct_feedthrough();
+    // active_has_any_direct_feedthrough_ =
+    //    mss_new->get_system()->has_any_direct_feedthrough();
 
-    hybrid_context->RegisterSubsystem(std::move(mss), std::move(subcontext),
-                                std::move(suboutput));
+    hybrid_context->RegisterSubsystem(std::move(mss_new), std::move(subcontext),
+                                      std::move(suboutput));
     hybrid_context->MakeState();
     hybrid_context->SetModalState();
   }
 
-  std::vector<ModalSubsystem<T>*> GetSuccessors(ModeId mode_id_pre) {
-
+  std::vector<ModeTransition<T>*> GetPossibleTransitions(
+      const ModeId mode_id_pre) const {
+    std::vector<ModeTransition<T>*> result;
+    // Create a functor `select2nd` to convert the resulting multimap to vector.
+    auto select2nd = std::bind(&std::multimap<ModeId,
+                               ModeTransition<T>*>::value_type::second,
+                               std::placeholders::_1);
+    transform(mode_transitions_.lower_bound(mode_id_pre),
+              mode_transitions_.upper_bound(mode_id_pre),
+              back_inserter(result), select2nd);
     DRAKE_DEMAND(result.size() > 0);
-    return result
+    return result;
   }
 
   // The finite-state machine (automaton) whose modes are the modal subsystems
@@ -783,7 +792,7 @@ class HybridAutomaton : public System<T>,
   // TODO(jadecastro): Add a set of initial modes.
   struct StateMachine {
     std::vector<ModalSubsystem<T>*> modal_subsystems;
-    std::vector<ModeTransition<T>*> mode_transitions;
+    std::multimap<ModeId, ModeTransition<T>*> mode_transitions;
     std::set<ModeId> initial_modes;
   };
 
@@ -834,7 +843,7 @@ class HybridAutomaton : public System<T>,
     } else {
       for (auto mss : modal_subsystems_) {
         ModeId mode_id = mss->get_mode_id();
-        intitial_modes_.push_back(mode_id);
+        initial_modes_.insert(mode_id);
       }
     }
 
@@ -881,7 +890,8 @@ class HybridAutomaton : public System<T>,
   // Copies all state machine data from HybridAutomatonBuilder. Note that this
   // is only used when converting between scalar types.
   void DumpInto(const std::vector<ModalSubsystem<T>*>& modal_subsystems,
-                const std::vector<ModeTransition<T>*>& mode_transitions) {
+                const std::multimap<ModeId, ModeTransition<T>*>&
+                mode_transitions) {
     // Ensure that we have data to transfer and that our data structures are
     // empty.
     DRAKE_DEMAND(!modal_subsystems.empty());
@@ -997,10 +1007,14 @@ class HybridAutomaton : public System<T>,
   // TODO(jadecastro): Better to store/access data as a map or a multimap?
   // TODO(jadecastro): Figure out a way to reimplement as unique_ptrs.
   std::vector<ModalSubsystem<T>*> modal_subsystems_;
-  std::map<ModeId, ModeTransition<T>*> mode_transitions_;
+  // TODO(jadecastro): The ModeId key is redundant with edge_.first in
+  // ModeTransition<T>.
+  std::multimap<ModeId, ModeTransition<T>*> mode_transitions_;
   ModeId mode_id_init_;
 
-  std::set<ModeId> initial_modes;
+  // ************* This never gets intiialized....
+  std::set<ModeId> initial_modes_;
+  // ******** * * * * * * * * * * * * *  *  *    *      *           *
 
   // Fixed input/output port dimensions for the HA.
   int num_inports_;
