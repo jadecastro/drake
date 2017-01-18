@@ -10,6 +10,7 @@ set(sources
   diagram_context.cc
   diagram_continuous_state.cc
   discrete_state.cc
+  ../../examples/bouncing_ball/ball.cc
   input_port_evaluator_interface.cc
   leaf_context.cc
   leaf_system.cc
@@ -51,6 +52,7 @@ set(installed_headers
   diagram_context.h
   diagram_continuous_state.h
   discrete_state.h
+  ../../examples/bouncing_ball/ball.h
   input_port_evaluator_interface.h
   leaf_context.h
   leaf_system.h

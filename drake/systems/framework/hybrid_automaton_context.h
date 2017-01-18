@@ -23,6 +23,8 @@
 namespace drake {
 namespace systems {
 
+using std::unique_ptr;
+
 // TODO(jadecastro): Test capability to capture hybrid system-of-hybrid-systems
 // functionality.
 //
@@ -63,8 +65,6 @@ class ModalSubsystem {
   explicit ModalSubsystem(
       ModeId mode_id, System<T>* system)
       : mode_id_(mode_id), system_(system) {}
-
-  //explicit ModalSubsystem() = default;  // TODO(jadecastro): Revisit..
 
   ModeId get_mode_id() const { return mode_id_; }
   System<T>* get_system() const {return system_; }
@@ -119,13 +119,15 @@ class ModalSubsystem {
   /// Returns a clone that includes a deep copy of all the output ports.
   // TODO(jadecastro): Decide whether or not we actually need ModalSubsystems to
   // be unique_ptr, and hence need this function.
-  std::unique_ptr<ModalSubsystem<T>> Clone() const {
+  unique_ptr<ModalSubsystem<T>> Clone() const {
+    std::cerr << " invariant size: " << invariant_.size() << std::endl;
+    std::cerr << " ic size: " << initial_conditions_.size() << std::endl;
     ModalSubsystem<T>* clone =
         new ModalSubsystem<T>(mode_id_, system_,
                               invariant_, initial_conditions_,
                               input_port_ids_, output_port_ids_);
     DRAKE_DEMAND(clone != nullptr);
-    return std::unique_ptr<ModalSubsystem<T>>(clone);
+    return unique_ptr<ModalSubsystem<T>>(clone);
   }
 
  private:
@@ -166,9 +168,10 @@ class HybridAutomatonContext : public Context<T> {
   explicit HybridAutomatonContext() {}
 
   // ADD COMMENTS
-  void RegisterSubsystem(std::unique_ptr<ModalSubsystem<T>> modal_subsystem,
-                         std::unique_ptr<Context<T>> subcontext,
-                         std::unique_ptr<SystemOutput<T>> suboutput) {
+  void RegisterSubsystem(unique_ptr<ModalSubsystem<T>> modal_subsystem,
+                         unique_ptr<Context<T>> subcontext,
+                         unique_ptr<SystemOutput<T>> suboutput) {
+    std::cerr << " RegisterSubsystem() ..." << std::endl;
     subcontext->set_parent(this);
 
     context_ = std::move(subcontext);
@@ -195,6 +198,10 @@ class HybridAutomatonContext : public Context<T> {
     modal_subsystem_->get_mutable_input_port_ids()->emplace_back(port_id);
   }
 
+  void ExportInput(const std::vector<PortId>& port_ids) {
+    for (auto& port_id : port_ids) { this->ExportInput(port_id); }
+  }
+
   /// Declares that a particular input port of a particular subsystem is an
   /// input to the entire HA that allocates this Context.
   ///
@@ -202,6 +209,10 @@ class HybridAutomatonContext : public Context<T> {
   /// allocation only.
   void ExportOutput(const PortId& port_id) {
     modal_subsystem_->get_mutable_output_port_ids()->emplace_back(port_id);
+  }
+
+  void ExportOutput(const std::vector<PortId>& port_ids) {
+    for (auto& port_id : port_ids) { this->ExportOutput(port_id); }
   }
 
   /// Generates the state vector for the HA.
@@ -223,12 +234,12 @@ class HybridAutomatonContext : public Context<T> {
         subcontext->get_mutable_discrete_state()->get_data();
     // Create abstract state.
     AbstractState* subsystem_xm = subcontext->get_mutable_abstract_state();
-    std::vector<std::unique_ptr<AbstractValue>> hybrid_xm;
+    std::vector<unique_ptr<AbstractValue>> hybrid_xm;
     for (int i_xm = 0; i_xm < subsystem_xm->size(); ++i_xm) {
       hybrid_xm.push_back(
           subsystem_xm->get_mutable_abstract_state(i_xm).Clone());
     }
-    hybrid_xm.push_back(std::unique_ptr<AbstractValue>(new Value<int>(
+    hybrid_xm.push_back(unique_ptr<AbstractValue>(new Value<int>(
         modal_subsystem_->get_mode_id())));
 
     // The wrapper states do not own the constituent state.
@@ -284,7 +295,7 @@ class HybridAutomatonContext : public Context<T> {
     return modal_subsystem->get_num_input_ports();
   }
 
-  void SetInputPort(int port_index, std::unique_ptr<InputPort> port) override {
+  void SetInputPort(int port_index, unique_ptr<InputPort> port) override {
     // TODO(jadecastro): DependentInputPort? (i.e. eval some output to get the
     // input?)
     const ModalSubsystem<T>* modal_subsystem = GetModalSubsystem();
@@ -353,7 +364,7 @@ class HybridAutomatonContext : public Context<T> {
  private:
   // TODO(jadecastro): Implement this.
   /*
-  std::unique_ptr<symbolic::Variable>
+  unique_ptr<symbolic::Variable>
   MakeSymbolicVariableFromState() {
 
   }
@@ -362,9 +373,9 @@ class HybridAutomatonContext : public Context<T> {
   // The internal state of the System.
   State<T>* state_ = nullptr;
 
-  std::unique_ptr<SystemOutput<T>> output_;
-  std::unique_ptr<Context<T>> context_;
-  std::unique_ptr<ModalSubsystem<T>> modal_subsystem_;  // TODO(jadecastro):
+  unique_ptr<SystemOutput<T>> output_;
+  unique_ptr<Context<T>> context_;
+  unique_ptr<ModalSubsystem<T>> modal_subsystem_;  // TODO(jadecastro):
                                                         // Need?
 };
 

@@ -16,6 +16,8 @@
 namespace drake {
 namespace systems {
 
+using std::unique_ptr;
+
   // TODO(jadecastro): Prune modal subsystem list if any are isolated from the
   // tree.
   //  - First pass: discard any modes that are either not initial nor immediate
@@ -62,14 +64,13 @@ class HybridAutomatonBuilder {
   /// @endcode
   ///
   /// @tparam S The type of system to add.
-
-  // TODO(jadecastro): I think we can get rid of these two of the following
-  // three functions.
-  template <template <typename Scalar> class S, typename... Args>
+  template <template <typename Scalar> class S>
   ModalSubsystem<T> AddModalSubsystem(
-      std::unique_ptr<S<T>> system, std::vector<PortId>& inport_ids,
+      unique_ptr<S<T>> system, std::vector<PortId>& inport_ids,
       std::vector<PortId>& outport_ids, const ModeId mode_id) {
     // Initialize the invariant to True.
+
+    DRAKE_DEMAND(system != nullptr);
 
     for (auto mss : modal_subsystems_) {
       // Throw if the proposed mode_id exists.
@@ -85,19 +86,15 @@ class HybridAutomatonBuilder {
     // Initialize the intial conditions to True.
     std::vector<symbolic::Formula> init;
 
+    std::cerr << " mode id: " << mode_id
+              << std::endl;
+
+    DRAKE_DEMAND(system.get() != nullptr);
     // Populate a ModalSubsystem
     ModalSubsystem<T> modal_subsystem =
         ModalSubsystem<T>(mode_id, system.get(), invariant, init,
                           inport_ids, outport_ids);
     modal_subsystems_.emplace_back(&modal_subsystem);
-
-    // Export the input and output ports.
-    // *****************************************************************
-    // ********************************************************
-    // ******************************** TODO!!
-    // *****************************
-    //hybrid_context->ExportInput({inport_ids});
-    //hybrid_context->ExportOutput({outport_ids});
 
     return modal_subsystem;
   }
@@ -119,7 +116,16 @@ class HybridAutomatonBuilder {
     return mode_transition;
   }
 
-  // A helper for dealing with self-transitions.
+  // TODO(jadecastro): These three functions are kinda dumb.
+  void set_mode_id_init(const ModeId mode_id) { mode_id_init_ = mode_id; }
+  void set_num_expected_input_ports(const int num_inports) {
+    num_inports_ = num_inports;
+  }
+  void set_num_expected_output_ports(const int num_outports) {
+    num_outports_ = num_outports;
+  }
+
+  // A helper for creating transitions with a self-loop.
   ModeTransition<T> AddModeTransition(ModalSubsystem<T>& sys) {
     return this->AddModeTransition(sys, sys);
   }
@@ -190,10 +196,10 @@ class HybridAutomatonBuilder {
     // something like AddConstraint in MathematicalProgram?
     if (reset[0].EqualTo(symbolic::Formula::True())) {
       // Ensure that the continuous dimensions all match.
-      std::unique_ptr<Context<T>> context_pre =
+      unique_ptr<Context<T>> context_pre =
           mode_transition->get_predecessor()->get_system()->
           CreateDefaultContext();
-      std::unique_ptr<Context<T>> context_post =
+      unique_ptr<Context<T>> context_post =
           mode_transition->get_predecessor()->get_system()->
           CreateDefaultContext();
       const ContinuousState<T>& xc_pre = *context_pre->get_continuous_state();
@@ -245,13 +251,12 @@ class HybridAutomatonBuilder {
   /// Builds the HybridAutomaton that has been described by the calls to
   /// Connect, ExportInput, and ExportOutput. Throws std::logic_error if the
   /// graph is not buildable.
-  std::unique_ptr<HybridAutomaton<T>> Build() {
+  unique_ptr<HybridAutomaton<T>> Build() {
     // TODO(jadecastro): Need some extensive verification here.
     Finalize();
-    std::unique_ptr<HybridAutomaton<T>> hybrid_automaton(
-        new HybridAutomaton<T>(Compile()));
-    std::multimap<ModeId, ModeTransition<T>*> mode_transitions;
-    hybrid_automaton->DumpInto(modal_subsystems_, mode_transitions_);
+    unique_ptr<HybridAutomaton<T>> hybrid_automaton(
+        new HybridAutomaton<T>());
+    hybrid_automaton->Initialize(Compile());;
     return std::move(hybrid_automaton);
   }
 
@@ -264,7 +269,6 @@ class HybridAutomatonBuilder {
   void BuildInto(HybridAutomaton<T>* target) {
     Finalize();
     target->Initialize(Compile());
-    target->DumpInto(modal_subsystems_, mode_transitions_);
   }
 
   void Finalize() {
@@ -285,7 +289,7 @@ class HybridAutomatonBuilder {
         (*guard).emplace_back(symbolic::Formula::True());
       }
       // NB: We require resets to be explicitly specified by the user, since
-      // consistency checks are needed.
+      // context consistency checks are needed upon finalizing the HA.
     }
   }
 
@@ -306,9 +310,18 @@ class HybridAutomatonBuilder {
           "Cannot create an empty or unconnected HybridAutomatonBuilder.");
     }
     typename HybridAutomaton<T>::StateMachine state_machine;
-    state_machine.modal_subsystems = modal_subsystems_;
+    // TODO(jadecastro): The loop is here to deal with the const conversion. Is
+    // there a cleaner way?
+    for (auto& mss : modal_subsystems_) {
+      state_machine.modal_subsystems.emplace_back(mss);
+    }
     state_machine.mode_transitions = mode_transitions_;
     state_machine.initial_modes = initial_modes_;
+    state_machine.mode_id_init = mode_id_init_;
+    state_machine.num_inports = num_inports_;
+    state_machine.num_outports = num_outports_;
+    std::cerr << " mode id: "
+              << state_machine.modal_subsystems[0]->get_mode_id() << std::endl;
     return state_machine;
   }
 
@@ -323,6 +336,11 @@ class HybridAutomatonBuilder {
   std::vector<ModalSubsystem<T>*> modal_subsystems_;
   std::multimap<ModeId, ModeTransition<T>*> mode_transitions_;
   std::set<ModeId> initial_modes_;
+
+  // Fixed input/output port dimensions for the HA.
+  ModeId mode_id_init_{0};
+  int num_inports_;
+  int num_outports_;
 };
 
 }  // namespace systems
