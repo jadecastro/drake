@@ -86,9 +86,6 @@ class HybridAutomatonBuilder {
     // Initialize the intial conditions to True.
     std::vector<symbolic::Formula> init;
 
-    std::cerr << " mode id: " << mode_id
-              << std::endl;
-
     DRAKE_DEMAND(system.get() != nullptr);
     // Populate a ModalSubsystem
     ModalSubsystem<T> modal_subsystem =
@@ -271,20 +268,21 @@ class HybridAutomatonBuilder {
     target->Initialize(Compile());
   }
 
+  // **********Call this something else!!
   void Finalize() {
     for (auto modal_subsystem : modal_subsystems_) {
-      if (modal_subsystem->get_invariant().empty()) {
+      if (modal_subsystem->get_invariant().size() == 0) {
         auto invariant = modal_subsystem->get_mutable_invariant();
         (*invariant).emplace_back(symbolic::Formula::True());
       }
-      if (modal_subsystem->get_initial_conditions().empty()) {
+      if (modal_subsystem->get_initial_conditions().size() == 0) {
         auto init = modal_subsystem->get_mutable_initial_conditions();
         (*init).emplace_back(symbolic::Formula::True());
       }
     }
     for (auto it : mode_transitions_) {
       ModeTransition<T>* mode_transition = it.second;
-      if (mode_transition->get_guard().empty()) {
+      if (mode_transition->get_guard().size() == 0) {
         auto guard = mode_transition->get_mutable_guard();
         (*guard).emplace_back(symbolic::Formula::True());
       }
@@ -309,6 +307,7 @@ class HybridAutomatonBuilder {
       throw std::logic_error(
           "Cannot create an empty or unconnected HybridAutomatonBuilder.");
     }
+
     typename HybridAutomaton<T>::StateMachine state_machine;
     // TODO(jadecastro): The loop is here to deal with the const conversion. Is
     // there a cleaner way?
@@ -320,8 +319,6 @@ class HybridAutomatonBuilder {
     state_machine.mode_id_init = mode_id_init_;
     state_machine.num_inports = num_inports_;
     state_machine.num_outports = num_outports_;
-    std::cerr << " mode id: "
-              << state_machine.modal_subsystems[0]->get_mode_id() << std::endl;
     return state_machine;
   }
 

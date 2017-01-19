@@ -6,6 +6,7 @@
 #include <fstream>
 #include <functional>
 #include <map>
+#include <memory>
 #include <set>
 #include <stdexcept>
 #include <vector>
@@ -17,6 +18,7 @@ namespace drake {
 namespace systems {
 
 using std::unique_ptr;
+using std::make_unique;
 
 // Helper to attempt a dynamic_cast on a type-T pointer, failing if the result
 // is nullptr.
@@ -205,9 +207,9 @@ class HybridAutomaton : public System<T>,
       result.push_back(mss);
     }
     */
-  std::vector<const ModalSubsystem<T>*> GetModalSubsystems() const {
-    return modal_subsystems_;
-  }
+  //std::vector<const ModalSubsystem<T>*> GetModalSubsystems() const {
+  //  return modal_subsystems_;
+  //}
 
   /// Returns true if any modal subsystem has direct feedthrough.
   // TODO(jadecastro): It seems this should be re-computed for each mode.
@@ -216,11 +218,17 @@ class HybridAutomaton : public System<T>,
   }
 
   // *********************** DEBUGGING
-  int DBG_get_num_invts() {
+  int DBG_get_num_invts() const {
     return modal_subsystems_[0]->get_invariant().size();
   }
-  int DBG_get_num_ics() {
+  int DBG_get_num_ics() const {
     return modal_subsystems_[0]->get_initial_conditions().size();
+  }
+  int DBG_get_mode_id() {
+    return modal_subsystems_[0]->get_mode_id();
+  }
+  int DBG_get_blah_id() const {
+    return modal_subsystems_[0]->get_mode_id();
   }
   // ***********************************
 
@@ -235,37 +243,18 @@ class HybridAutomaton : public System<T>,
   }
 
   unique_ptr<Context<T>> AllocateContext() const override {
-    std::cerr << " AllocateContext() ...." << std::endl;
-    std::cerr << " mode id init: " << mode_id_init_ << std::endl;
-
-    for (auto& mss : modal_subsystems_) {
-      std::cerr << " mode id: " << mss->get_mode_id() << std::endl;
-      std::cerr << " invariant size: " << mss->get_invariant().size()
-                << std::endl;
-      std::cerr << " ic size: " << mss->get_initial_conditions().size()
-                << std::endl;
-    }
-
     // Reserve inputs as specified during initialization.
     auto context =
         std::make_unique<HybridAutomatonContext<T>>();
-    std::cerr << " AllocateContext() 1" << std::endl;
 
     // Add the initial ModalSubsystem to the Context.
     // TODO(jadecastro): Throw if a subsystem is already registered.
-    const ModalSubsystem<T>* mss = modal_subsystems_[mode_id_init_];
+    const ModalSubsystem<T>* mss = modal_subsystems_[mode_id_init_].get();
     const System<T>* const subsystem = mss->get_system();
     auto modal_context = subsystem->AllocateContext();
     auto modal_output = subsystem->AllocateOutput(*modal_context);
     DRAKE_DEMAND(modal_context != nullptr);
     DRAKE_DEMAND(modal_output != nullptr);
-    std::cerr << " AllocateContext() 2" << std::endl;
-    std::cerr << " invariant size: "
-              << mss->get_invariant().size()
-              << std::endl;
-    std::cerr << " ic size: "
-              << mss->get_initial_conditions().size()
-              << std::endl;
 
     unique_ptr<ModalSubsystem<T>> mssptr = mss->Clone();
     context->RegisterSubsystem(std::move(mssptr),
@@ -318,7 +307,7 @@ class HybridAutomaton : public System<T>,
     subsystem->SetDefaults(subcontext);
 
     // Register the initial ModalSubsystem.
-    const ModalSubsystem<T>* mss_new = modal_subsystems_[mode_id_init_];
+    const ModalSubsystem<T>* mss_new = modal_subsystems_[mode_id_init_].get();
     CreateAndRegisterSystem(mss_new, hybrid_context);
   }
 
@@ -851,16 +840,15 @@ class HybridAutomaton : public System<T>,
     DRAKE_DEMAND(mode_transitions_.empty());
     DRAKE_DEMAND(initial_modes_.empty());
 
-    modal_subsystems_ = state_machine.modal_subsystems;
+    for (auto& mss : state_machine.modal_subsystems) {
+      modal_subsystems_.push_back(unique_ptr<ModalSubsystem<T>>(
+          mss->Clone()));
+    }
     mode_transitions_ = state_machine.mode_transitions;
     initial_modes_ = state_machine.initial_modes;
     mode_id_init_ = state_machine.mode_id_init;
     num_inports_ = state_machine.num_inports;
     num_outports_ = state_machine.num_outports;
-    std::cerr << " mode id init: " << mode_id_init_ << std::endl;
-
-    std::cerr << " num invts: " << DBG_get_num_invts() << std::endl;
-    std::cerr << " num ics: " << DBG_get_num_ics() << std::endl;
 
     // TODO(jadecastro): Do this for all, or just the initial mode?
     //for (auto& modal_subsystem : modal_subsystems_) {
@@ -896,7 +884,7 @@ class HybridAutomaton : public System<T>,
     if (!state_machine.initial_modes.empty()) {
       initial_modes_ = state_machine.initial_modes;
     } else {
-      for (auto mss : modal_subsystems_) {
+      for (auto& mss : modal_subsystems_) {
         ModeId mode_id = mss->get_mode_id();
         initial_modes_.insert(mode_id);
       }
@@ -969,6 +957,9 @@ class HybridAutomaton : public System<T>,
 
     // Add this port to our externally visible topology.
     const auto& subsystem_ports = subsystem.get_output_ports();
+    std::cerr << " Num output ports: " << subsystem.get_output_ports().size()
+              << std::endl;
+    std::cerr << " port_id: " << port_id << std::endl;
     if (port_id < 0 || port_id >= static_cast<int>(subsystem_ports.size())) {
       throw std::out_of_range("Output port out of range.");
     }
@@ -1040,7 +1031,7 @@ class HybridAutomaton : public System<T>,
 
   // TODO(jadecastro): Better to store/access data as a map or a multimap?
   // TODO(jadecastro): Figure out a way to reimplement as unique_ptrs.
-  std::vector<const ModalSubsystem<T>*> modal_subsystems_;
+  std::vector<unique_ptr<ModalSubsystem<T>>> modal_subsystems_;
   // TODO(jadecastro): The ModeId key is redundant with edge_.first in
   // ModeTransition<T>.
   std::multimap<ModeId, ModeTransition<T>*> mode_transitions_;

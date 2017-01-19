@@ -15,9 +15,7 @@ namespace systems {
 namespace {
 
 /// Set up an example HybridAutomaton, consisting of a bouncing ball plant.
-constexpr int kModeIdBall = 0;
-constexpr int kNumInports = 0;
-constexpr int kNumOutports = 1;
+constexpr int kModeIdBall = 0, kNumInports = 0, kNumOutports = 1;
 
 class ExampleHybridAutomaton : public HybridAutomaton<double> {
  public:
@@ -27,8 +25,7 @@ class ExampleHybridAutomaton : public HybridAutomaton<double> {
     builder.set_num_expected_input_ports(kNumInports);
     builder.set_num_expected_output_ports(kNumOutports);
 
-    std::vector<PortId> inports;
-    std::vector<PortId> outports;
+    std::vector<PortId> inports, outports;
     outports.push_back(0);
 
     // TODO(jadecastro): A cleaner way of accomplishing this (note the required
@@ -39,6 +36,7 @@ class ExampleHybridAutomaton : public HybridAutomaton<double> {
     ModalSubsystem<double> mss = builder.AddModalSubsystem(
         std::move(ball), inports, outports,
         kModeIdBall);
+
     ball_subsystem_ = &mss;
     ball_ = ball_subsystem_->get_system();
     //symbolic::Expression x = get_symbolic_state_vector(ball_subsystem_);
@@ -67,8 +65,6 @@ class HybridAutomatonTest : public ::testing::Test {
  protected:
   void SetUp() override {
     dut_ = std::make_unique<ExampleHybridAutomaton>();
-    std::cerr << " num invts: " << dut_->DBG_get_num_invts() << std::endl;
-    std::cerr << " num ics: " << dut_->DBG_get_num_ics() << std::endl;
 
     context_ = dut_->CreateDefaultContext();
     output_ = dut_->AllocateOutput(*context_);

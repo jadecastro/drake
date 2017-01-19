@@ -120,8 +120,6 @@ class ModalSubsystem {
   // TODO(jadecastro): Decide whether or not we actually need ModalSubsystems to
   // be unique_ptr, and hence need this function.
   unique_ptr<ModalSubsystem<T>> Clone() const {
-    std::cerr << " invariant size: " << invariant_.size() << std::endl;
-    std::cerr << " ic size: " << initial_conditions_.size() << std::endl;
     ModalSubsystem<T>* clone =
         new ModalSubsystem<T>(mode_id_, system_,
                               invariant_, initial_conditions_,
