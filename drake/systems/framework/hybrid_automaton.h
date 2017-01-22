@@ -19,6 +19,8 @@ namespace systems {
 
 using std::unique_ptr;
 using std::make_unique;
+using std::cerr;
+using std::endl;
 
 // Helper to attempt a dynamic_cast on a type-T pointer, failing if the result
 // is nullptr.
@@ -260,22 +262,22 @@ class HybridAutomaton : public System<T>,
     context->RegisterSubsystem(std::move(mssptr),
                                std::move(modal_context),
                                std::move(modal_output));
-    std::cerr << " AllocateContext() 3" << std::endl;
+    cerr << " AllocateContext() 3" << endl;
 
     // Build the state for the initially-activated subsystem and register its
     // AbstractState.
-    std::cerr << " AllocateContext() 4" << std::endl;
+    cerr << " AllocateContext() 4" << endl;
     context->MakeState();
-    std::cerr << " AllocateContext() 5" << std::endl;
+    cerr << " AllocateContext() 5" << endl;
     context->SetModalState();
 
-    std::cerr << " AllocateContext() 6" << std::endl;
+    cerr << " AllocateContext() 6" << endl;
     // Declare the HA-external inputs.
     for (const PortId& id : mss->get_input_port_ids()) {
       context->ExportInput(id);
     }
 
-    std::cerr << " AllocateContext() ." << std::endl;
+    cerr << " AllocateContext() ." << endl;
 
     return unique_ptr<Context<T>>(context.release());
   }
@@ -463,26 +465,6 @@ class HybridAutomaton : public System<T>,
   }
 
   /// @name Context-Related Accessors
-  /// Returns the subcontext that corresponds to the moda_subsystem.  Classes
-  /// inheriting from HybridAutomaton need access to this method in order to
-  /// pass their constituent subsystems the apropriate subcontext.
-
-  /// Retrieves the state derivatives for a particular subsystem from the
-  /// derivatives. Aborts if @p subsystem is not actually a subsystem of this
-  /// diagram. Returns nullptr if @p subsystem is stateless.
-
-  /// TODO(jadecastro): Might be useful, but let's punt on it for now.
-  /*
-  const ContinuousState<T>* GetSubsystemDerivatives(
-      const ContinuousState<T>& derivatives,
-      const ModalSystem<T>* modal_subsystem) const {
-    DRAKE_DEMAND(subsystem != nullptr);
-    DRAKE_DEMAND(derivatives != nullptr);
-    const ModeId id = get_mode_id(modal_subsystem);
-    return derivatives->get_substate(id);
-  }
-  */
-
   /// Returns a constant reference to the subcontext that corresponds to the
   /// system @p subsystem.
   /// Classes inheriting from %Diagram need access to this method in order to
@@ -867,7 +849,11 @@ class HybridAutomaton : public System<T>,
     for (auto id : modal_subsystems_[mode_id_init_]->get_input_port_ids()) {
       ExportInput(*subsystem, id);
     }
+    cerr << " Initialize " << endl;
     for (auto id : modal_subsystems_[mode_id_init_]->get_output_port_ids()) {
+      cerr << " Outport id: " << id << endl;
+      cerr << " Num output ports: " << subsystem->get_output_ports().size()
+           << endl;
       ExportOutput(*subsystem, id);
     }
 
@@ -957,9 +943,9 @@ class HybridAutomaton : public System<T>,
 
     // Add this port to our externally visible topology.
     const auto& subsystem_ports = subsystem.get_output_ports();
-    std::cerr << " Num output ports: " << subsystem.get_output_ports().size()
-              << std::endl;
-    std::cerr << " port_id: " << port_id << std::endl;
+    cerr << " Num output ports: " << subsystem.get_output_ports().size()
+         << endl;
+    cerr << " port_id: " << port_id << endl;
     if (port_id < 0 || port_id >= static_cast<int>(subsystem_ports.size())) {
       throw std::out_of_range("Output port out of range.");
     }
@@ -1030,7 +1016,7 @@ class HybridAutomaton : public System<T>,
   bool active_has_any_direct_feedthrough_;
 
   // TODO(jadecastro): Better to store/access data as a map or a multimap?
-  // TODO(jadecastro): Figure out a way to reimplement as unique_ptrs.
+  // TODO(jadecastro): Shared ptr
   std::vector<unique_ptr<ModalSubsystem<T>>> modal_subsystems_;
   // TODO(jadecastro): The ModeId key is redundant with edge_.first in
   // ModeTransition<T>.

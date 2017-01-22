@@ -14,6 +14,7 @@
 #include "drake/systems/framework/context.h"
 #include "drake/systems/framework/input_port_evaluator_interface.h"
 //#include "drake/systems/framework/state.h"
+#include "drake/systems/framework/system.h"
 //#include "drake/systems/framework/system_input.h"
 //#include "drake/systems/framework/system_output.h"
 
@@ -24,6 +25,8 @@ namespace drake {
 namespace systems {
 
 using std::unique_ptr;
+using std::make_unique;
+using std::shared_ptr;
 
 // TODO(jadecastro): Test capability to capture hybrid system-of-hybrid-systems
 // functionality.
@@ -40,34 +43,35 @@ class ModalSubsystem {
 
   // TODO(jadecastro): Use setters instead, like in RigidBody.
   explicit ModalSubsystem(
-      ModeId mode_id, System<T>* system,
+      ModeId mode_id, shared_ptr<System<T>> system,
       std::vector<symbolic::Formula> invariant,  // TODO(jadecastro): pointer?
       std::vector<symbolic::Formula> initial_conditions,  // TODO(jadecastro):
                                                           // pointer?
       std::vector<PortId> input_port_ids, std::vector<PortId> output_port_ids)
-      : mode_id_(mode_id), system_(system), invariant_(invariant),
+      : mode_id_(mode_id), system_(std::move(system)), invariant_(invariant),
         initial_conditions_(initial_conditions),
         input_port_ids_(input_port_ids), output_port_ids_(output_port_ids) {}
 
   explicit ModalSubsystem(
-      ModeId mode_id, System<T>* system,
+      ModeId mode_id, shared_ptr<System<T>> system,
       std::vector<symbolic::Formula> invariant,
       std::vector<symbolic::Formula> initial_conditions)
-      : mode_id_(mode_id), system_(system), invariant_(invariant),
+      : mode_id_(mode_id), system_(std::move(system)), invariant_(invariant),
         initial_conditions_(initial_conditions) {}
 
   explicit ModalSubsystem(
-      ModeId mode_id, System<T>* system,
+      ModeId mode_id, shared_ptr<System<T>> system,
       std::vector<PortId> input_port_ids, std::vector<PortId> output_port_ids)
-      : mode_id_(mode_id), system_(system), input_port_ids_(input_port_ids),
+      : mode_id_(mode_id), system_(std::move(system)),
+        input_port_ids_(input_port_ids),
         output_port_ids_(output_port_ids){}
 
   explicit ModalSubsystem(
-      ModeId mode_id, System<T>* system)
-      : mode_id_(mode_id), system_(system) {}
+      ModeId mode_id, shared_ptr<System<T>> system)
+      : mode_id_(mode_id), system_(std::move(system)) {}
 
   ModeId get_mode_id() const { return mode_id_; }
-  System<T>* get_system() const {return system_; }
+  System<T>* get_system() const {return system_.get(); }
   int get_num_input_ports() const {
     return static_cast<int>(input_port_ids_.size());
   }
@@ -119,9 +123,11 @@ class ModalSubsystem {
   /// Returns a clone that includes a deep copy of all the output ports.
   // TODO(jadecastro): Decide whether or not we actually need ModalSubsystems to
   // be unique_ptr, and hence need this function.
+  //   **** Deprecating this function since it needs to be reconstructed.
   unique_ptr<ModalSubsystem<T>> Clone() const {
+    shared_ptr<System<T>> sys = system_;
     ModalSubsystem<T>* clone =
-        new ModalSubsystem<T>(mode_id_, system_,
+        new ModalSubsystem<T>(mode_id_, sys,
                               invariant_, initial_conditions_,
                               input_port_ids_, output_port_ids_);
     DRAKE_DEMAND(clone != nullptr);
@@ -134,7 +140,7 @@ class ModalSubsystem {
   // TODO(jadecastro): Allow ModeId to take on an `enum` here in place of the
   // `int`.
   // The system model.
-  System<T>* system_;
+  shared_ptr<System<T>> system_;
   // Formula representing the invariant for this mode.
   std::vector<symbolic::Formula> invariant_;  // TODO: Eigen??
   // Formula representing the initial conditions for this mode.
@@ -335,8 +341,8 @@ class HybridAutomatonContext : public Context<T> {
 
     // Clone all the subsystem contexts and outputs.  This basically repeats
     // everything in CreateDefaultContext.
-    clone->RegisterSubsystem(
-        modal_subsystem_->Clone(), context_->Clone(), output_->Clone());
+    clone->RegisterSubsystem(modal_subsystem_->Clone(), context_->Clone(),
+                             output_->Clone());
 
     // Build the state for the initially-activated subsystem in the HA.
     clone->MakeState();

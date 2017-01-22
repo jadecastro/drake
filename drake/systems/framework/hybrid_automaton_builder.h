@@ -17,6 +17,7 @@ namespace drake {
 namespace systems {
 
 using std::unique_ptr;
+using std::shared_ptr;
 
   // TODO(jadecastro): Prune modal subsystem list if any are isolated from the
   // tree.
@@ -68,16 +69,13 @@ class HybridAutomatonBuilder {
   ModalSubsystem<T> AddModalSubsystem(
       unique_ptr<S<T>> system, std::vector<PortId>& inport_ids,
       std::vector<PortId>& outport_ids, const ModeId mode_id) {
-    // Initialize the invariant to True.
-
-    DRAKE_DEMAND(system != nullptr);
+    //DRAKE_DEMAND(system != nullptr);
 
     for (auto mss : modal_subsystems_) {
       // Throw if the proposed mode_id exists.
+      // TODO(jadecastro): Make use of find.
       DRAKE_ASSERT(mss->get_mode_id() != mode_id);
     }
-    // TODO(jadecastro): Is std::vector the best data container?  Ultimately
-    // want set operations on elements (e.g. unions, intersections).
 
     // TODO(jadecastro): Make sure that the variables used are consistent with
     // the underlying continuous state.
@@ -86,10 +84,10 @@ class HybridAutomatonBuilder {
     // Initialize the intial conditions to True.
     std::vector<symbolic::Formula> init;
 
-    DRAKE_DEMAND(system.get() != nullptr);
     // Populate a ModalSubsystem
     ModalSubsystem<T> modal_subsystem =
-        ModalSubsystem<T>(mode_id, system.get(), invariant, init,
+        ModalSubsystem<T>(mode_id, shared_ptr<System<T>>(std::move(system)),
+                          invariant, init,
                           inport_ids, outport_ids);
     modal_subsystems_.emplace_back(&modal_subsystem);
 

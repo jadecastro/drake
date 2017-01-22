@@ -10,7 +10,7 @@ set(sources
   diagram_context.cc
   diagram_continuous_state.cc
   discrete_state.cc
-  ../../examples/bouncing_ball/ball.cc
+  ../../examples/bouncing_ball/ball.cc  # For the hybrid automaton unit test.
   input_port_evaluator_interface.cc
   leaf_context.cc
   leaf_system.cc

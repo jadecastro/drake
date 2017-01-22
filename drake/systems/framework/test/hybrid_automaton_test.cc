@@ -15,7 +15,8 @@ namespace systems {
 namespace {
 
 /// Set up an example HybridAutomaton, consisting of a bouncing ball plant.
-constexpr int kModeIdBall = 0, kNumInports = 0, kNumOutports = 1;
+constexpr int kModeIdBall = 0, kNumInports = 0, kNumOutports = 1,
+  kStateDimension = 2;
 
 class ExampleHybridAutomaton : public HybridAutomaton<double> {
  public:
@@ -32,6 +33,7 @@ class ExampleHybridAutomaton : public HybridAutomaton<double> {
     // linker files)?
     std::unique_ptr<bouncing_ball::Ball<double>> ball;
     ball.reset(new bouncing_ball::Ball<double>);
+    //bouncing_ball::Ball<double> ball;
 
     ModalSubsystem<double> mss = builder.AddModalSubsystem(
         std::move(ball), inports, outports,
@@ -70,7 +72,7 @@ class HybridAutomatonTest : public ::testing::Test {
     output_ = dut_->AllocateOutput(*context_);
 
     input0_ = BasicVector<double>::Make({1});
-    // Initialize the integrator states.
+    // Initialize the states.
     auto ball_xc = dut_->GetMutableSubsystemContext(context_.get())->
         get_mutable_continuous_state();
     ASSERT_TRUE(ball_xc != nullptr);
@@ -106,15 +108,14 @@ class HybridAutomatonTest : public ::testing::Test {
 
 // Tests that the diagram exports the correct topology.
 TEST_F(HybridAutomatonTest, Topology) {
-  ASSERT_EQ(1, dut_->get_num_input_ports());
-  ASSERT_EQ(1, dut_->get_num_output_ports());
+  ASSERT_EQ(kNumInports, dut_->get_num_input_ports());
+  ASSERT_EQ(kNumOutports, dut_->get_num_output_ports());
   /*
     for (const auto& descriptor : dut_->get_input_ports()) {
     EXPECT_EQ(dut_.get(), descriptor.get_system());
     EXPECT_EQ(kVectorValued, descriptor.get_data_type());
     EXPECT_EQ(kInputPort, descriptor.get_face());
     EXPECT_EQ(kSize, descriptor.get_size());
-    EXPECT_EQ(kInheritedSampling, descriptor.get_sampling());
     }
 
     ASSERT_EQ(kSize, dut_->get_num_output_ports());
@@ -125,7 +126,7 @@ TEST_F(HybridAutomatonTest, Topology) {
     EXPECT_EQ(kSize, descriptor.get_size());
     }
   */
-  EXPECT_TRUE(dut_->has_any_direct_feedthrough());
+  EXPECT_FALSE(dut_->has_any_direct_feedthrough());
 }
 
   /*
@@ -134,45 +135,31 @@ TEST_F(DutTest, Path) {
   const std::string path = adder0()->GetPath();
   EXPECT_EQ("::Unicode Snowman's Favorite Diagram!!1!☃!::adder0", path);
 }
-
-// Tests that the dut computes the correct sum.
-TEST_F(DiagramTest, EvalOutput) {
-  AttachInputs();
-  dut_->EvalOutput(*context_, output_.get());
-
-  ASSERT_EQ(kSize, output_->get_num_ports());
-  ExpectDefaultOutputs();
-}
-
-TEST_F(DutTest, EvalTimeDerivatives) {
-  AttachInputs();
+  */
+TEST_F(HybridAutomatonTest, EvalTimeDerivatives) {
+  //AttachInputs();
   std::unique_ptr<ContinuousState<double>> derivatives =
       dut_->AllocateTimeDerivatives();
 
+  // Set the initial conditions.
+  Vector2<double> x0;
+  x0 << 10., 0.;  /* pos. [m], vel. [m/s] */
+  systems::ContinuousState<double>* xc =
+      dut_->GetMutableSubsystemContext(context_.get())->
+      get_mutable_continuous_state();
+  xc->SetFromVector(x0);
+
   dut_->EvalTimeDerivatives(*context_, derivatives.get());
 
-  ASSERT_EQ(6, derivatives->size());
-  ASSERT_EQ(0, derivatives->get_generalized_position().size());
-  ASSERT_EQ(0, derivatives->get_generalized_velocity().size());
-  ASSERT_EQ(6, derivatives->get_misc_continuous_state().size());
+  ASSERT_EQ(kStateDimension, derivatives->size());
+  ASSERT_EQ(1, derivatives->get_generalized_position().size());
+  ASSERT_EQ(1, derivatives->get_generalized_velocity().size());
 
-  // The derivative of the first integrator is A.
-  const ContinuousState<double>* integrator0_xcdot =
-      dut_->GetSubsystemDerivatives(*derivatives, integrator0());
-  ASSERT_TRUE(integrator0_xcdot != nullptr);
-  EXPECT_EQ(1 + 8, integrator0_xcdot->get_vector().GetAtIndex(0));
-  EXPECT_EQ(2 + 16, integrator0_xcdot->get_vector().GetAtIndex(1));
-  EXPECT_EQ(4 + 32, integrator0_xcdot->get_vector().GetAtIndex(2));
-
-  // The derivative of the second integrator is the state of the first.
-  const ContinuousState<double>* integrator1_xcdot =
-      dut_->GetSubsystemDerivatives(*derivatives, integrator1());
-  ASSERT_TRUE(integrator1_xcdot != nullptr);
-  EXPECT_EQ(3, integrator1_xcdot->get_vector().GetAtIndex(0));
-  EXPECT_EQ(9, integrator1_xcdot->get_vector().GetAtIndex(1));
-  EXPECT_EQ(27, integrator1_xcdot->get_vector().GetAtIndex(2));
+  // Evaluate the derivative.
+  EXPECT_EQ(0, derivatives->get_vector().GetAtIndex(0));
+  EXPECT_EQ(-9.81, derivatives->get_vector().GetAtIndex(1));
 }
-
+/*
 // Tests that the same dut can be evaluated into the same output with
 // different contexts interchangeably.
 TEST_F(DutTest, Clone) {
@@ -214,15 +201,6 @@ TEST_F(DutTest, Clone) {
   // Check that the context that was cloned is unaffected.
   dut_->EvalOutput(*context_, output_.get());
   ExpectDefaultOutputs();
-}
-
-// Tests that, when asked for the state derivatives of Systems that are
-// stateless, Dut returns an empty state.
-TEST_F(DutTest, DerivativesOfStatelessSystemAreEmpty) {
-  std::unique_ptr<ContinuousState<double>> derivatives =
-      dut_->AllocateTimeDerivatives();
-  EXPECT_EQ(0,
-            dut_->GetSubsystemDerivatives(*derivatives, adder0())->size());
 }
 
 class DiagramOfDiagramsTest : public ::testing::Test {
