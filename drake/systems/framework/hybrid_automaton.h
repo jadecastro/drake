@@ -116,8 +116,8 @@ class ModeTransition {
   // TODO(jadecastro): Use setters instead, like in RigidBody.
   explicit ModeTransition(
       const std::pair<ModalSubsystem<T>*, ModalSubsystem<T>*> edge,
-      std::vector<symbolic::Formula> guard,
-      std::vector<symbolic::Formula> reset)
+      std::vector<symbolic::Expression> guard,
+      std::vector<symbolic::Expression> reset)
       : edge_(edge), guard_(guard), reset_(reset) {}
 
   explicit ModeTransition(
@@ -132,25 +132,26 @@ class ModeTransition {
 
   const ModalSubsystem<T>* get_successor() const { return edge_.second; }
 
-  const std::vector<symbolic::Formula> get_guard() const { return guard_; }
+  const std::vector<symbolic::Expression> get_guard() const { return guard_; }
 
-  std::vector<symbolic::Formula>* get_mutable_guard() { return &guard_; }
+  std::vector<symbolic::Expression>* get_mutable_guard() { return &guard_; }
 
   // Sets the vector of formulas representing the guard, wiping anything already
   // stored.
   // TODO(jadecastro): Perform checks?
-  void set_guard(std::vector<symbolic::Formula>& guard) { guard_ = guard; }
+  void set_guard(std::vector<symbolic::Expression>& guard) { guard_ = guard; }
 
-  const std::vector<symbolic::Formula> get_reset() const { return reset_; }
+  const std::vector<symbolic::Expression> get_reset() const { return reset_; }
 
-  std::vector<symbolic::Formula>* get_mutable_reset() { return &reset_; }
+  std::vector<symbolic::Expression>* get_mutable_reset() { return &reset_; }
 
   // Sets the vector of formulas representing the reset, wiping anything already
   // stored.
   // TODO(jadecastro): Check that dimensions are consistent.
   //                   ^^^ Can we bypass context to extract these dims from
   //                   System?
-  void set_reset_throw_if_incompatible(std::vector<symbolic::Formula>& reset) {
+  void set_reset_throw_if_incompatible(
+      std::vector<symbolic::Expression>& reset) {
     reset_ = reset;
   }
 
@@ -167,10 +168,10 @@ class ModeTransition {
  private:
   // Pair of ModalSubsystems representing the edge for this transition.
   std::pair<ModalSubsystem<T>*, ModalSubsystem<T>*> edge_;
-  // Formula representing the guard for this edge.
-  std::vector<symbolic::Formula> guard_;  // TODO: Eigen??
-  // Formula representing the reset map for this edge.
-  std::vector<symbolic::Formula> reset_;  // TODO: Eigen??
+  // Expression representing the guard for this edge.
+  std::vector<symbolic::Expression> guard_;  // TODO: Eigen??
+  // Expression representing the reset map for this edge.
+  std::vector<symbolic::Expression> reset_;  // TODO: Eigen??
 };
 
 /// HybridAutomaton collects all of the system-related data necessary for
@@ -194,7 +195,7 @@ class HybridAutomaton : public System<T>,
   ~HybridAutomaton() override {}
 
   ///
-  // symbolic::Formula* get_mutable_invariant(int index) {
+  // symbolic::Expression* get_mutable_invariant(int index) {
   //  DRAKE_ASSERT(index >= 0 && index < size());
   //
   //  return data_[index];
@@ -262,22 +263,16 @@ class HybridAutomaton : public System<T>,
     context->RegisterSubsystem(std::move(mssptr),
                                std::move(modal_context),
                                std::move(modal_output));
-    cerr << " AllocateContext() 3" << endl;
 
     // Build the state for the initially-activated subsystem and register its
     // AbstractState.
-    cerr << " AllocateContext() 4" << endl;
     context->MakeState();
-    cerr << " AllocateContext() 5" << endl;
     context->SetModalState();
 
-    cerr << " AllocateContext() 6" << endl;
     // Declare the HA-external inputs.
     for (const PortId& id : mss->get_input_port_ids()) {
       context->ExportInput(id);
     }
-
-    cerr << " AllocateContext() ." << endl;
 
     return unique_ptr<Context<T>>(context.release());
   }
@@ -389,7 +384,7 @@ class HybridAutomaton : public System<T>,
     // Evaluate the invariant.
     std::vector<T> result;
     for (auto formula : invariant) {
-      result.emplace_back(EvalFormula(context, formula));
+      result.emplace_back(EvalExpression(context, formula));
     }
     return result;
   }
@@ -405,7 +400,7 @@ class HybridAutomaton : public System<T>,
     // Evaluate the initial conditions.
     std::vector<T> result;
     for (auto formula : init) {
-      result.emplace_back(EvalFormula(context, formula));
+      result.emplace_back(EvalExpression(context, formula));
     }
     return result;
   }
@@ -425,7 +420,7 @@ class HybridAutomaton : public System<T>,
       // Evaluate the guard conditions.
       std::vector<T> sub_result;
       for (auto formula : mode_transition->get_guard()) {
-        sub_result.emplace_back(EvalFormula(context, formula));
+        sub_result.emplace_back(EvalExpression(context, formula));
       }
       result.emplace_back(sub_result);
     }
@@ -459,8 +454,8 @@ class HybridAutomaton : public System<T>,
     // Apply non-identity reset maps to the continuous states for the successor.
     // TODO(jadecastro): How to apply the inverse mapping to satisfy the ODE
     // solver?
-    if (mode_transition.get_reset()[0].EqualTo(symbolic::Formula::True())) {
-      PerformReset(context, mode_transition);
+    if (mode_transition.get_reset().size() == 0) {
+      PerformReset(hybrid_context, mode_transition);
     }
   }
 
@@ -715,8 +710,8 @@ class HybridAutomaton : public System<T>,
   }
 
   // Evaluate a symbolic formula at a particular continuous state.
-  T EvalFormula(const Context<T>& context,
-                symbolic::Formula formula) const {
+  T EvalExpression(const HybridAutomatonContext<T>& context,
+                symbolic::Expression formula) const {
     DRAKE_ASSERT_VOID(systems::System<T>::CheckValidContext(context));
     // TODO(jadecastro): add ^this to all other context-consuming methods as
     // well.
@@ -725,34 +720,30 @@ class HybridAutomaton : public System<T>,
     // TODO(jadecastro): Verify consistency of the state dimensions.
     const systems::VectorBase<T>& state = context.get_continuous_state_vector();
     symbolic::Environment state_env;
-    for (int i = 0; i < state.size(); i++) {
-      // if ( state[i] == double ) {
-      std::ostringstream key;
-      key << "x" << i;
-      symbolic::Variable state_var{key.str()};
-      state_env.insert(state_var, state[i]);
-      //} else {
-      // throw std::runtime_error("types other than double not implemented.");
-      //}
-    }
 
+    // TODO(jadecastro): Overload for Eigen arguments.
+    std::vector<symbolic::Variable> state_vect =
+        context.get_symbolic_state_vector();
+    for (int i = 0; i < state.size(); i++) {
+      state_env.insert(state_vect[i], state[i]);
+    }
     return formula.Evaluate(state_env);
   }
 
   // Modifies the HybridAutomatonContext according to the reset map.
-  void PerformReset(Context<T>* context,
+  void PerformReset(HybridAutomatonContext<T>* context,
                     const ModeTransition<T>& mode_transition) const {
     ContinuousState<double>* xc = context->get_mutable_continuous_state();
 
     // Process the reset function.
-    const std::vector<symbolic::Formula> reset = mode_transition.get_reset();
+    const std::vector<symbolic::Expression> reset = mode_transition.get_reset();
 
     // Set the continuous state. Note that the update for the discrete and
     // abstract states should already have been made in
     // HybridAutomatonContext<T>::MakeState().
     VectorX<T> values(xc->get_mutable_vector()->size());
     for (int i = 0; i < xc->get_mutable_vector()->size(); ++i) {
-      values(i) = EvalFormula(*context, reset[i]);
+      values(i) = EvalExpression(*context, reset[i]);
     }
     xc->get_mutable_vector()->SetFromVector(values);
   }

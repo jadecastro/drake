@@ -44,31 +44,38 @@ class ModalSubsystem {
   // TODO(jadecastro): Use setters instead, like in RigidBody.
   explicit ModalSubsystem(
       ModeId mode_id, shared_ptr<System<T>> system,
-      std::vector<symbolic::Formula> invariant,  // TODO(jadecastro): pointer?
-      std::vector<symbolic::Formula> initial_conditions,  // TODO(jadecastro):
-                                                          // pointer?
+      std::vector<symbolic::Expression> invariant,
+      std::vector<symbolic::Expression> initial_conditions,
       std::vector<PortId> input_port_ids, std::vector<PortId> output_port_ids)
       : mode_id_(mode_id), system_(std::move(system)), invariant_(invariant),
         initial_conditions_(initial_conditions),
-        input_port_ids_(input_port_ids), output_port_ids_(output_port_ids) {}
+        input_port_ids_(input_port_ids), output_port_ids_(output_port_ids) {
+    CreateSymbolicVariables();
+  }
 
   explicit ModalSubsystem(
       ModeId mode_id, shared_ptr<System<T>> system,
-      std::vector<symbolic::Formula> invariant,
-      std::vector<symbolic::Formula> initial_conditions)
+      std::vector<symbolic::Expression> invariant,
+      std::vector<symbolic::Expression> initial_conditions)
       : mode_id_(mode_id), system_(std::move(system)), invariant_(invariant),
-        initial_conditions_(initial_conditions) {}
+        initial_conditions_(initial_conditions) {
+    CreateSymbolicVariables();
+  }
 
   explicit ModalSubsystem(
       ModeId mode_id, shared_ptr<System<T>> system,
       std::vector<PortId> input_port_ids, std::vector<PortId> output_port_ids)
       : mode_id_(mode_id), system_(std::move(system)),
         input_port_ids_(input_port_ids),
-        output_port_ids_(output_port_ids){}
+        output_port_ids_(output_port_ids){
+    CreateSymbolicVariables();
+  }
 
   explicit ModalSubsystem(
       ModeId mode_id, shared_ptr<System<T>> system)
-      : mode_id_(mode_id), system_(std::move(system)) {}
+      : mode_id_(mode_id), system_(std::move(system)) {
+    CreateSymbolicVariables();
+  }
 
   ModeId get_mode_id() const { return mode_id_; }
   System<T>* get_system() const {return system_.get(); }
@@ -91,22 +98,22 @@ class ModalSubsystem {
   std::vector<PortId>* get_mutable_output_port_ids() {
     return &output_port_ids_;
   }
-  const std::vector<symbolic::Formula> get_invariant() const {
+  const std::vector<symbolic::Expression> get_invariant() const {
     return invariant_;
   }
-  std::vector<symbolic::Formula>* get_mutable_invariant() {
+  std::vector<symbolic::Expression>* get_mutable_invariant() {
     return &invariant_;
   }
-  void set_invariant(std::vector<symbolic::Formula>& invariant) {
+  void set_invariant(std::vector<symbolic::Expression>& invariant) {
     invariant_ = invariant;
   }
-  const std::vector<symbolic::Formula> get_initial_conditions() const {
+  const std::vector<symbolic::Expression> get_initial_conditions() const {
     return initial_conditions_;
   }
-  std::vector<symbolic::Formula>* get_mutable_initial_conditions() {
+  std::vector<symbolic::Expression>* get_mutable_initial_conditions() {
     return &initial_conditions_;
   }
-  void set_intial_conditions(std::vector<symbolic::Formula>& init) {
+  void set_intial_conditions(std::vector<symbolic::Expression>& init) {
     initial_conditions_ = init;
   }
   // TODO(jadecastro): Do we really need the following two getters?
@@ -119,6 +126,12 @@ class ModalSubsystem {
     DRAKE_DEMAND(index >=0 && index < (int)output_port_ids_.size());
     return output_port_ids_[index];
   }
+
+  // TODO(jadecastro): Check for consistency of any incoming invariants or
+  // initial condition formulas with the given symbolic_state_.
+  const std::vector<symbolic::Variable>& get_symbolic_state_vector() {
+    return symbolic_state_;
+  };
 
   /// Returns a clone that includes a deep copy of all the output ports.
   // TODO(jadecastro): Decide whether or not we actually need ModalSubsystems to
@@ -135,19 +148,41 @@ class ModalSubsystem {
   }
 
  private:
+  void CreateSymbolicVariables() {
+    // TODO(jadecastro): Either we need to modify the system API to allow us
+    // access to the underlying state dimensions without creating a throwaway
+    // context *or* we just allocate the context here and output it along with
+    // the ModalSubsystem.
+    std::unique_ptr<Context<T>> context = system_->AllocateContext();
+
+    // TODO(jadecastro): Implement this to handle both continuous state @p x and
+    // input @p u.
+    const int num_xc = context->get_continuous_state_vector().size();
+    for (int i = 0; i < num_xc; ++i) {
+      std::ostringstream key;
+      key << "x" << i;
+      symbolic::Variable state_var{key.str()};
+      symbolic_state_.emplace_back(state_var);
+    }
+  }
+
   // Index for this mode.
   ModeId mode_id_;
   // TODO(jadecastro): Allow ModeId to take on an `enum` here in place of the
   // `int`.
   // The system model.
   shared_ptr<System<T>> system_;
-  // Formula representing the invariant for this mode.
-  std::vector<symbolic::Formula> invariant_;  // TODO: Eigen??
-  // Formula representing the initial conditions for this mode.
-  std::vector<symbolic::Formula> initial_conditions_;  // TODO: Eigen??
+  // Expression representing the invariant for this mode.
+  std::vector<symbolic::Expression> invariant_;  // TODO: Eigen??
+  // Expression representing the initial conditions for this mode.
+  std::vector<symbolic::Expression> initial_conditions_;  // TODO: Eigen??
   // Index set of the input and output ports.
   std::vector<PortId> input_port_ids_;
   std::vector<PortId> output_port_ids_;
+  // A vector of symbolic variables for each of the continuous states in the
+  // system.
+  std::vector<symbolic::Variable> symbolic_state_;
+  // TODO(jadecastro): Store symbolic versions of the inputs also.
 };
 
 /// The HybridAutomatonContext is a container for all of the data necessary to
@@ -334,6 +369,11 @@ class HybridAutomatonContext : public Context<T> {
   const State<T>& get_state() const override { return *state_; }
 
   State<T>* get_mutable_state() override { return state_; }
+
+  const std::vector<symbolic::Variable>& get_symbolic_state_vector() const {
+    ModalSubsystem<T>* modal_subsystem = GetModalSubsystem();
+    return modal_subsystem->get_symbolic_state_vector();
+  };
 
  protected:
   HybridAutomatonContext<T>* DoClone() const override {

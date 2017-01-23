@@ -77,17 +77,9 @@ class HybridAutomatonBuilder {
       DRAKE_ASSERT(mss->get_mode_id() != mode_id);
     }
 
-    // TODO(jadecastro): Make sure that the variables used are consistent with
-    // the underlying continuous state.
-    std::vector<symbolic::Formula> invariant;
-
-    // Initialize the intial conditions to True.
-    std::vector<symbolic::Formula> init;
-
     // Populate a ModalSubsystem
     ModalSubsystem<T> modal_subsystem =
         ModalSubsystem<T>(mode_id, shared_ptr<System<T>>(std::move(system)),
-                          invariant, init,
                           inport_ids, outport_ids);
     modal_subsystems_.emplace_back(&modal_subsystem);
 
@@ -99,12 +91,8 @@ class HybridAutomatonBuilder {
     // TODO(jadecastro): Throw if pre and post have disjoint invariants.
     std::pair<ModalSubsystem<T>*, ModalSubsystem<T>*> edge =
         std::make_pair(&sys_pre, &sys_post);
-    // Define an empty guard.
-    std::vector<symbolic::Formula> guard;
-    // Define an empty reset mapping.
-    std::vector<symbolic::Formula> reset;
 
-    ModeTransition<T> mode_transition = ModeTransition<T>(edge, guard, reset);
+    ModeTransition<T> mode_transition = ModeTransition<T>(edge);
     mode_transitions_.insert(std::make_pair(mode_transitions_.size(),
                                             &mode_transition));
 
@@ -132,7 +120,7 @@ class HybridAutomatonBuilder {
 
   // Adds an invariant formula for the specified ModalSubsystem.
   void AddInvariant(ModalSubsystem<T>* modal_subsystem,
-                    const symbolic::Formula& invariant) const {
+                    const symbolic::Expression& invariant) const {
     DRAKE_ASSERT(modal_subsystem != nullptr);
     // TODO: validate, like in context.
     // DRAKE_ASSERT_VOID(systems::System<T>::CheckValidContext(*context));
@@ -148,7 +136,7 @@ class HybridAutomatonBuilder {
 
   // Adds an initial condition formula for the specified ModalSubsystem.
   void AddInitialCondition(ModalSubsystem<T>* modal_subsystem,
-                            const symbolic::Formula& init) const {
+                            const symbolic::Expression& init) const {
     DRAKE_ASSERT(modal_subsystem != nullptr);
     // TODO: validate, like in context.
     // DRAKE_ASSERT_VOID(systems::System<T>::CheckValidContext(*context));
@@ -164,7 +152,7 @@ class HybridAutomatonBuilder {
 
   // Adds a guard formula for the specified ModeTransition.
   void AddGuard(ModeTransition<T>* mode_transition,
-                const symbolic::Formula& guard) const {
+                const symbolic::Expression& guard) const {
     DRAKE_ASSERT(mode_transition != nullptr);
     // TODO: validate, like in context.
     // DRAKE_ASSERT_VOID(systems::System<T>::CheckValidContext(*context));
@@ -183,12 +171,12 @@ class HybridAutomatonBuilder {
   // alignment with the continuous state vector is important, we require reset
   // to be supplied as a vector of appropriate dimension.
   void AddReset(ModeTransition<T>* mode_transition,
-                std::vector<symbolic::Formula>& reset) {
-    // NB: symbolic::Formula::True() defaults as the identity mapping.
+                std::vector<symbolic::Expression>& reset) {
+    // NB: symbolic::Expression::True() defaults as the identity mapping.
 
     // TODO(jadecastro): Throw if non-trivial resets are not algebraic. Do
     // something like AddConstraint in MathematicalProgram?
-    if (reset[0].EqualTo(symbolic::Formula::True())) {
+    if (reset.size() == 0) {
       // Ensure that the continuous dimensions all match.
       unique_ptr<Context<T>> context_pre =
           mode_transition->get_predecessor()->get_system()->
@@ -209,9 +197,9 @@ class HybridAutomatonBuilder {
     mode_transition->set_reset_throw_if_incompatible(reset);
   }
 
-  // Adds the identity reset to the specified ModeTransition.
+  // Adds the identity reset (empty vector) to the specified ModeTransition.
   void AddReset(ModeTransition<T>* mode_transition) {
-    std::vector<symbolic::Formula> reset{symbolic::Formula::True()};
+    std::vector<symbolic::Expression> reset;
     AddReset(mode_transition, reset);
   }
 
@@ -247,7 +235,7 @@ class HybridAutomatonBuilder {
   /// graph is not buildable.
   unique_ptr<HybridAutomaton<T>> Build() {
     // TODO(jadecastro): Need some extensive verification here.
-    Finalize();
+    //Finalize();
     unique_ptr<HybridAutomaton<T>> hybrid_automaton(
         new HybridAutomaton<T>());
     hybrid_automaton->Initialize(Compile());;
@@ -261,40 +249,35 @@ class HybridAutomatonBuilder {
   /// Only HybridAutomaton subclasses should call this method. The target must
   /// not already be initialized.
   void BuildInto(HybridAutomaton<T>* target) {
-    Finalize();
+    //Finalize();
     target->Initialize(Compile());
   }
 
   // **********Call this something else!!
+  /*
   void Finalize() {
     for (auto modal_subsystem : modal_subsystems_) {
       if (modal_subsystem->get_invariant().size() == 0) {
         auto invariant = modal_subsystem->get_mutable_invariant();
-        (*invariant).emplace_back(symbolic::Formula::True());
+        (*invariant).emplace_back(symbolic::Expression::True());
       }
       if (modal_subsystem->get_initial_conditions().size() == 0) {
         auto init = modal_subsystem->get_mutable_initial_conditions();
-        (*init).emplace_back(symbolic::Formula::True());
+        (*init).emplace_back(symbolic::Expression::True());
       }
     }
     for (auto it : mode_transitions_) {
       ModeTransition<T>* mode_transition = it.second;
       if (mode_transition->get_guard().size() == 0) {
         auto guard = mode_transition->get_mutable_guard();
-        (*guard).emplace_back(symbolic::Formula::True());
+        (*guard).emplace_back(symbolic::Expression::True());
       }
       // NB: We require resets to be explicitly specified by the user, since
       // context consistency checks are needed upon finalizing the HA.
     }
   }
-
+  */
  private:
-  // TODO(jadecastro): Implement this to handle both continuous state @p x and
-  // input @p u.
-  symbolic::Variable* MakeSymbolicVariableFromState(Context<T>& context) {
-    
-  }
-
   /*
   void ThrowIfSystemNotRegistered(const ModalSubsystem<T>* modal_subsystem)
       const {

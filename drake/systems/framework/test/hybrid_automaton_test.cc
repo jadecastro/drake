@@ -15,8 +15,10 @@ namespace systems {
 namespace {
 
 /// Set up an example HybridAutomaton, consisting of a bouncing ball plant.
-constexpr int kModeIdBall = 0, kNumInports = 0, kNumOutports = 1,
-  kStateDimension = 2;
+constexpr int kModeIdBall = 0;
+constexpr int kNumInports = 0;
+constexpr int kNumOutports = 1;
+constexpr int kStateDimension = 2;
 
 class ExampleHybridAutomaton : public HybridAutomaton<double> {
  public:
@@ -41,14 +43,20 @@ class ExampleHybridAutomaton : public HybridAutomaton<double> {
 
     ball_subsystem_ = &mss;
     ball_ = ball_subsystem_->get_system();
-    symbolic::Expression x = get_symbolic_state_vector(ball_subsystem_);
-    symbolic::Formula invariant_ball = symbolic::Formula::True();
+    std::vector<symbolic::Variable> x =
+        ball_subsystem_->get_symbolic_state_vector();
+
+    // TODO(jadecastro): Decide on a cleaner way of auto-generate the named
+    // getters from states, possibly leverage the .sh script for states.
+    const symbolic::Expression y{x[0]};
+    const symbolic::Expression ydot{x[1]};
+    symbolic::Expression invariant_ball{y};
     builder.AddInvariant(ball_subsystem_, invariant_ball);
 
     ModeTransition<double> trans =
         builder.AddModeTransition(*ball_subsystem_);
     ball_to_ball_ = &trans;
-    //symbolic::Formula guard_formula_bounce = symbolic::Formula::True();
+    //symbolic::Expression guard_formula_bounce{1.};
 
     builder.BuildInto(this);
   }
