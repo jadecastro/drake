@@ -41,7 +41,7 @@ class ExampleHybridAutomaton : public HybridAutomaton<double> {
 
     ball_subsystem_ = &mss;
     ball_ = ball_subsystem_->get_system();
-    //symbolic::Expression x = get_symbolic_state_vector(ball_subsystem_);
+    symbolic::Expression x = get_symbolic_state_vector(ball_subsystem_);
     symbolic::Formula invariant_ball = symbolic::Formula::True();
     builder.AddInvariant(ball_subsystem_, invariant_ball);
 
@@ -79,22 +79,11 @@ class HybridAutomatonTest : public ::testing::Test {
     ball_xc->get_mutable_vector()->SetAtIndex(0, 3);
   }
 
-  void ExpectDefaultOutputs() {
-    Eigen::Vector3d expected_output0;
-    expected_output0 << 1 + 8 + 64;
-
-    Eigen::Vector3d expected_output2;
-    expected_output2 << 81;
-
-    const BasicVector<double>* output0 = output_->get_vector_data(0);
-    ASSERT_TRUE(output0 != nullptr);
-    EXPECT_EQ(expected_output0[0], output0->get_value()[0]);
-  }
-
   void AttachInputs() {
     context_->SetInputPort(
         0, std::make_unique<FreestandingInputPort>(std::move(input0_)));
   }
+
   const System<double>* ball() { return dut_->ball(); }
   const ModalSubsystem<double>* ball_subsystem() {
     return dut_->ball_subsystem();
@@ -275,9 +264,8 @@ class DiagramOfDiagramsTest : public ::testing::Test {
   std::unique_ptr<SystemOutput<double>> output_;
 };
 
-// Tests the failure to build a hybrid automaton composed of other
-// hybrid automata.
-TEST_F(DiagramOfDiagramsTest, EvalOutput) {
+// Tests a diagram composed of hybrid automata.
+TEST_F(DiagramOfHybridAutomata, EvalOutput) {
   diagram_->EvalOutput(*context_, output_.get());
   // The outputs of subsystem0_ are:
   //   output0 = 8 + 64 + 512 = 584

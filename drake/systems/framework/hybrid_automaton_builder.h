@@ -184,8 +184,7 @@ class HybridAutomatonBuilder {
   // to be supplied as a vector of appropriate dimension.
   void AddReset(ModeTransition<T>* mode_transition,
                 std::vector<symbolic::Formula>& reset) {
-    // NB: symbolic::Formula::True() implements a 'fast' version of the identity
-    // mapping.
+    // NB: symbolic::Formula::True() defaults as the identity mapping.
 
     // TODO(jadecastro): Throw if non-trivial resets are not algebraic. Do
     // something like AddConstraint in MathematicalProgram?
@@ -290,6 +289,12 @@ class HybridAutomatonBuilder {
   }
 
  private:
+  // TODO(jadecastro): Implement this to handle both continuous state @p x and
+  // input @p u.
+  symbolic::Variable* MakeSymbolicVariableFromState(Context<T>& context) {
+    
+  }
+
   /*
   void ThrowIfSystemNotRegistered(const ModalSubsystem<T>* modal_subsystem)
       const {

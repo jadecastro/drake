@@ -366,14 +366,6 @@ class HybridAutomatonContext : public Context<T> {
   }
 
  private:
-  // TODO(jadecastro): Implement this.
-  /*
-  unique_ptr<symbolic::Variable>
-  MakeSymbolicVariableFromState() {
-
-  }
-  */
-
   // The internal state of the System.
   State<T>* state_ = nullptr;
 
