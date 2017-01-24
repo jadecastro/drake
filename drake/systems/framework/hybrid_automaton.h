@@ -726,7 +726,13 @@ class HybridAutomaton : public System<T>,
         context.get_symbolic_state_vector();
     for (int i = 0; i < state.size(); i++) {
       state_env.insert(state_vect[i], state[i]);
+
+      std::cerr << " i: " << i << std::endl;
+      std::cerr << " state: " << state_vect[i] << std::endl;
+      std::cerr << " state val: " << state[i] << std::endl;
     }
+    std::cerr << " env: " << state_env << std::endl;
+    std::cerr << " formula: " << formula << std::endl;
     return formula.Evaluate(state_env);
   }
 

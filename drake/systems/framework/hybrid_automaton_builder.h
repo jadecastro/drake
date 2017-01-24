@@ -169,10 +169,10 @@ class HybridAutomatonBuilder {
 
   // Adds a vector of reset formulas to the specified ModeTransition. Because
   // alignment with the continuous state vector is important, we require reset
-  // to be supplied as a vector of appropriate dimension.
+  // to be supplied as a vector of appropriate dimension.  An empty Expression
+  // corresponds to the identity mapping.
   void AddReset(ModeTransition<T>* mode_transition,
                 std::vector<symbolic::Expression>& reset) {
-    // NB: symbolic::Expression::True() defaults as the identity mapping.
 
     // TODO(jadecastro): Throw if non-trivial resets are not algebraic. Do
     // something like AddConstraint in MathematicalProgram?
@@ -253,30 +253,6 @@ class HybridAutomatonBuilder {
     target->Initialize(Compile());
   }
 
-  // **********Call this something else!!
-  /*
-  void Finalize() {
-    for (auto modal_subsystem : modal_subsystems_) {
-      if (modal_subsystem->get_invariant().size() == 0) {
-        auto invariant = modal_subsystem->get_mutable_invariant();
-        (*invariant).emplace_back(symbolic::Expression::True());
-      }
-      if (modal_subsystem->get_initial_conditions().size() == 0) {
-        auto init = modal_subsystem->get_mutable_initial_conditions();
-        (*init).emplace_back(symbolic::Expression::True());
-      }
-    }
-    for (auto it : mode_transitions_) {
-      ModeTransition<T>* mode_transition = it.second;
-      if (mode_transition->get_guard().size() == 0) {
-        auto guard = mode_transition->get_mutable_guard();
-        (*guard).emplace_back(symbolic::Expression::True());
-      }
-      // NB: We require resets to be explicitly specified by the user, since
-      // context consistency checks are needed upon finalizing the HA.
-    }
-  }
-  */
  private:
   /*
   void ThrowIfSystemNotRegistered(const ModalSubsystem<T>* modal_subsystem)

@@ -92,6 +92,13 @@ class HybridAutomatonTest : public ::testing::Test {
         0, std::make_unique<FreestandingInputPort>(std::move(input0_)));
   }
 
+  void SetInitialConditions(const Vector2<double>& x0) {
+    systems::ContinuousState<double>* xc =
+        dut_->GetMutableSubsystemContext(context_.get())->
+        get_mutable_continuous_state();
+    xc->SetFromVector(x0);
+  }
+
   const System<double>* ball() { return dut_->ball(); }
   const ModalSubsystem<double>* ball_subsystem() {
     return dut_->ball_subsystem();
@@ -141,10 +148,7 @@ TEST_F(HybridAutomatonTest, EvalTimeDerivatives) {
   // Set the initial conditions.
   Vector2<double> x0;
   x0 << 10., 0.;  /* pos. [m], vel. [m/s] */
-  systems::ContinuousState<double>* xc =
-      dut_->GetMutableSubsystemContext(context_.get())->
-      get_mutable_continuous_state();
-  xc->SetFromVector(x0);
+  SetInitialConditions(x0);
 
   dut_->EvalTimeDerivatives(*context_, derivatives.get());
 
@@ -156,50 +160,61 @@ TEST_F(HybridAutomatonTest, EvalTimeDerivatives) {
   EXPECT_EQ(0, derivatives->get_vector().GetAtIndex(0));
   EXPECT_EQ(-9.81, derivatives->get_vector().GetAtIndex(1));
 }
-/*
+
 // Tests that the same dut can be evaluated into the same output with
 // different contexts interchangeably.
-TEST_F(DutTest, Clone) {
-  context_->SetInputPort(0, MakeInput(std::move(input0_)));
-  context_->SetInputPort(1, MakeInput(std::move(input1_)));
-  context_->SetInputPort(2, MakeInput(std::move(input2_)));
+TEST_F(HybridAutomatonTest, CloneContext) {
+  // Set the initial conditions.
+  Vector2<double> x0;
+  x0 << 10., 2.4;  /* pos. [m], vel. [m/s] */
+  SetInitialConditions(x0);
 
   // Compute the output with the default inputs and sanity-check it.
   dut_->EvalOutput(*context_, output_.get());
-  ExpectDefaultOutputs();
 
-  // Create a clone of the context and change an input.
-  auto clone = context_->Clone();
-
-  auto next_input_0 = std::make_unique<BasicVector<double>>(kSize);
-  next_input_0->get_mutable_value() << 3, 6, 9;
-  clone->SetInputPort(0, MakeInput(std::move(next_input_0)));
-
-  // Recompute the output and check the values.
-  dut_->EvalOutput(*clone, output_.get());
-
-  Eigen::Vector3d expected_output0;
-  expected_output0 << 3 + 8 + 64, 6 + 16 + 128, 9 + 32 + 256;  // B
+  Vector2<double> expected_output0;
+  expected_output0 << 10., 2.4;
   const BasicVector<double>* output0 = output_->get_vector_data(0);
   ASSERT_TRUE(output0 != nullptr);
   EXPECT_EQ(expected_output0[0], output0->get_value()[0]);
   EXPECT_EQ(expected_output0[1], output0->get_value()[1]);
-  EXPECT_EQ(expected_output0[2], output0->get_value()[2]);
 
-  Eigen::Vector3d expected_output1;
-  expected_output1 << 3 + 8, 6 + 16, 9 + 32;  // A
-  expected_output1 += expected_output0;       // A + B
-  const BasicVector<double>* output1 = output_->get_vector_data(1);
+  // Create a clone of the context and change the initial conditions.
+  auto clone = context_->Clone();
+
+  x0 << 6.7, 3.3;  /* pos. [m], vel. [m/s] */
+  SetInitialConditions(x0);
+
+  // Recompute the output and check the values.
+  dut_->EvalOutput(*clone, output_.get());
+
+  Vector2<double> expected_output1;
+  expected_output1 << 6.7, 3.3;
+  const BasicVector<double>* output1 = output_->get_vector_data(0);
   ASSERT_TRUE(output1 != nullptr);
   EXPECT_EQ(expected_output1[0], output1->get_value()[0]);
   EXPECT_EQ(expected_output1[1], output1->get_value()[1]);
-  EXPECT_EQ(expected_output1[2], output1->get_value()[2]);
-
-  // Check that the context that was cloned is unaffected.
-  dut_->EvalOutput(*context_, output_.get());
-  ExpectDefaultOutputs();
 }
 
+// Tests that the invariant, guard, initial conditions and reset are evaluated
+// correctly.
+TEST_F(HybridAutomatonTest, EvaluateSymbolicQuantities) {
+  // Set the initial conditions.
+  Vector2<double> x0;
+  x0 << 0., -2.;  /* pos. [m], vel. [m/s] */
+  SetInitialConditions(x0);
+
+  // Recompute the output and check the values.
+  auto hybrid_context =
+      dynamic_cast<HybridAutomatonContext<double>*>(context_.get());
+  const std::vector<double> invariant_value =
+      dut_->EvalInvariant(*hybrid_context);
+
+  const double expected_invariant = 0.;
+  EXPECT_EQ(expected_invariant, invariant_value[0]);
+}
+
+/*
 class DiagramOfDiagramsTest : public ::testing::Test {
  protected:
   void SetUp() override {
