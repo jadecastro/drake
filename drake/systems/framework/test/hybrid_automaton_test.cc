@@ -19,6 +19,7 @@ constexpr int kModeIdBall = 0;
 constexpr int kNumInports = 0;
 constexpr int kNumOutports = 1;
 constexpr int kStateDimension = 2;
+constexpr double kCoeffOfRestitution = 0.7;
 
 class ExampleHybridAutomaton : public HybridAutomaton<double> {
  public:
@@ -44,18 +45,25 @@ class ExampleHybridAutomaton : public HybridAutomaton<double> {
     ball_subsystem_ = &mss;
     ball_ = ball_subsystem_->get_system();
     std::vector<symbolic::Variable> x =
-        ball_subsystem_->get_symbolic_state_vector();
+        ball_subsystem_->get_symbolic_state_variables();
 
     // TODO(jadecastro): Decide on a cleaner way of auto-generate the named
     // getters from states, possibly leverage the .sh script for states.
     const symbolic::Expression y{x[0]};
     const symbolic::Expression ydot{x[1]};
+
+    // Define the invariant to be simply y > 0.
     symbolic::Expression invariant_ball{y};
     builder.AddInvariant(ball_subsystem_, invariant_ball);
 
     ModeTransition<double> trans =
         builder.AddModeTransition(*ball_subsystem_);
     ball_to_ball_ = &trans;
+
+    // Define the reset map to negate the velocity and decrement by a factor of
+    // kCoeffOfRestitution.
+    std::vector<symbolic::Expression> reset{y, -kCoeffOfRestitution * ydot};
+    builder.AddReset(ball_to_ball_, reset);
     //symbolic::Expression guard_formula_bounce{1.};
 
     builder.BuildInto(this);
@@ -201,7 +209,7 @@ TEST_F(HybridAutomatonTest, CloneContext) {
 TEST_F(HybridAutomatonTest, EvaluateSymbolicQuantities) {
   // Set the initial conditions.
   Vector2<double> x0;
-  x0 << 0., -2.;  /* pos. [m], vel. [m/s] */
+  x0 << 2.7, -2.;  /* pos. [m], vel. [m/s] */
   SetInitialConditions(x0);
 
   // Recompute the output and check the values.
@@ -210,8 +218,29 @@ TEST_F(HybridAutomatonTest, EvaluateSymbolicQuantities) {
   const std::vector<double> invariant_value =
       dut_->EvalInvariant(*hybrid_context);
 
-  const double expected_invariant = 0.;
+  const double expected_invariant = 2.7;
   EXPECT_EQ(expected_invariant, invariant_value[0]);
+}
+
+// Tests the mode transition.
+TEST_F(HybridAutomatonTest, ModeTransition) {
+  // Set the initial conditions.
+  Vector2<double> x0;
+  x0 << 0., -2.;  /* pos. [m], vel. [m/s] */
+  SetInitialConditions(x0);
+
+  // Recompute the output and check the values.
+  dut_->PerformTransition(0, context_.get());
+
+  // Compute the output.
+  dut_->EvalOutput(*context_, output_.get());
+
+  Vector2<double> expected_output0;
+  expected_output0 << 10., 2.4;
+  const BasicVector<double>* output0 = output_->get_vector_data(0);
+  ASSERT_TRUE(output0 != nullptr);
+  EXPECT_EQ(expected_output0[0], output0->get_value()[0]);
+  EXPECT_EQ(expected_output0[1], output0->get_value()[1]);
 }
 
 /*

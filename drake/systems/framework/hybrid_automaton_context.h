@@ -27,6 +27,8 @@ namespace systems {
 using std::unique_ptr;
 using std::make_unique;
 using std::shared_ptr;
+using std::cerr;
+using std::endl;
 
 // TODO(jadecastro): Test capability to capture hybrid system-of-hybrid-systems
 // functionality.
@@ -99,7 +101,11 @@ class ModalSubsystem {
     return &output_port_ids_;
   }
   const std::vector<symbolic::Expression> get_invariant() const {
-    return invariant_;
+    const symbolic::Expression y{symbolic_state_[0]};
+    std::vector<symbolic::Expression> invariant;
+    invariant.push_back(y);
+
+    return invariant;
   }
   std::vector<symbolic::Expression>* get_mutable_invariant() {
     return &invariant_;
@@ -129,7 +135,7 @@ class ModalSubsystem {
 
   // TODO(jadecastro): Check for consistency of any incoming invariants or
   // initial condition formulas with the given symbolic_state_.
-  const std::vector<symbolic::Variable>& get_symbolic_state_vector() {
+  const std::vector<symbolic::Variable>& get_symbolic_state_variables() {
     return symbolic_state_;
   };
 
@@ -138,6 +144,9 @@ class ModalSubsystem {
   // be unique_ptr, and hence need this function.
   //   **** Deprecating this function since it needs to be reconstructed.
   unique_ptr<ModalSubsystem<T>> Clone() const {
+
+    std::cerr << " Cloning...." << std::endl;
+    DRAKE_DEMAND(system_ != nullptr);
     shared_ptr<System<T>> sys = system_;
     ModalSubsystem<T>* clone =
         new ModalSubsystem<T>(mode_id_, sys,
@@ -210,7 +219,6 @@ class HybridAutomatonContext : public Context<T> {
   void RegisterSubsystem(unique_ptr<ModalSubsystem<T>> modal_subsystem,
                          unique_ptr<Context<T>> subcontext,
                          unique_ptr<SystemOutput<T>> suboutput) {
-    std::cerr << " RegisterSubsystem() ..." << std::endl;
     subcontext->set_parent(this);
 
     context_ = std::move(subcontext);
@@ -223,9 +231,10 @@ class HybridAutomatonContext : public Context<T> {
 
   // ADD COMMENTS
   void DeRegisterSubsystem() {
+    cerr << " De-Registering!!" << endl;
     context_.release();
     output_.release();
-    modal_subsystem_.release();
+    //modal_subsystem_.release();
   }
 
   /// Declares that a particular input port of a particular subsystem is an
@@ -238,6 +247,11 @@ class HybridAutomatonContext : public Context<T> {
   }
 
   void ExportInput(const std::vector<PortId>& port_ids) {
+    // Debugging.....
+    //DRAKE_DEMAND(context_ != nullptr);
+    //DRAKE_DEMAND(output_ != nullptr);
+    DRAKE_DEMAND(modal_subsystem_ != nullptr);
+
     for (auto& port_id : port_ids) { this->ExportInput(port_id); }
   }
 
@@ -247,7 +261,9 @@ class HybridAutomatonContext : public Context<T> {
   /// User code should not call this method. It is for use during HA context
   /// allocation only.
   void ExportOutput(const PortId& port_id) {
+    cerr << " ExportOutput 1" << endl;
     modal_subsystem_->get_mutable_output_port_ids()->emplace_back(port_id);
+    cerr << " ExportOutput 2" << endl;
   }
 
   void ExportOutput(const std::vector<PortId>& port_ids) {
@@ -370,9 +386,9 @@ class HybridAutomatonContext : public Context<T> {
 
   State<T>* get_mutable_state() override { return state_; }
 
-  const std::vector<symbolic::Variable>& get_symbolic_state_vector() const {
+  const std::vector<symbolic::Variable>& get_symbolic_state_variables() const {
     ModalSubsystem<T>* modal_subsystem = GetModalSubsystem();
-    return modal_subsystem->get_symbolic_state_vector();
+    return modal_subsystem->get_symbolic_state_variables();
   };
 
  protected:

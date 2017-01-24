@@ -136,7 +136,7 @@ class HybridAutomatonBuilder {
 
   // Adds an initial condition formula for the specified ModalSubsystem.
   void AddInitialCondition(ModalSubsystem<T>* modal_subsystem,
-                            const symbolic::Expression& init) const {
+                           const symbolic::Expression& init) const {
     DRAKE_ASSERT(modal_subsystem != nullptr);
     // TODO: validate, like in context.
     // DRAKE_ASSERT_VOID(systems::System<T>::CheckValidContext(*context));
@@ -198,7 +198,9 @@ class HybridAutomatonBuilder {
   }
 
   // Adds the identity reset (empty vector) to the specified ModeTransition.
-  void AddReset(ModeTransition<T>* mode_transition) {
+  // TODO(jadecastro): How do we ensure that the user either calls AddReset or
+  // AddIdentityReset?
+  void AddIdentityReset(ModeTransition<T>* mode_transition) {
     std::vector<symbolic::Expression> reset;
     AddReset(mode_transition, reset);
   }
