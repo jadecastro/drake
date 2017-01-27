@@ -141,7 +141,19 @@ class ModeTransition {
   // TODO(jadecastro): Perform checks?
   void set_guard(std::vector<symbolic::Expression>& guard) { guard_ = guard; }
 
-  const std::vector<symbolic::Expression> get_reset() const { return reset_; }
+  const std::vector<symbolic::Expression> get_reset() const {
+    // ****************** Debug ***************
+    std::vector<symbolic::Variable> x =
+        edge_.first->get_symbolic_state_variables();
+
+    const symbolic::Expression y{x[0]};
+    const symbolic::Expression ydot{x[1]};
+    
+    std::vector<symbolic::Expression> reset{y, -0.7 * ydot};
+    // ****************************************
+    
+    return reset;
+  }
 
   std::vector<symbolic::Expression>* get_mutable_reset() { return &reset_; }
 
@@ -416,10 +428,10 @@ class HybridAutomaton : public System<T>,
     DRAKE_ASSERT_VOID(systems::System<T>::CheckValidContext(context));
     const ModeId mode_id = context.get_mode_id();
 
-    std::vector<ModeTransition<T>*> mode_transitions =
-        GetPossibleTransitions(mode_id);
+    std::vector<const ModeTransition<T>*> mode_transitions =
+        GetLegalTransitions(mode_id);
     std::vector<std::vector<T>> result;
-    for (auto mode_transition : mode_transitions) {
+    for (auto& mode_transition : mode_transitions) {
       // Evaluate the guard conditions.
       std::vector<T> sub_result;
       for (auto& expression : mode_transition->get_guard()) {
@@ -473,8 +485,8 @@ class HybridAutomaton : public System<T>,
         dynamic_cast_or_die<HybridAutomatonContext<T>*>(context);
 
     const ModeId mode_id = hybrid_context->get_mode_id();
-    std::vector<ModeTransition<T>*> mode_transitions =
-        GetPossibleTransitions(mode_id);
+    std::vector<const ModeTransition<T>*> mode_transitions =
+        GetLegalTransitions(mode_id);
     DoPerformTransition(*mode_transitions[index], hybrid_context);
   }
 
@@ -804,12 +816,14 @@ class HybridAutomaton : public System<T>,
     cerr << " CreateAndRegisterSystem 7" << endl;
   }
 
-  std::vector<ModeTransition<T>*> GetPossibleTransitions(
+  // Gets a vector of legal transitions for a given pre mode. A pair (pre, post)
+  // is legal iff it exists in the set of edges.
+  std::vector<const ModeTransition<T>*> GetLegalTransitions(
       const ModeId mode_id_pre) const {
-    std::vector<ModeTransition<T>*> result;
+    std::vector<const ModeTransition<T>*> result;
     // Create a functor `select2nd` to convert the resulting multimap to vector.
     auto select2nd = std::bind(&std::multimap<ModeId,
-                               ModeTransition<T>*>::value_type::second,
+                               const ModeTransition<T>*>::value_type::second,
                                std::placeholders::_1);
     transform(mode_transitions_.lower_bound(mode_id_pre),
               mode_transitions_.upper_bound(mode_id_pre),
@@ -822,7 +836,7 @@ class HybridAutomaton : public System<T>,
   // and whose edges are the mode transitions.
   struct StateMachine {
     std::vector<const ModalSubsystem<T>*> modal_subsystems;
-    std::multimap<ModeId, ModeTransition<T>*> mode_transitions;
+    std::multimap<ModeId, const ModeTransition<T>*> mode_transitions;
     std::set<ModeId> initial_modes;
     ModeId mode_id_init;
     int num_inports, num_outports;
@@ -852,11 +866,32 @@ class HybridAutomaton : public System<T>,
       modal_subsystems_.push_back(unique_ptr<ModalSubsystem<T>>(
           mss->Clone()));
     }
-    mode_transitions_ = state_machine.mode_transitions;
+    for (auto& mt : state_machine.mode_transitions) {
+      ModeId mid = mt.first;
+      const ModeTransition<T>* basic_mt = mt.second;
+      mode_transitions_.insert(std::make_pair(mid, basic_mt));
+    }
     initial_modes_ = state_machine.initial_modes;
     mode_id_init_ = state_machine.mode_id_init;
     num_inports_ = state_machine.num_inports;
     num_outports_ = state_machine.num_outports;
+
+    // ******************************************
+    std::vector<symbolic::Variable> x =
+        modal_subsystems_[0]->get_symbolic_state_variables();
+
+    const symbolic::Expression y{x[0]};
+    const symbolic::Expression ydot{x[1]};
+    
+    //std::vector<symbolic::Expression> reset{y, -0.7 * ydot};
+
+    //std::vector<ModeTransition<T>*> mode_transitions = GetLegalTransitions(0);
+
+    auto resets = state_machine.mode_transitions.find(0)->second->get_reset();
+    const symbolic::Environment env{{x[0], 5.}, {x[1], 3.}};
+    std::cerr << "  *** Reset Formula 0: " << resets[0] << std::endl;
+    std::cerr << "  *** Reset Result: " << resets[0].Evaluate(env) << std::endl;
+    // ******************************************
 
     // TODO(jadecastro): Do this for all, or just the initial mode?
     //for (auto& modal_subsystem : modal_subsystems_) {
@@ -1045,7 +1080,7 @@ class HybridAutomaton : public System<T>,
   std::vector<unique_ptr<ModalSubsystem<T>>> modal_subsystems_;
   // TODO(jadecastro): The ModeId key is redundant with edge_.first in
   // ModeTransition<T>.
-  std::multimap<ModeId, ModeTransition<T>*> mode_transitions_;
+  std::multimap<ModeId, const ModeTransition<T>*> mode_transitions_;
   // Mode 0 is the default intiial mode unless otherwise specified.
   ModeId mode_id_init_{0};  // TODO(jadecastro): <---Initialize this.
 

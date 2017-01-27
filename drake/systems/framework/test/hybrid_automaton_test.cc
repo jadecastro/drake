@@ -44,6 +44,7 @@ class ExampleHybridAutomaton : public HybridAutomaton<double> {
 
     ball_subsystem_ = &mss;
     ball_ = ball_subsystem_->get_system();
+    // TODO(jadecastro): symbolic::Variables?
     std::vector<symbolic::Variable> x =
         ball_subsystem_->get_symbolic_state_variables();
 
@@ -60,11 +61,10 @@ class ExampleHybridAutomaton : public HybridAutomaton<double> {
         builder.AddModeTransition(*ball_subsystem_);
     ball_to_ball_ = &trans;
 
-    // Define the reset map to negate the velocity and decrement by a factor of
-    // kCoeffOfRestitution.
+    // Define the reset map that negates the velocity and decrements by a factor
+    // of kCoeffOfRestitution.
     std::vector<symbolic::Expression> reset{y, -kCoeffOfRestitution * ydot};
     builder.AddReset(ball_to_ball_, reset);
-    //symbolic::Expression guard_formula_bounce{1.};
 
     builder.BuildInto(this);
   }

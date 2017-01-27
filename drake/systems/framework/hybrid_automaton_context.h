@@ -101,9 +101,11 @@ class ModalSubsystem {
     return &output_port_ids_;
   }
   const std::vector<symbolic::Expression> get_invariant() const {
+    // ******* Debugging *******
     const symbolic::Expression y{symbolic_state_[0]};
     std::vector<symbolic::Expression> invariant;
     invariant.push_back(y);
+    // *************************
 
     return invariant;
   }
@@ -135,7 +137,7 @@ class ModalSubsystem {
 
   // TODO(jadecastro): Check for consistency of any incoming invariants or
   // initial condition formulas with the given symbolic_state_.
-  const std::vector<symbolic::Variable>& get_symbolic_state_variables() {
+  const std::vector<symbolic::Variable>& get_symbolic_state_variables() const {
     return symbolic_state_;
   };
 

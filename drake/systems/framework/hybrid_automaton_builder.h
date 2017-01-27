@@ -278,11 +278,32 @@ class HybridAutomatonBuilder {
     for (auto& mss : modal_subsystems_) {
       state_machine.modal_subsystems.emplace_back(mss);
     }
-    state_machine.mode_transitions = mode_transitions_;
+    for (auto& mt : mode_transitions_) {
+      state_machine.mode_transitions.insert(mt);
+    }
     state_machine.initial_modes = initial_modes_;
     state_machine.mode_id_init = mode_id_init_;
     state_machine.num_inports = num_inports_;
     state_machine.num_outports = num_outports_;
+
+    // ******************************************
+    const auto modal_subsystem =
+        mode_transitions_.find(0)->second->get_predecessor();
+    std::vector<symbolic::Variable> x =
+        modal_subsystem->get_symbolic_state_variables();
+
+    const symbolic::Expression y{x[0]};
+    const symbolic::Expression ydot{x[1]};
+    
+    //std::vector<symbolic::Expression> reset{y, -0.7 * ydot};
+
+    auto resets = mode_transitions_.find(0)->second->get_reset();
+    const symbolic::Environment env{{x[0], 5.}, {x[1], 3.}};
+    std::cerr << "  *** (Compile) Reset Formula 0: " << resets[0] << std::endl;
+    std::cerr << "  *** (Compile) Reset Result: " << resets[0].Evaluate(env)
+              << std::endl;
+    // ******************************************
+
     return state_machine;
   }
 
