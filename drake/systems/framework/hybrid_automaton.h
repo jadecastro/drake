@@ -118,11 +118,15 @@ class ModeTransition {
       const std::pair<ModalSubsystem<T>*, ModalSubsystem<T>*> edge,
       std::vector<symbolic::Expression> guard,
       std::vector<symbolic::Expression> reset)
-      : edge_(edge), guard_(guard), reset_(reset) {}
+      : edge_(edge), guard_(guard), reset_(reset) {
+    CreateSymbolicVariables();
+}
 
   explicit ModeTransition(
       const std::pair<ModalSubsystem<T>*, ModalSubsystem<T>*> edge)
-      : edge_(edge) {}
+      : edge_(edge) {
+    CreateSymbolicVariables();
+  }
 
   const std::pair<ModalSubsystem<T>*, ModalSubsystem<T>*> get_edge() const {
     return edge_;
@@ -143,16 +147,13 @@ class ModeTransition {
 
   const std::vector<symbolic::Expression> get_reset() const {
     // ****************** Debug ***************
-    std::vector<symbolic::Variable> x =
-        edge_.first->get_symbolic_state_variables();
-
-    const symbolic::Expression y{x[0]};
-    const symbolic::Expression ydot{x[1]};
+    //const symbolic::Expression y{symbolic_state_[0]};
+    //const symbolic::Expression ydot{symbolic_state_[1]};
     
-    std::vector<symbolic::Expression> reset{y, -0.7 * ydot};
+    //std::vector<symbolic::Expression> reset{y, -0.7 * ydot};
     // ****************************************
     
-    return reset;
+    return reset_;
   }
 
   std::vector<symbolic::Expression>* get_mutable_reset() { return &reset_; }
@@ -177,13 +178,44 @@ class ModeTransition {
     return unique_ptr<ModeTransition<T>>(clone);
   }
 
+  // TODO(jadecastro): Check for consistency of any incoming invariants or
+  // initial condition formulas with the given symbolic_state_.
+  const std::vector<symbolic::Variable>& get_symbolic_state_variables() const {
+    return symbolic_state_;
+  };
+
  private:
+  void CreateSymbolicVariables() {
+    // TODO(jadecastro): Either we need to modify the system API to allow us
+    // access to the underlying state dimensions without creating a throwaway
+    // context *or* we just allocate the context here and output it along with
+    // the ModalSubsystem.
+    std::unique_ptr<Context<T>> context =
+        edge_.first->get_system()->AllocateContext();
+
+    // TODO(jadecastro): Implement this to handle both continuous state @p x and
+    // input @p u.
+    const int num_xc = context->get_continuous_state_vector().size();
+    for (int i = 0; i < num_xc; ++i) {
+      std::ostringstream key;
+      key << "x" << i;
+      symbolic::Variable state_var{key.str()};
+      symbolic_state_.emplace_back(state_var);
+    }
+  }
+
   // Pair of ModalSubsystems representing the edge for this transition.
   std::pair<ModalSubsystem<T>*, ModalSubsystem<T>*> edge_;
   // Expression representing the guard for this edge.
   std::vector<symbolic::Expression> guard_;  // TODO: Eigen??
   // Expression representing the reset map for this edge.
   std::vector<symbolic::Expression> reset_;  // TODO: Eigen??
+  // A vector of symbolic variables for each of the continuous states in the
+  // system.
+  std::vector<symbolic::Variable> symbolic_state_;
+  // TODO(jadecastro): Store symbolic versions of the inputs also.
+  // TODO(jadecastro): This is redundant -- combine with the one in
+  // ModalSubsystem.
 };
 
 /// HybridAutomaton collects all of the system-related data necessary for
@@ -470,6 +502,8 @@ class HybridAutomaton : public System<T>,
     // Apply non-identity reset maps to the continuous states for the successor.
     // TODO(jadecastro): How to apply the inverse mapping to satisfy the ODE
     // solver?
+    //cerr << " Size of reset map: " << mode_transition.get_reset().size()
+    //     << endl;
     if (mode_transition.get_reset().size() == 0) {
       cerr << " DoPerformTransition 3" << endl;
       PerformReset(context, mode_transition);
@@ -822,13 +856,14 @@ class HybridAutomaton : public System<T>,
       const ModeId mode_id_pre) const {
     std::vector<const ModeTransition<T>*> result;
     // Create a functor `select2nd` to convert the resulting multimap to vector.
-    auto select2nd = std::bind(&std::multimap<ModeId,
+    auto select2nd = std::bind(&std::multimap<int,
                                const ModeTransition<T>*>::value_type::second,
                                std::placeholders::_1);
     transform(mode_transitions_.lower_bound(mode_id_pre),
               mode_transitions_.upper_bound(mode_id_pre),
               back_inserter(result), select2nd);
     DRAKE_DEMAND(result.size() > 0);
+
     return result;
   }
 
@@ -836,7 +871,7 @@ class HybridAutomaton : public System<T>,
   // and whose edges are the mode transitions.
   struct StateMachine {
     std::vector<const ModalSubsystem<T>*> modal_subsystems;
-    std::multimap<ModeId, const ModeTransition<T>*> mode_transitions;
+    std::vector<const ModeTransition<T>*> mode_transitions;
     std::set<ModeId> initial_modes;
     ModeId mode_id_init;
     int num_inports, num_outports;
@@ -866,10 +901,10 @@ class HybridAutomaton : public System<T>,
       modal_subsystems_.push_back(unique_ptr<ModalSubsystem<T>>(
           mss->Clone()));
     }
-    for (auto& mt : state_machine.mode_transitions) {
-      ModeId mid = mt.first;
-      const ModeTransition<T>* basic_mt = mt.second;
-      mode_transitions_.insert(std::make_pair(mid, basic_mt));
+    //for (auto& mt : state_machine.mode_transitions) {
+    for (auto i = 0; i < (int)state_machine.mode_transitions.size(); ++i) {
+      mode_transitions_.insert(
+          std::make_pair(i, state_machine.mode_transitions[i]));
     }
     initial_modes_ = state_machine.initial_modes;
     mode_id_init_ = state_machine.mode_id_init;
@@ -887,10 +922,10 @@ class HybridAutomaton : public System<T>,
 
     //std::vector<ModeTransition<T>*> mode_transitions = GetLegalTransitions(0);
 
-    auto resets = state_machine.mode_transitions.find(0)->second->get_reset();
-    const symbolic::Environment env{{x[0], 5.}, {x[1], 3.}};
-    std::cerr << "  *** Reset Formula 0: " << resets[0] << std::endl;
-    std::cerr << "  *** Reset Result: " << resets[0].Evaluate(env) << std::endl;
+    //auto resets = state_machine.mode_transitions[0]->get_reset();
+    //const symbolic::Environment env{{x[0], 4.}, {x[1], 3.}};
+    //std::cerr << "  *** Reset Formula 0: " << resets[0] << std::endl;
+    //std::cerr << "  *** Reset Result: " << resets[0].Evaluate(env) << std::endl;
     // ******************************************
 
     // TODO(jadecastro): Do this for all, or just the initial mode?
@@ -1080,7 +1115,7 @@ class HybridAutomaton : public System<T>,
   std::vector<unique_ptr<ModalSubsystem<T>>> modal_subsystems_;
   // TODO(jadecastro): The ModeId key is redundant with edge_.first in
   // ModeTransition<T>.
-  std::multimap<ModeId, const ModeTransition<T>*> mode_transitions_;
+  std::multimap<int, const ModeTransition<T>*> mode_transitions_;
   // Mode 0 is the default intiial mode unless otherwise specified.
   ModeId mode_id_init_{0};  // TODO(jadecastro): <---Initialize this.
 

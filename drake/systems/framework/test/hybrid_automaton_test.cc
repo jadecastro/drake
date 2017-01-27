@@ -63,7 +63,7 @@ class ExampleHybridAutomaton : public HybridAutomaton<double> {
 
     // Define the reset map that negates the velocity and decrements by a factor
     // of kCoeffOfRestitution.
-    std::vector<symbolic::Expression> reset{y, -kCoeffOfRestitution * ydot};
+    std::vector<symbolic::Expression> reset{7, -kCoeffOfRestitution * ydot};
     builder.AddReset(ball_to_ball_, reset);
 
     builder.BuildInto(this);
@@ -236,7 +236,7 @@ TEST_F(HybridAutomatonTest, ModeTransition) {
   dut_->EvalOutput(*context_, output_.get());
 
   Vector2<double> expected_output0;
-  expected_output0 << 10., 2.4;
+  expected_output0 << 10., 0.;
   const BasicVector<double>* output0 = output_->get_vector_data(0);
   ASSERT_TRUE(output0 != nullptr);
   EXPECT_EQ(expected_output0[0], output0->get_value()[0]);

@@ -93,8 +93,9 @@ class HybridAutomatonBuilder {
         std::make_pair(&sys_pre, &sys_post);
 
     ModeTransition<T> mode_transition = ModeTransition<T>(edge);
-    mode_transitions_.insert(std::make_pair(mode_transitions_.size(),
-                                            &mode_transition));
+    //mode_transitions_.insert(std::make_pair(mode_transitions_.size(),
+    //                                        &mode_transition));
+    mode_transitions_.push_back(&mode_transition);
 
     return mode_transition;
   }
@@ -114,9 +115,9 @@ class HybridAutomatonBuilder {
   }
 
   // Getter for the ordered list of mode transitions.
-  std::multimap<ModeId, ModeTransition<T>*> get_mode_transitions() const {
-    return mode_transitions_;
-  };
+  //std::multimap<int, ModeTransition<T>*> get_mode_transitions() const {
+  //  return mode_transitions_;
+  //};
 
   // Adds an invariant formula for the specified ModalSubsystem.
   void AddInvariant(ModalSubsystem<T>* modal_subsystem,
@@ -279,16 +280,17 @@ class HybridAutomatonBuilder {
       state_machine.modal_subsystems.emplace_back(mss);
     }
     for (auto& mt : mode_transitions_) {
-      state_machine.mode_transitions.insert(mt);
+      state_machine.mode_transitions.emplace_back(mt);
     }
     state_machine.initial_modes = initial_modes_;
     state_machine.mode_id_init = mode_id_init_;
     state_machine.num_inports = num_inports_;
     state_machine.num_outports = num_outports_;
 
+    /*
     // ******************************************
     const auto modal_subsystem =
-        mode_transitions_.find(0)->second->get_predecessor();
+        mode_transitions_[0]->get_predecessor();
     std::vector<symbolic::Variable> x =
         modal_subsystem->get_symbolic_state_variables();
 
@@ -297,13 +299,13 @@ class HybridAutomatonBuilder {
     
     //std::vector<symbolic::Expression> reset{y, -0.7 * ydot};
 
-    auto resets = mode_transitions_.find(0)->second->get_reset();
-    const symbolic::Environment env{{x[0], 5.}, {x[1], 3.}};
+    auto resets = mode_transitions_[0]->get_reset();
+    const symbolic::Environment env{{x[0], 29.}, {x[1], 3.}};
     std::cerr << "  *** (Compile) Reset Formula 0: " << resets[0] << std::endl;
     std::cerr << "  *** (Compile) Reset Result: " << resets[0].Evaluate(env)
               << std::endl;
     // ******************************************
-
+    */
     return state_machine;
   }
 
@@ -316,7 +318,8 @@ class HybridAutomatonBuilder {
 
   // TODO(jadecastro): map?
   std::vector<ModalSubsystem<T>*> modal_subsystems_;
-  std::multimap<ModeId, ModeTransition<T>*> mode_transitions_;
+  std::vector<ModeTransition<T>*> mode_transitions_;
+  //std::multimap<int, ModeTransition<T>*> mode_transitions_;
   std::set<ModeId> initial_modes_;
 
   // Fixed input/output port dimensions for the HA.
