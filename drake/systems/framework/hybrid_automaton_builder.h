@@ -44,8 +44,9 @@ using std::shared_ptr;
 /// HybridAutomatonBuilder gives up ownership of the constituent systems, and
 /// should therefore be discarded.
 ///
-/// A system must be added to the HybridAutomatonBuilder with AddSystem before
-/// it can be wired up in any way.
+/// A ModalSubsystem must be added to the HybridAutomatonBuilder via
+/// AddModalSubsystem, then ModeTransitions may then be added to define the
+/// transitionable subsystems.  
 template <typename T>
 class HybridAutomatonBuilder {
  public:
@@ -58,11 +59,6 @@ class HybridAutomatonBuilder {
   /// Takes ownership of @p system and adds it to the builder. Returns a bare
   /// pointer to the System, which will remain valid for the lifetime of the
   /// HybridAutomaton built by this builder.
-  ///
-  /// @code
-  ///   HybridAutomatonBuilder<T> builder;
-  ///   auto foo = builder.AddSystem(std::make_unique<Foo<T>>());
-  /// @endcode
   ///
   /// @tparam S The type of system to add.
   template <template <typename Scalar> class S>
@@ -77,6 +73,19 @@ class HybridAutomatonBuilder {
       DRAKE_ASSERT(mss->get_mode_id() != mode_id);
     }
 
+    // Fail if the system is stateless or if the inputs and output traits
+    // disagree.
+    auto context0 = system->CreateDefaultContext();
+    auto output0 = system->AllocateOutput(*context0);
+    DRAKE_DEMAND(!context0->is_stateless());
+
+    if (modal_subsystems_.size() > 0) {
+      DRAKE_DEMAND(modal_subsystems_[0]->get_num_input_ports() ==
+                   static_cast<int>(inport_ids.size()));
+      DRAKE_DEMAND(modal_subsystems_[0]->get_num_output_ports() ==
+                   static_cast<int>(outport_ids.size()));
+    }
+
     // Populate a ModalSubsystem
     ModalSubsystem<T> modal_subsystem =
         ModalSubsystem<T>(mode_id, shared_ptr<System<T>>(std::move(system)),
@@ -86,11 +95,47 @@ class HybridAutomatonBuilder {
     return modal_subsystem;
   }
 
+  /// Implicitly sets the input and output ports to system defaults.
+  template <template <typename Scalar> class S>
+  ModalSubsystem<T> AddModalSubsystem(unique_ptr<S<T>> system,
+                                      const ModeId mode_id) {
+    //DRAKE_DEMAND(system != nullptr);
+
+    for (auto mss : modal_subsystems_) {
+      // Throw if the proposed mode_id exists.
+      // TODO(jadecastro): Make use of find.
+      DRAKE_ASSERT(mss->get_mode_id() != mode_id);
+    }
+
+    // Fail if the system is stateless or if the inputs and output traits
+    // disagree.
+    auto context0 = system->CreateDefaultContext();
+    auto output0 = system->AllocateOutput(*context0);
+    DRAKE_DEMAND(!context0->is_stateless());
+
+    if (modal_subsystems_.size() > 0) {
+      auto& system1 = modal_subsystems_.front->get_system();
+      auto context1 = system1->CreateDefaultContext();
+      auto output1 = system1->AllocateOutput(*context1);
+      DRAKE_DEMAND(modal_subsystems_[0]->get_num_input_ports() ==
+                   context1->get_num_input_ports());
+      DRAKE_DEMAND(modal_subsystems_[0]->get_num_output_ports() ==
+                   output1->get_num_ports());
+    }
+
+    // Populate a ModalSubsystem
+    ModalSubsystem<T> modal_subsystem =
+        ModalSubsystem<T>(mode_id, shared_ptr<System<T>>(std::move(system)));
+    modal_subsystems_.emplace_back(&modal_subsystem);
+
+    return modal_subsystem;
+  }
+
   ModeTransition<T> AddModeTransition(ModalSubsystem<T>& sys_pre,
                                       ModalSubsystem<T>& sys_post) {
     // TODO(jadecastro): Throw if pre and post have disjoint invariants.
-    std::pair<ModalSubsystem<T>*, ModalSubsystem<T>*> edge =
-        std::make_pair(&sys_pre, &sys_post);
+    std::pair<ModeId, ModeId> edge = std::make_pair(sys_pre.get_mode_id(),
+                                                    sys_post.get_mode_id());
 
     ModeTransition<T> mode_transition = ModeTransition<T>(edge);
     //mode_transitions_.insert(std::make_pair(mode_transitions_.size(),
@@ -179,12 +224,14 @@ class HybridAutomatonBuilder {
     // something like AddConstraint in MathematicalProgram?
     if (reset.size() == 0) {
       // Ensure that the continuous dimensions all match.
+      const ModalSubsystem<T>* mss_pre =
+          modal_subsystems_[mode_transition->get_predecessor()];
       unique_ptr<Context<T>> context_pre =
-          mode_transition->get_predecessor()->get_system()->
-          CreateDefaultContext();
+          mss_pre->get_system()->CreateDefaultContext();
+      const ModalSubsystem<T>* mss_post =
+          modal_subsystems_[mode_transition->get_successor()];
       unique_ptr<Context<T>> context_post =
-          mode_transition->get_predecessor()->get_system()->
-          CreateDefaultContext();
+          mss_post->get_system()->CreateDefaultContext();
       const ContinuousState<T>& xc_pre = *context_pre->get_continuous_state();
       const ContinuousState<T>& xc_post = *context_post->get_continuous_state();
       DRAKE_DEMAND(xc_pre.get_generalized_position().size() ==
@@ -193,6 +240,9 @@ class HybridAutomatonBuilder {
                    xc_post.get_generalized_velocity().size());
       DRAKE_DEMAND(xc_pre.get_misc_continuous_state().size() ==
                    xc_post.get_misc_continuous_state().size());
+      int num_xd_pre = context_pre->get_num_discrete_state_groups();
+      int num_xd_post = context_post->get_num_discrete_state_groups();
+      DRAKE_DEMAND(num_xd_pre == num_xd_post);
     }
 
     mode_transition->set_reset_throw_if_incompatible(reset);
@@ -257,13 +307,12 @@ class HybridAutomatonBuilder {
   }
 
  private:
-  /*
-  void ThrowIfSystemNotRegistered(const ModalSubsystem<T>* modal_subsystem)
-      const {
-    DRAKE_THROW_UNLESS(
-        modal_subsystems_.find(modal_subsystem) != modal_subsystems_.end());
-  }
-  */
+
+  // void ThrowIfSystemNotRegistered(const ModalSubsystem<T>* modal_subsystem)
+  //     const {
+  //   DRAKE_THROW_UNLESS(
+  //       modal_subsystems_.find(modal_subsystem) != modal_subsystems_.end());
+  // }
 
   /// Produces the state machine corresponding to the modal subsystems and mode
   /// transitions created using the HybridAutomatonBuilder.
@@ -287,25 +336,6 @@ class HybridAutomatonBuilder {
     state_machine.num_inports = num_inports_;
     state_machine.num_outports = num_outports_;
 
-    /*
-    // ******************************************
-    const auto modal_subsystem =
-        mode_transitions_[0]->get_predecessor();
-    std::vector<symbolic::Variable> x =
-        modal_subsystem->get_symbolic_state_variables();
-
-    const symbolic::Expression y{x[0]};
-    const symbolic::Expression ydot{x[1]};
-    
-    //std::vector<symbolic::Expression> reset{y, -0.7 * ydot};
-
-    auto resets = mode_transitions_[0]->get_reset();
-    const symbolic::Environment env{{x[0], 29.}, {x[1], 3.}};
-    std::cerr << "  *** (Compile) Reset Formula 0: " << resets[0] << std::endl;
-    std::cerr << "  *** (Compile) Reset Result: " << resets[0].Evaluate(env)
-              << std::endl;
-    // ******************************************
-    */
     return state_machine;
   }
 

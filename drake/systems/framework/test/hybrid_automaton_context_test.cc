@@ -32,21 +32,19 @@ class HybridAutomatonContextTest : public ::testing::Test {
     context_.reset(new HybridAutomatonContext<double>());
     context_->set_time(kTime);
 
-    // Instantiate a new modal subsystem.
-    const int mode_id = 27;
+    // Instantiate a new modal subsystem.  Implicitly, one input and one output
+    // are exported.
+    const int mode_id = 0;
     //std::unique_ptr<ModalSubsystem<double>> mss0(new ModalSubsystem<double>(
     //    mode_id, integrator0_.get()));
     const ModalSubsystem<double> mss0 =
-        ModalSubsystem<double>(mode_id, integrator0_.get());
-
-    // Explicitly export the ports.
-    context_->ExportInput(0 /* export input port 0 */);
-    context_->ExportOutput(0 /* export output port 0 */);
+        ModalSubsystem<double>(mode_id, std::move(integrator0_));
 
     //const ModalSubsystem<double> mss0 =
     //    ModalSubsystem(mode_id, integrator0_.get());
     auto subcontext0 = integrator0_->CreateDefaultContext();
     auto suboutput0 = integrator0_->AllocateOutput(*subcontext0);
+
     context_->RegisterSubsystem(std::make_unique<ModalSubsystem<double>>(mss0),
                                 std::move(subcontext0),
                                 std::move(suboutput0));
@@ -144,7 +142,7 @@ TEST_F(HybridAutomatonContextTest, HybridAutomatonState) {
 TEST_F(HybridAutomatonContextTest, HybridAutomatonMode) {
   const int mode_id = 555;
   std::unique_ptr<ModalSubsystem<double>> mss(new ModalSubsystem<double>(
-      mode_id, integrator1_.get()));
+      mode_id, std::move(integrator1_)));
   //ModalSubsystem<double> mss1 = ModalSubsystem(mode_id, integrator1_.get());
   auto subcontext1 = integrator1_->CreateDefaultContext();
   auto suboutput1 = integrator1_->AllocateOutput(*subcontext1);

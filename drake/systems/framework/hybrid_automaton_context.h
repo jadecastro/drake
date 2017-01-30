@@ -3,6 +3,7 @@
 // TODO: triage this list.
 //#include <map>
 #include <memory>
+#include <numeric>
 #include <set>
 #include <stdexcept>
 #include <utility>
@@ -32,9 +33,6 @@ using std::endl;
 
 // TODO(jadecastro): Test capability to capture hybrid system-of-hybrid-systems
 // functionality.
-//
-// TODO(jadecastro): Consistent naming modalsubsystems vs. modal_subsystems, id
-// vs. mode_id, ....
 
 // TODO(jadecastro): Some comments are in order.
 template <typename T>
@@ -62,14 +60,23 @@ class ModalSubsystem {
       : mode_id_(mode_id), system_(std::move(system)), invariant_(invariant),
         initial_conditions_(initial_conditions) {
     CreateSymbolicVariables();
+
+    // Populate the input and output ports with the full complement of system
+    // inputs and outputs.
+    input_port_ids_.resize(system->get_num_input_ports());
+    std::iota (std::begin(input_port_ids_), std::end(input_port_ids_), 0);
+    for (auto i : input_port_ids_) {
+      std::cerr << " id: " << i << std::endl;
+    }
+    output_port_ids_.resize(system->get_num_output_ports());
+    std::iota (std::begin(output_port_ids_), std::end(output_port_ids_), 0);
   }
 
   explicit ModalSubsystem(
       ModeId mode_id, shared_ptr<System<T>> system,
       std::vector<PortId> input_port_ids, std::vector<PortId> output_port_ids)
       : mode_id_(mode_id), system_(std::move(system)),
-        input_port_ids_(input_port_ids),
-        output_port_ids_(output_port_ids){
+        input_port_ids_(input_port_ids), output_port_ids_(output_port_ids) {
     CreateSymbolicVariables();
   }
 
@@ -77,6 +84,16 @@ class ModalSubsystem {
       ModeId mode_id, shared_ptr<System<T>> system)
       : mode_id_(mode_id), system_(std::move(system)) {
     CreateSymbolicVariables();
+
+    // Populate the input and output ports with the full complement of system
+    // inputs and outputs.
+    input_port_ids_.resize(system->get_num_input_ports());
+    std::iota (std::begin(input_port_ids_), std::end(input_port_ids_), 0);
+    for (auto i : input_port_ids_) {
+      std::cerr << " id: " << i << std::endl;
+    }
+    //output_port_ids_.resize(system->get_num_output_ports());
+    //std::iota (std::begin(output_port_ids_), std::end(output_port_ids_), 0);
   }
 
   ModeId get_mode_id() const { return mode_id_; }
@@ -101,13 +118,7 @@ class ModalSubsystem {
     return &output_port_ids_;
   }
   const std::vector<symbolic::Expression> get_invariant() const {
-    // ******* Debugging *******
-    const symbolic::Expression y{symbolic_state_[0]};
-    std::vector<symbolic::Expression> invariant;
-    invariant.push_back(y);
-    // *************************
-
-    return invariant;
+    return invariant_;
   }
   std::vector<symbolic::Expression>* get_mutable_invariant() {
     return &invariant_;
@@ -124,14 +135,13 @@ class ModalSubsystem {
   void set_intial_conditions(std::vector<symbolic::Expression>& init) {
     initial_conditions_ = init;
   }
-  // TODO(jadecastro): Do we really need the following two getters?
-  // TODO: const?
   PortId get_input_port_id(const int index) const {
-    DRAKE_DEMAND(index >=0 && index < (int)input_port_ids_.size());
+    DRAKE_DEMAND(index >=0 && index < static_cast<int>(input_port_ids_.size()));
     return input_port_ids_[index];
   }
   PortId get_output_port_id(const int index) const {
-    DRAKE_DEMAND(index >=0 && index < (int)output_port_ids_.size());
+    DRAKE_DEMAND(index >=0 &&
+                 index < static_cast<int>(output_port_ids_.size()));
     return output_port_ids_[index];
   }
 
@@ -142,17 +152,11 @@ class ModalSubsystem {
   };
 
   /// Returns a clone that includes a deep copy of all the output ports.
-  // TODO(jadecastro): Decide whether or not we actually need ModalSubsystems to
-  // be unique_ptr, and hence need this function.
-  //   **** Deprecating this function since it needs to be reconstructed.
   unique_ptr<ModalSubsystem<T>> Clone() const {
-
-    std::cerr << " Cloning...." << std::endl;
     DRAKE_DEMAND(system_ != nullptr);
     shared_ptr<System<T>> sys = system_;
     ModalSubsystem<T>* clone =
-        new ModalSubsystem<T>(mode_id_, sys,
-                              invariant_, initial_conditions_,
+        new ModalSubsystem<T>(mode_id_, sys, invariant_, initial_conditions_,
                               input_port_ids_, output_port_ids_);
     DRAKE_DEMAND(clone != nullptr);
     return unique_ptr<ModalSubsystem<T>>(clone);
@@ -171,7 +175,14 @@ class ModalSubsystem {
     const int num_xc = context->get_continuous_state_vector().size();
     for (int i = 0; i < num_xc; ++i) {
       std::ostringstream key;
-      key << "x" << i;
+      key << "xc" << i;
+      symbolic::Variable state_var{key.str()};
+      symbolic_state_.emplace_back(state_var);
+    }
+    const int num_xd = context->get_num_discrete_state_groups();
+    for (int i = 0; i < num_xd; ++i) {
+      std::ostringstream key;
+      key << "xd" << i;
       symbolic::Variable state_var{key.str()};
       symbolic_state_.emplace_back(state_var);
     }
@@ -196,11 +207,9 @@ class ModalSubsystem {
   // TODO(jadecastro): Store symbolic versions of the inputs also.
 };
 
-/// The HybridAutomatonContext is a container for all of the data necessary to
-/// uniquely determine the state of a HybridAutomaton (HA).  It contains the
-/// context and output for active ModalSubsystem, as chosen by
-/// HybridAutomaton. In addition, it augments the subsystem contexts with an
-/// abstract state designating the active mode.
+/// The HybridAutomatonContext contains the context and output for the active
+/// ModalSubsystem, as chosen by HybridAutomaton. In addition, it augments the
+/// subsystem contexts with an abstract state designating the active mode.
 ///
 /// In general, users should not need to interact with a HybridAutomatonContext
 /// directly. Use the accessors on Hybrid Automaton instead.
@@ -263,9 +272,7 @@ class HybridAutomatonContext : public Context<T> {
   /// User code should not call this method. It is for use during HA context
   /// allocation only.
   void ExportOutput(const PortId& port_id) {
-    cerr << " ExportOutput 1" << endl;
     modal_subsystem_->get_mutable_output_port_ids()->emplace_back(port_id);
-    cerr << " ExportOutput 2" << endl;
   }
 
   void ExportOutput(const std::vector<PortId>& port_ids) {

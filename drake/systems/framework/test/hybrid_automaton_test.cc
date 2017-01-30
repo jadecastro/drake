@@ -21,9 +21,9 @@ constexpr int kNumOutports = 1;
 constexpr int kStateDimension = 2;
 constexpr double kCoeffOfRestitution = 0.7;
 
-class ExampleHybridAutomaton : public HybridAutomaton<double> {
+class BouncingBall : public HybridAutomaton<double> {
  public:
-  explicit ExampleHybridAutomaton() {
+  explicit BouncingBall() {
     HybridAutomatonBuilder<double> builder;
 
     builder.set_num_expected_input_ports(kNumInports);
@@ -39,12 +39,11 @@ class ExampleHybridAutomaton : public HybridAutomaton<double> {
     //bouncing_ball::Ball<double> ball;
 
     ModalSubsystem<double> mss = builder.AddModalSubsystem(
-        std::move(ball), inports, outports,
-        kModeIdBall);
+        std::move(ball), inports, outports, kModeIdBall);
 
     ball_subsystem_ = &mss;
     ball_ = ball_subsystem_->get_system();
-    // TODO(jadecastro): symbolic::Variables?
+    // TODO(jadecastro): Variable -> Variables?
     std::vector<symbolic::Variable> x =
         ball_subsystem_->get_symbolic_state_variables();
 
@@ -53,18 +52,20 @@ class ExampleHybridAutomaton : public HybridAutomaton<double> {
     const symbolic::Expression y{x[0]};
     const symbolic::Expression ydot{x[1]};
 
-    // Define the invariant to be simply y > 0.
+    // Define the invariant to be the open half space y > 0.
     symbolic::Expression invariant_ball{y};
     builder.AddInvariant(ball_subsystem_, invariant_ball);
 
     ModeTransition<double> trans =
         builder.AddModeTransition(*ball_subsystem_);
-    ball_to_ball_ = &trans;
+    bounce_transition_ = &trans;
 
-    // Define the reset map that negates the velocity and decrements by a factor
-    // of kCoeffOfRestitution.
-    std::vector<symbolic::Expression> reset{7, -kCoeffOfRestitution * ydot};
-    builder.AddReset(ball_to_ball_, reset);
+    // Define a reset map that negates the velocity and decrements it by a
+    // factor of kCoeffOfRestitution.
+    std::vector<symbolic::Expression> reset{y, -kCoeffOfRestitution * ydot};
+    builder.AddReset(bounce_transition_, reset);
+    std::cerr << " Reset size: " << bounce_transition_->get_reset().size()
+              << std::endl;
 
     builder.BuildInto(this);
   }
@@ -75,14 +76,14 @@ class ExampleHybridAutomaton : public HybridAutomaton<double> {
 
  private:
   ModalSubsystem<double>* ball_subsystem_ = nullptr;
-  ModeTransition<double>* ball_to_ball_ = nullptr;
+  ModeTransition<double>* bounce_transition_ = nullptr;
   const System<double>* ball_ = nullptr;
 };
 
 class HybridAutomatonTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    dut_ = std::make_unique<ExampleHybridAutomaton>();
+    dut_ = std::make_unique<BouncingBall>();
 
     context_ = dut_->CreateDefaultContext();
     output_ = dut_->AllocateOutput(*context_);
@@ -112,7 +113,7 @@ class HybridAutomatonTest : public ::testing::Test {
     return dut_->ball_subsystem();
   }
 
-  std::unique_ptr<ExampleHybridAutomaton> dut_;
+  std::unique_ptr<BouncingBall> dut_;
   std::unique_ptr<Context<double>> context_;
   std::unique_ptr<BasicVector<double>> input0_;
   std::unique_ptr<SystemOutput<double>> output_;
@@ -242,154 +243,6 @@ TEST_F(HybridAutomatonTest, ModeTransition) {
   EXPECT_EQ(expected_output0[0], output0->get_value()[0]);
   EXPECT_EQ(expected_output0[1], output0->get_value()[1]);
 }
-
-/*
-class DiagramOfDiagramsTest : public ::testing::Test {
- protected:
-  void SetUp() override {
-    DiagramBuilder<double> builder;
-    subdiagram0_ = builder.AddSystem<ExampleDiagram>(kSize);
-    subdiagram0_->set_name("subdiagram0");
-    subdiagram1_ = builder.AddSystem<ExampleDiagram>(kSize);
-    subdiagram1_->set_name("subdiagram1");
-
-    // Hook up the two diagrams in portwise series.
-    for (int i = 0; i < 3; i++) {
-      builder.ExportInput(subdiagram0_->get_input_port(i));
-      builder.Connect(subdiagram0_->get_output_port(i),
-                      subdiagram1_->get_input_port(i));
-      builder.ExportOutput(subdiagram1_->get_output_port(i));
-    }
-
-    diagram_ = builder.Build();
-    diagram_->set_name("DiagramOfDiagrams");
-
-    context_ = diagram_->CreateDefaultContext();
-    output_ = diagram_->AllocateOutput(*context_);
-
-    input0_ = BasicVector<double>::Make({8});
-    input1_ = BasicVector<double>::Make({64});
-    input2_ = BasicVector<double>::Make({512});
-
-    context_->SetInputPort(0, MakeInput(std::move(input0_)));
-    context_->SetInputPort(1, MakeInput(std::move(input1_)));
-    context_->SetInputPort(2, MakeInput(std::move(input2_)));
-
-    // Initialize the integrator states.
-    Context<double>* d0_context =
-        diagram_->GetMutableSubsystemContext(context_.get(), subdiagram0_);
-    Context<double>* d1_context =
-        diagram_->GetMutableSubsystemContext(context_.get(), subdiagram1_);
-
-    State<double>* integrator0_x = subdiagram0_->GetMutableSubsystemState(
-        d0_context, subdiagram0_->integrator0());
-    integrator0_x->get_mutable_continuous_state()
-        ->get_mutable_vector()->SetAtIndex(0, 3);
-
-    State<double>* integrator1_x = subdiagram0_->GetMutableSubsystemState(
-        d0_context, subdiagram0_->integrator1());
-    integrator1_x->get_mutable_continuous_state()
-        ->get_mutable_vector()->SetAtIndex(0, 9);
-
-    State<double>* integrator2_x = subdiagram1_->GetMutableSubsystemState(
-        d1_context, subdiagram1_->integrator0());
-    integrator2_x->get_mutable_continuous_state()
-        ->get_mutable_vector()->SetAtIndex(0, 27);
-
-    State<double>* integrator3_x = subdiagram1_->GetMutableSubsystemState(
-        d1_context, subdiagram1_->integrator1());
-    integrator3_x->get_mutable_continuous_state()
-        ->get_mutable_vector()->SetAtIndex(0, 81);
-  }
-
-  const int kSize = 1;
-
-  std::unique_ptr<Diagram<double>> diagram_ = nullptr;
-  ExampleDiagram* subdiagram0_ = nullptr;
-  ExampleDiagram* subdiagram1_ = nullptr;
-
-  std::unique_ptr<BasicVector<double>> input0_;
-  std::unique_ptr<BasicVector<double>> input1_;
-  std::unique_ptr<BasicVector<double>> input2_;
-
-  std::unique_ptr<Context<double>> context_;
-  std::unique_ptr<SystemOutput<double>> output_;
-};
-
-// Tests a diagram composed of hybrid automata.
-TEST_F(DiagramOfHybridAutomata, EvalOutput) {
-  diagram_->EvalOutput(*context_, output_.get());
-  // The outputs of subsystem0_ are:
-  //   output0 = 8 + 64 + 512 = 584
-  //   output1 = output0 + 8 + 64 = 656
-  //   output2 = 9 (state of integrator1_)
-
-  // So, the outputs of subsytem1_, and thus of the whole diagram, are:
-  //   output0 = 584 + 656 + 9 = 1249
-  //   output1 = output0 + 584 + 656 = 2489
-  //   output2 = 81 (state of integrator1_)
-  EXPECT_EQ(1249, output_->get_vector_data(0)->get_value().x());
-  EXPECT_EQ(2489, output_->get_vector_data(1)->get_value().x());
-  EXPECT_EQ(81, output_->get_vector_data(2)->get_value().x());
-}
-
-// PublishingSystem has an input port for a single double. It publishes that
-// double to a function provided in the constructor.
-class PublishingSystem : public LeafSystem<double> {
- public:
-  explicit PublishingSystem(std::function<void(int)> callback)
-      : callback_(callback) {
-    this->DeclareInputPort(kVectorValued, 1, kInheritedSampling);
-  }
-
-  void EvalOutput(const Context<double>& context,
-                  SystemOutput<double>* output) const override {}
-
- protected:
-  void DoPublish(const Context<double>& context) const override {
-    CheckValidContext(context);
-    callback_(this->EvalVectorInput(context, 0)->get_value()[0]);
-  }
-
- private:
-  std::function<void(int)> callback_;
-};
-
-  // TODO: Question: What does it mean to publish a variable?
-// PublishNumberDiagram publishes a double provided to its constructor.
-class PublishNumberDiagram : public Diagram<double> {
- public:
-  explicit PublishNumberDiagram(double constant) : Diagram<double>() {
-    DiagramBuilder<double> builder;
-
-    constant_ =
-        builder.AddSystem<ConstantVectorSource<double>>(Vector1d{constant});
-    publisher_ =
-        builder.AddSystem<PublishingSystem>([this](double v) { this->set(v); });
-
-    builder.Connect(constant_->get_output_port(),
-                    publisher_->get_input_port(0));
-    builder.BuildInto(this);
-  }
-
-  double get() const { return published_value_; }
-
- private:
-  void set(double value) { published_value_ = value; }
-
-  ConstantVectorSource<double>* constant_ = nullptr;
-  PublishingSystem* publisher_ = nullptr;
-  double published_value_ = 0;
-};
-
-GTEST_TEST(DiagramPublishTest, Publish) {
-  PublishNumberDiagram publishing_diagram(42.0);
-  EXPECT_EQ(0, publishing_diagram.get());
-  auto context = publishing_diagram.CreateDefaultContext();
-  publishing_diagram.Publish(*context);
-  EXPECT_EQ(42.0, publishing_diagram.get());
-}
-  */
 
 }  // namespace
 }  // namespace systems
