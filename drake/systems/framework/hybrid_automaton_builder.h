@@ -84,7 +84,15 @@ class HybridAutomatonBuilder {
                    static_cast<int>(inport_ids.size()));
       DRAKE_DEMAND(modal_subsystems_[0]->get_num_output_ports() ==
                    static_cast<int>(outport_ids.size()));
+      // Fail if the introduced system doesn't share the same direct-feedthrough
+      // status as the existing systems.
+      auto system1 = modal_subsystems_.front()->get_system();
+      DRAKE_DEMAND(system->has_any_direct_feedthrough() ==
+                   system1->has_any_direct_feedthrough());
     }
+
+    // TODO(jadecastro): Check the dimension of the continous and discrete
+    // ports here; also check the type of the abstract ports.
 
     // Populate a ModalSubsystem
     ModalSubsystem<T> modal_subsystem =
@@ -114,13 +122,17 @@ class HybridAutomatonBuilder {
     DRAKE_DEMAND(!context0->is_stateless());
 
     if (modal_subsystems_.size() > 0) {
-      auto& system1 = modal_subsystems_.front->get_system();
+      auto system1 = modal_subsystems_.front()->get_system();
       auto context1 = system1->CreateDefaultContext();
       auto output1 = system1->AllocateOutput(*context1);
       DRAKE_DEMAND(modal_subsystems_[0]->get_num_input_ports() ==
                    context1->get_num_input_ports());
       DRAKE_DEMAND(modal_subsystems_[0]->get_num_output_ports() ==
                    output1->get_num_ports());
+      // Fail if the introduced system doesn't share the same direct-feedthrough
+      // status as the existing systems.
+      DRAKE_DEMAND(system->has_any_direct_feedthrough() ==
+                   system1->has_any_direct_feedthrough());
     }
 
     // Populate a ModalSubsystem

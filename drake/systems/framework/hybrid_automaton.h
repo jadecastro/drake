@@ -36,7 +36,8 @@ class HybridAutomatonBuilder;
 
 namespace internal {
 
-/// Returns true if any of the events in @p actions has type @p type.
+/// A callback that returns true if any of the events in @p actions has type @p
+/// type.
 template <typename T>
 bool HasEvent(const UpdateActions<T> actions,
               typename DiscreteEvent<T>::ActionType type) {
@@ -80,32 +81,6 @@ class HybridAutomatonOutput : public SystemOutput<T> {
   std::vector<OutputPort*> ports_;
 };
 
-// TODO(jadecastro): I don't think we need these utilities, however keeping it
-// around until absolutely sure.
-/*
-template <typename T>
-class DiagramTimeDerivatives : public DiagramContinuousState<T> {
- public:
-  explicit DiagramTimeDerivatives(
-      std::vector<unique_ptr<ContinuousState<T>>> substates)
-      : DiagramContinuousState<T>(Unpack(substates)),
-        substates_(std::move(substates)) {}
-
-  ~DiagramTimeDerivatives() override {}
-
- private:
-  template <typename U>
-  std::vector<U*> Unpack(const std::vector<unique_ptr<U>>& in) {
-    std::vector<U*> out(in.size());
-    std::transform(in.begin(), in.end(), out.begin(),
-                   [](auto& p) { return p.get(); });
-    return out;
-  }
-
-  std::vector<unique_ptr<ContinuousState<T>>> substates_;
-};
-*/
-
 }  // namespace internal
 
 
@@ -120,14 +95,10 @@ class ModeTransition {
       const std::pair<ModeId, ModeId> edge,
       std::vector<symbolic::Expression> guard,
       std::vector<symbolic::Expression> reset)
-      : edge_(edge), guard_(guard), reset_(reset) {
-    //CreateSymbolicVariables();
-}
+      : edge_(edge), guard_(guard), reset_(reset) {}
 
   explicit ModeTransition(
-      const std::pair<ModeId, ModeId> edge) : edge_(edge) {
-    //CreateSymbolicVariables();
-  }
+      const std::pair<ModeId, ModeId> edge) : edge_(edge) {}
 
   const std::pair<ModeId, ModeId> get_edge() const { return edge_; }
 
@@ -144,18 +115,7 @@ class ModeTransition {
   // TODO(jadecastro): Perform checks?
   void set_guard(std::vector<symbolic::Expression>& guard) { guard_ = guard; }
 
-  const std::vector<symbolic::Expression> get_reset() const {
-    // ****************** Debug ***************
-    //const symbolic::Expression y{symbolic_state_[0]};
-    //const symbolic::Expression ydot{symbolic_state_[1]};
-    
-    //std::vector<symbolic::Expression> reset{y, -0.7 * ydot};
-
-    //std::cerr << " (get_reset) Reset size: " << reset.size() << std::endl;
-    // ****************************************
-    
-    return reset_;
-  }
+  const std::vector<symbolic::Expression> get_reset() const { return reset_; }
 
   std::vector<symbolic::Expression>* get_mutable_reset() { return &reset_; }
 
@@ -169,12 +129,6 @@ class ModeTransition {
     reset_ = reset;
   }
 
-  // TODO(jadecastro): Check for consistency of any incoming invariants or
-  // initial condition formulas with the given symbolic_state_.
-  //const std::vector<symbolic::Variable>& get_symbolic_state_variables() const {
-  //   return symbolic_state_;
-  //};
-
   /// Returns a clone that includes a deep copy of all the output ports.
   // TODO(jadecastro): Decide whether or not we actually need ModalSubsystems to
   // be unique_ptr, and hence need this function.
@@ -186,26 +140,6 @@ class ModeTransition {
   }
 
  private:
-  /*
-  void CreateSymbolicVariables() {
-    // TODO(jadecastro): Either we need to modify the system API to allow us
-    // access to the underlying state dimensions without creating a throwaway
-    // context *or* we just allocate the context here and output it along with
-    // the ModalSubsystem.
-    std::unique_ptr<Context<T>> context =
-        edge_.first->get_system()->AllocateContext();
-
-    // TODO(jadecastro): Implement this to handle both continuous state @p x and
-    // input @p u.
-    const int num_xc = context->get_continuous_state_vector().size();
-    for (int i = 0; i < num_xc; ++i) {
-      std::ostringstream key;
-      key << "x" << i;
-      symbolic::Variable state_var{key.str()};
-      symbolic_state_.emplace_back(state_var);
-    }
-  }
-  */
 
   // Pair of ModalSubsystems representing the edge for this transition.
   std::pair<ModeId, ModeId> edge_;
@@ -213,13 +147,6 @@ class ModeTransition {
   std::vector<symbolic::Expression> guard_;  // TODO: Eigen??
   // Expression representing the reset map for this edge.
   std::vector<symbolic::Expression> reset_;  // TODO: Eigen??
-
-  // A vector of symbolic variables for each of the continuous states in the
-  // system.
-  //std::vector<symbolic::Variable> symbolic_state_;
-  // TODO(jadecastro): Store symbolic versions of the inputs also.
-  // TODO(jadecastro): This is redundant -- combine with the one in
-  // ModalSubsystem.
 };
 
 /// HybridAutomaton collects all of the system-related data necessary for
@@ -242,46 +169,11 @@ class HybridAutomaton : public System<T>,
   explicit HybridAutomaton(ModeId mode_init) : mode_id_init_(mode_init) {}
   ~HybridAutomaton() override {}
 
-  ///
-  // symbolic::Expression* get_mutable_invariant(int index) {
-  //  DRAKE_ASSERT(index >= 0 && index < size());
-  //
-  //  return data_[index];
-  //}
-
-  /// Returns the list of modal subsystems.
-  //std::vector<const ModalSubsystem<T>*> GetModalSubsystems() const {
-    /*
-    std::vector<const ModalSubsystem<T>*> result;
-    result.reserve(modal_subsystems_.size());
-    for (const auto& mss : modal_subsystems_) {
-      result.push_back(mss);
-    }
-    */
-  //std::vector<const ModalSubsystem<T>*> GetModalSubsystems() const {
-  //  return modal_subsystems_;
-  //}
-
   /// Returns true if any modal subsystem has direct feedthrough.
   // TODO(jadecastro): It seems this should be re-computed for each mode.
   bool has_any_direct_feedthrough() const override {
     return active_has_any_direct_feedthrough_;
   }
-
-  // *********************** DEBUGGING
-  int DBG_get_num_invts() const {
-    return modal_subsystems_[0]->get_invariant().size();
-  }
-  int DBG_get_num_ics() const {
-    return modal_subsystems_[0]->get_initial_conditions().size();
-  }
-  int DBG_get_mode_id() {
-    return modal_subsystems_[0]->get_mode_id();
-  }
-  int DBG_get_blah_id() const {
-    return modal_subsystems_[0]->get_mode_id();
-  }
-  // ***********************************
 
   void set_mode_id_init(const ModeId mode_id) { mode_id_init_ = mode_id; }
 
@@ -541,23 +433,6 @@ class HybridAutomaton : public System<T>,
   }
 
   /// @name Context-Related Accessors
-  /// Returns a constant reference to the subcontext that corresponds to the
-  /// system @p subsystem.
-  /// Classes inheriting from %Diagram need access to this method in order to
-  /// pass their constituent subsystems the apropriate subcontext. Aborts if
-  /// @p subsystem is not actually a subsystem of this diagram.
-
-  // TODO(jadecastro): Decide what to do with this. Seems like it's never used,
-  // since we're always calling the HybridAutomatonContext version of it.
-  /*
-  const Context<T>& GetSubsystemContext(
-      const Context<T>& context, const ModalSubystem* modal_subsystem) const {
-    DRAKE_DEMAND(modal_subsystem != nullptr);
-    auto& hybrid_context =
-        dynamic_cast<const HybridAutomatonContext<T>&>(context);
-    return *hybrid_context.GetSubsystemContext();
-  }
-  */
 
   /// Returns the subcontext that corresponds to the system @p subsystem.
   /// Classes inheriting from %Diagram need access to this method in order to
@@ -800,19 +675,37 @@ class HybridAutomaton : public System<T>,
 
     // Evaluate the function.
     // TODO(jadecastro): Verify consistency of the state dimensions.
-    const systems::VectorBase<T>& state = context.get_continuous_state_vector();
 
-    // TODO(jadecastro): Overload for Eigen arguments.
-    symbolic::Environment state_env;
+    const systems::VectorBase<T>& xc = context.get_continuous_state_vector();
+    // TODO(jadecastro): Replace the xc_sym_ with the following implementation.
+    //const std::vector<symbolic::Variable> xc_sym =
+    //    context.GetModalSubsystem()->get_symbolic_continuous_states();
+    //std::vector<symbolic::Variable> xc_sym;
+    //for (auto it :
+    //         context.GetModalSubsystem()->get_symbolic_continuous_states()) {
+    // xc_sym.push_back(std::move(it));
+    //}
+
+    symbolic::Environment xc_env;
     //std::vector<symbolic::Variable> state_sym =
     //    context.get_symbolic_state_variables();
     // std::vector<symbolic::Variable> state_sym =
     //    modal_subsystems_[0]->get_symbolic_state_variables();
-    for (int i = 0; i < state.size(); i++) {
-      state_env.insert(state_sym_[i], state[i]);
+    for (int i = 0; i < xc.size(); i++) {
+      xc_env.insert(xc_sym_[i], xc[i]);
     }
 
-    return expression.Evaluate(state_env);
+    // TODO(jadecastro): Implement for discrete state groups.
+    //const systems::VectorBase<T>& xd = context.get_discrete_state();
+    //const std::vector<symbolic::Variable> xd_sym =
+    //    context.GetModalSubsystem()->get_symbolic_discrete_state();
+    //symbolic::Environment xd_env;
+    //for (int i = 0; i < xd.size(); i++) {
+    //  xd_env.insert(xd_sym[i], xd[i]);
+    //}
+
+    return expression.Evaluate(xc_env);
+    // TODO(jadecastro): Return xd_env also.
   }
 
   // Modifies the HybridAutomatonContext according to the reset map.
@@ -835,6 +728,8 @@ class HybridAutomaton : public System<T>,
     xc->get_mutable_vector()->SetFromVector(values);
   }
 
+  // Performs all the required operations required to link the desired subsystem
+  // to the current HybridAutomatonContext.
   void CreateAndRegisterSystem(const ModalSubsystem<T>* mss,
                                HybridAutomatonContext<T>* hybrid_context)
       const {
@@ -842,10 +737,6 @@ class HybridAutomaton : public System<T>,
     unique_ptr<ModalSubsystem<T>> mss_new = mss->Clone();
     auto subcontext = mss_new->get_system()->CreateDefaultContext();
     auto suboutput = mss_new->get_system()->AllocateOutput(*subcontext);
-
-    // Store any vital info about the modal subsystem we will be installing.
-    // active_has_any_direct_feedthrough_ =
-    //    mss_new->get_system()->has_any_direct_feedthrough();
 
     hybrid_context->ExportInput(mss_new->get_input_port_ids());
     hybrid_context->ExportOutput(mss_new->get_output_port_ids());
@@ -909,9 +800,10 @@ class HybridAutomaton : public System<T>,
     DRAKE_DEMAND(mode_transitions_.empty());
     DRAKE_DEMAND(initial_modes_.empty());
 
+    // TODO(jadecastro): Remove and replace with an in-place version.
     for (auto it : state_machine.modal_subsystems[0]->
-             get_symbolic_state_variables()) {
-      state_sym_.push_back(std::move(it));
+             get_symbolic_continuous_states()) {
+      xc_sym_.push_back(std::move(it));
     }
 
     for (auto& mss : state_machine.modal_subsystems) {
@@ -1039,9 +931,6 @@ class HybridAutomaton : public System<T>,
 
     // Add this port to our externally visible topology.
     const auto& subsystem_ports = subsystem.get_output_ports();
-    //cerr << " Num output ports: " << subsystem.get_output_ports().size()
-    //     << endl;
-    //cerr << " port_id: " << port_id << endl;
     if (port_id < 0 || port_id >= static_cast<int>(subsystem_ports.size())) {
       throw std::out_of_range("Output port out of range.");
     }
@@ -1109,7 +998,9 @@ class HybridAutomaton : public System<T>,
   HybridAutomaton(HybridAutomaton<T>&& other) = delete;
   HybridAutomaton& operator=(HybridAutomaton<T>&& other) = delete;
 
-  bool active_has_any_direct_feedthrough_;
+  // TODO(jadecastro): System swapping without the const-ness restriction on
+  // direct-feedthrough of systems.
+  bool active_has_any_direct_feedthrough_{false};
 
   // TODO(jadecastro): Better to store/access data as a map or a multimap?
   // TODO(jadecastro): Shared ptr
@@ -1128,7 +1019,8 @@ class HybridAutomaton : public System<T>,
 
   // Store symbolic variables here.
   // TODO(jadecatro): Remove this.
-  std::vector<symbolic::Variable> state_sym_;
+  std::vector<symbolic::Variable> xc_sym_;
+
   // TODO(jadecastro): symbolic::Variable throws an obscure error when a
   // variable is copied rather than moved.
 

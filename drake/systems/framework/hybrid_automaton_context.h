@@ -60,16 +60,7 @@ class ModalSubsystem {
       : mode_id_(mode_id), system_(std::move(system)), invariant_(invariant),
         initial_conditions_(initial_conditions) {
     CreateSymbolicVariables();
-
-    // Populate the input and output ports with the full complement of system
-    // inputs and outputs.
-    input_port_ids_.resize(system->get_num_input_ports());
-    std::iota (std::begin(input_port_ids_), std::end(input_port_ids_), 0);
-    for (auto i : input_port_ids_) {
-      std::cerr << " id: " << i << std::endl;
-    }
-    output_port_ids_.resize(system->get_num_output_ports());
-    std::iota (std::begin(output_port_ids_), std::end(output_port_ids_), 0);
+    PopulateDefaultPorts();
   }
 
   explicit ModalSubsystem(
@@ -84,16 +75,7 @@ class ModalSubsystem {
       ModeId mode_id, shared_ptr<System<T>> system)
       : mode_id_(mode_id), system_(std::move(system)) {
     CreateSymbolicVariables();
-
-    // Populate the input and output ports with the full complement of system
-    // inputs and outputs.
-    input_port_ids_.resize(system->get_num_input_ports());
-    std::iota (std::begin(input_port_ids_), std::end(input_port_ids_), 0);
-    for (auto i : input_port_ids_) {
-      std::cerr << " id: " << i << std::endl;
-    }
-    //output_port_ids_.resize(system->get_num_output_ports());
-    //std::iota (std::begin(output_port_ids_), std::end(output_port_ids_), 0);
+    PopulateDefaultPorts();
   }
 
   ModeId get_mode_id() const { return mode_id_; }
@@ -147,8 +129,12 @@ class ModalSubsystem {
 
   // TODO(jadecastro): Check for consistency of any incoming invariants or
   // initial condition formulas with the given symbolic_state_.
-  const std::vector<symbolic::Variable>& get_symbolic_state_variables() const {
-    return symbolic_state_;
+  const std::vector<symbolic::Variable>& get_symbolic_continuous_states()
+      const {
+    return xc_symbolic_;
+  };
+  const std::vector<symbolic::Variable>& get_symbolic_discrete_states() const {
+    return xd_symbolic_;
   };
 
   /// Returns a clone that includes a deep copy of all the output ports.
@@ -163,6 +149,7 @@ class ModalSubsystem {
   }
 
  private:
+  // Create symbolic variables based on the expected context for this subsystem.
   void CreateSymbolicVariables() {
     // TODO(jadecastro): Either we need to modify the system API to allow us
     // access to the underlying state dimensions without creating a throwaway
@@ -177,21 +164,30 @@ class ModalSubsystem {
       std::ostringstream key;
       key << "xc" << i;
       symbolic::Variable state_var{key.str()};
-      symbolic_state_.emplace_back(state_var);
+      xc_symbolic_.emplace_back(state_var);
     }
     const int num_xd = context->get_num_discrete_state_groups();
     for (int i = 0; i < num_xd; ++i) {
       std::ostringstream key;
       key << "xd" << i;
       symbolic::Variable state_var{key.str()};
-      symbolic_state_.emplace_back(state_var);
+      xd_symbolic_.emplace_back(state_var);
     }
+  }
+
+  // Populate the input and output ports with the full complement of system
+  // inputs and outputs.
+  void PopulateDefaultPorts() {
+    input_port_ids_.resize(system_->get_num_input_ports());
+    std::iota (std::begin(input_port_ids_), std::end(input_port_ids_), 0);
+    output_port_ids_.resize(system_->get_num_output_ports());
+    std::iota (std::begin(output_port_ids_), std::end(output_port_ids_), 0);
   }
 
   // Index for this mode.
   ModeId mode_id_;
   // TODO(jadecastro): Allow ModeId to take on an `enum` here in place of the
-  // `int`.
+  // `int`?
   // The system model.
   shared_ptr<System<T>> system_;
   // Expression representing the invariant for this mode.
@@ -203,7 +199,8 @@ class ModalSubsystem {
   std::vector<PortId> output_port_ids_;
   // A vector of symbolic variables for each of the continuous states in the
   // system.
-  std::vector<symbolic::Variable> symbolic_state_;
+  std::vector<symbolic::Variable> xc_symbolic_;
+  std::vector<symbolic::Variable> xd_symbolic_;
   // TODO(jadecastro): Store symbolic versions of the inputs also.
 };
 
@@ -242,7 +239,6 @@ class HybridAutomatonContext : public Context<T> {
 
   // ADD COMMENTS
   void DeRegisterSubsystem() {
-    cerr << " De-Registering!!" << endl;
     context_.release();
     output_.release();
     //modal_subsystem_.release();
@@ -390,15 +386,25 @@ class HybridAutomatonContext : public Context<T> {
     mss = GetModalSubsystem()->get_mode_id();
   }
 
-  // Mandatory overrides.
+  /// Returns a reference to the continuous symbolic state vector.
+  //const std::vector<symbolic::Variable>& get_symbolic_continuous_states()
+  //    const {
+  //  ModalSubsystem<T>* modal_subsystem = GetModalSubsystem();
+  //  return modal_subsystem->get_symbolic_continuous_states();
+  //};
+
+  /// Returns a reference to the discrete symbolic state vector.
+  //const std::vector<symbolic::Variable>& get_symbolic_discrete_states() const {
+  //   ModalSubsystem<T>* modal_subsystem = GetModalSubsystem();
+  // return modal_subsystem->get_symbolic_discrete_states();
+  //};
+
+  /// @name Mandatory overrides.
+  /// Returns a reference to the state vector.
   const State<T>& get_state() const override { return *state_; }
 
+  /// Returns a pointer to the state vector.
   State<T>* get_mutable_state() override { return state_; }
-
-  const std::vector<symbolic::Variable>& get_symbolic_state_variables() const {
-    ModalSubsystem<T>* modal_subsystem = GetModalSubsystem();
-    return modal_subsystem->get_symbolic_state_variables();
-  };
 
  protected:
   HybridAutomatonContext<T>* DoClone() const override {

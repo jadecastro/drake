@@ -44,8 +44,8 @@ class BouncingBall : public HybridAutomaton<double> {
     ball_subsystem_ = &mss;
     ball_ = ball_subsystem_->get_system();
     // TODO(jadecastro): Variable -> Variables?
-    std::vector<symbolic::Variable> x =
-        ball_subsystem_->get_symbolic_state_variables();
+    const std::vector<symbolic::Variable> x =
+        ball_subsystem_->get_symbolic_continuous_states();
 
     // TODO(jadecastro): Decide on a cleaner way of auto-generate the named
     // getters from states, possibly leverage the .sh script for states.

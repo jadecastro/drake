@@ -26,6 +26,7 @@ constexpr double kTime = 12.0;
 class HybridAutomatonContextTest : public ::testing::Test {
  protected:
   void SetUp() override {
+
     integrator0_.reset(new Integrator<double>(kSize));
     integrator1_.reset(new Integrator<double>(kSize));
 
@@ -34,17 +35,16 @@ class HybridAutomatonContextTest : public ::testing::Test {
 
     // Instantiate a new modal subsystem.  Implicitly, one input and one output
     // are exported.
-    const int mode_id = 0;
-    //std::unique_ptr<ModalSubsystem<double>> mss0(new ModalSubsystem<double>(
-    //    mode_id, integrator0_.get()));
+    const int mode_id = 42;
     const ModalSubsystem<double> mss0 =
-        ModalSubsystem<double>(mode_id, std::move(integrator0_));
+        ModalSubsystem<double>(mode_id, shared_ptr<System<double>>(
+            std::move(integrator0_)));
 
-    //const ModalSubsystem<double> mss0 =
-    //    ModalSubsystem(mode_id, integrator0_.get());
-    auto subcontext0 = integrator0_->CreateDefaultContext();
-    auto suboutput0 = integrator0_->AllocateOutput(*subcontext0);
+    // Allocate the context and outputs.
+    auto subcontext0 = mss0.get_system()->CreateDefaultContext();
+    auto suboutput0 = mss0.get_system()->AllocateOutput(*subcontext0);
 
+    // Register the system in the HA Context for the first time.
     context_->RegisterSubsystem(std::make_unique<ModalSubsystem<double>>(mss0),
                                 std::move(subcontext0),
                                 std::move(suboutput0));
@@ -139,13 +139,16 @@ TEST_F(HybridAutomatonContextTest, HybridAutomatonState) {
 }
 
 // Tests that a change in the ModalSubsystem is reflected in the AbstractState.
-TEST_F(HybridAutomatonContextTest, HybridAutomatonMode) {
+TEST_F(HybridAutomatonContextTest, SwapSystems) {
   const int mode_id = 555;
+
+  // Register a new system as its own ModalSubsystem.
   std::unique_ptr<ModalSubsystem<double>> mss(new ModalSubsystem<double>(
-      mode_id, std::move(integrator1_)));
-  //ModalSubsystem<double> mss1 = ModalSubsystem(mode_id, integrator1_.get());
-  auto subcontext1 = integrator1_->CreateDefaultContext();
-  auto suboutput1 = integrator1_->AllocateOutput(*subcontext1);
+      mode_id, shared_ptr<System<double>>(std::move(integrator1_))));
+
+  auto subcontext1 = mss->get_system()->CreateDefaultContext();
+  auto suboutput1 = mss->get_system()->AllocateOutput(*subcontext1);
+
   context_->DeRegisterSubsystem();
   context_->RegisterSubsystem(std::move(mss), std::move(subcontext1),
                               std::move(suboutput1));
