@@ -149,7 +149,7 @@ TEST_F(DutTest, Path) {
   EXPECT_EQ("::Unicode Snowman's Favorite Diagram!!1!☃!::adder0", path);
 }
   */
-TEST_F(HybridAutomatonTest, EvalTimeDerivatives) {
+TEST_F(HybridAutomatonTest, DoCalcTimeDerivatives) {
   //AttachInputs();
   std::unique_ptr<ContinuousState<double>> derivatives =
       dut_->AllocateTimeDerivatives();
@@ -159,7 +159,7 @@ TEST_F(HybridAutomatonTest, EvalTimeDerivatives) {
   x0 << 10., 0.;  /* pos. [m], vel. [m/s] */
   SetInitialConditions(x0);
 
-  dut_->EvalTimeDerivatives(*context_, derivatives.get());
+  dut_->DoCalcTimeDerivatives(*context_, derivatives.get());
 
   ASSERT_EQ(kStateDimension, derivatives->size());
   ASSERT_EQ(1, derivatives->get_generalized_position().size());
@@ -179,7 +179,7 @@ TEST_F(HybridAutomatonTest, CloneContext) {
   SetInitialConditions(x0);
 
   // Compute the output with the default inputs and sanity-check it.
-  dut_->EvalOutput(*context_, output_.get());
+  dut_->DoCalcOutput(*context_, output_.get());
 
   Vector2<double> expected_output0;
   expected_output0 << 10., 2.4;
@@ -195,7 +195,7 @@ TEST_F(HybridAutomatonTest, CloneContext) {
   SetInitialConditions(x0);
 
   // Recompute the output and check the values.
-  dut_->EvalOutput(*clone, output_.get());
+  dut_->DoCalcOutput(*clone, output_.get());
 
   Vector2<double> expected_output1;
   expected_output1 << 6.7, 3.3;
@@ -234,7 +234,7 @@ TEST_F(HybridAutomatonTest, ModeTransition) {
   dut_->PerformTransition(0, context_.get());
 
   // Compute the output.
-  dut_->EvalOutput(*context_, output_.get());
+  dut_->DoCalcOutput(*context_, output_.get());
 
   Vector2<double> expected_output0;
   expected_output0 << 10., 0.;

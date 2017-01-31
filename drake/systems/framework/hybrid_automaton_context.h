@@ -9,18 +9,10 @@
 #include <utility>
 #include <vector>
 
-// TODO: triage this list.
 #include "drake/common/symbolic_formula.h"
-//#include "drake/systems/framework/basic_vector.h"
 #include "drake/systems/framework/context.h"
 #include "drake/systems/framework/input_port_evaluator_interface.h"
-//#include "drake/systems/framework/state.h"
 #include "drake/systems/framework/system.h"
-//#include "drake/systems/framework/system_input.h"
-//#include "drake/systems/framework/system_output.h"
-
-// Debugging.
-//#include "drake/systems/framework/test_utilities/pack_value.h"
 
 namespace drake {
 namespace systems {
@@ -184,16 +176,16 @@ class ModalSubsystem {
     std::iota (std::begin(output_port_ids_), std::end(output_port_ids_), 0);
   }
 
-  // Index for this mode.
+  // Identifier for this mode.
   ModeId mode_id_;
   // TODO(jadecastro): Allow ModeId to take on an `enum` here in place of the
   // `int`?
   // The system model.
   shared_ptr<System<T>> system_;
   // Expression representing the invariant for this mode.
-  std::vector<symbolic::Expression> invariant_;  // TODO: Eigen??
+  std::vector<symbolic::Expression> invariant_;
   // Expression representing the initial conditions for this mode.
-  std::vector<symbolic::Expression> initial_conditions_;  // TODO: Eigen??
+  std::vector<symbolic::Expression> initial_conditions_;
   // Index set of the input and output ports.
   std::vector<PortId> input_port_ids_;
   std::vector<PortId> output_port_ids_;
@@ -264,9 +256,6 @@ class HybridAutomatonState : public State<T> {
     // The wrapper states do not own the subsystem state.
     this->set_abstract_state(std::make_unique<AbstractState>(
         std::move(hybrid_xm)));
-
-    //std::cerr << " MakeState: Abstract state: "
-    //          << this->template get_abstract_state<int>(0) << std::endl;
   }
 
  private:
@@ -296,7 +285,8 @@ class HybridAutomatonContext : public Context<T> {
   /// in a way that allows for dynamic re-sizing during discrete events.
   explicit HybridAutomatonContext() {}
 
-  // ADD COMMENTS
+  // Registers the ModalSubsystem by passing ownership its constituent data
+  // structures to this context.
   void RegisterSubsystem(unique_ptr<ModalSubsystem<T>> modal_subsystem,
                          unique_ptr<Context<T>> subcontext,
                          unique_ptr<SystemOutput<T>> suboutput) {
@@ -310,7 +300,7 @@ class HybridAutomatonContext : public Context<T> {
     //   `reset_context` along with `Initialize` and `release_context`?
   }
 
-  // ADD COMMENTS
+  // Relinquishes ownership of the current ModalSubsystem consitutent data.
   void DeRegisterSubsystem() {
     context_.release();
     output_.release();
@@ -327,11 +317,6 @@ class HybridAutomatonContext : public Context<T> {
   }
 
   void ExportInput(const std::vector<PortId>& port_ids) {
-    // Debugging.....
-    //DRAKE_DEMAND(context_ != nullptr);
-    //DRAKE_DEMAND(output_ != nullptr);
-    DRAKE_DEMAND(modal_subsystem_ != nullptr);
-
     for (auto& port_id : port_ids) { this->ExportInput(port_id); }
   }
 
@@ -352,9 +337,6 @@ class HybridAutomatonContext : public Context<T> {
   ///
   /// User code should not call this method. It is for use during
   /// HybridAutomaton context allocation only.
-  //
-  // TODO(jadecastro): This and DoClone has changed a bit in master... we'll
-  // have to refactor it slightly.
   void MakeState() {
     auto hybrid_state = std::make_unique<HybridAutomatonState<T>>();
     Context<T>* subcontext = context_.get();
@@ -364,10 +346,8 @@ class HybridAutomatonContext : public Context<T> {
     hybrid_state->set_mode_id(modal_subsystem_->get_mode_id());
     hybrid_state->Finalize();
 
-    state_ = hybrid_state.get();
+    state_ = std::move(hybrid_state);
   }
-  // TODO(jadecastro): Likely a temporary function 'till we wrangle with the API
-  // updates to Context<T>.
 
   /// Returns the output structure for a given constituent system at @p index.
   /// Aborts if @p index is out of bounds, or if no system has been added to the
@@ -394,15 +374,15 @@ class HybridAutomatonContext : public Context<T> {
     }
   }
 
+  /// Retrieves the input ports for the current active ModalSubsystem.
   int get_num_input_ports() const override {
     const ModalSubsystem<T>* modal_subsystem = GetModalSubsystem();
     DRAKE_DEMAND(modal_subsystem != nullptr);
     return modal_subsystem->get_num_input_ports();
   }
 
+  /// Retrieves the output ports for the current active ModalSubsystem.
   void SetInputPort(int port_index, unique_ptr<InputPort> port) override {
-    // TODO(jadecastro): DependentInputPort? (i.e. eval some output to get the
-    // input?)
     const ModalSubsystem<T>* modal_subsystem = GetModalSubsystem();
     DRAKE_DEMAND(modal_subsystem != nullptr);
     PortId subsystem_port_id = modal_subsystem->get_input_port_id(port_index);
@@ -410,46 +390,51 @@ class HybridAutomatonContext : public Context<T> {
         ->SetInputPort(subsystem_port_id, std::move(port));
   }
 
+  /// Retrieves a pointer to the current active ModalSubsystem.
   ModalSubsystem<T>* GetModalSubsystem() const {
     return modal_subsystem_.get();
   }
 
+  /// Retrieves the identity of the current modal subsystem.
   ModeId get_mode_id() const {
     const ModalSubsystem<T>* modal_subsystem = GetModalSubsystem();
     DRAKE_DEMAND(modal_subsystem != nullptr);
     return modal_subsystem->get_mode_id();
   }
 
-  // Updates the abstract value with the current active ModalSubsystem.
+  /// Updates the abstract value with the current active ModalSubsystem.
   void SetModalState() {
-    const int mss_index = this->get_mutable_abstract_state()->size() - 1;
-    //std::cerr << " mss_index: " << mss_index << std::endl;
+    auto abstract_state = this->get_mutable_abstract_state();
+    DRAKE_DEMAND(abstract_state != nullptr);
+
     //ModalSubsystem<T> mss = this->
     //    template get_mutable_abstract_state<ModalSubsystem<T>>(mss_index);
     // TODO(jadecastro): int vs. ModalSubsystem<T>?
-    this->template get_mutable_abstract_state<int>(mss_index) =
+    this->template get_mutable_abstract_state<int>(abstract_state->size()-1) =
         GetModalSubsystem()->get_mode_id();
   }
 
-  /// Returns a reference to the continuous symbolic state vector.
-  //const std::vector<symbolic::Variable>& get_symbolic_continuous_states()
-  //    const {
-  //  ModalSubsystem<T>* modal_subsystem = GetModalSubsystem();
-  //  return modal_subsystem->get_symbolic_continuous_states();
-  //};
+  /// Returns a pointer to the continuous symbolic state vector.
+  const std::vector<symbolic::Variable>& get_symbolic_continuous_states()
+      const {
+    ModalSubsystem<T>* modal_subsystem = GetModalSubsystem();
+    DRAKE_DEMAND(modal_subsystem != nullptr);
+    return modal_subsystem->get_symbolic_continuous_states();
+  };
 
-  /// Returns a reference to the discrete symbolic state vector.
-  //const std::vector<symbolic::Variable>& get_symbolic_discrete_states() const {
-  //   ModalSubsystem<T>* modal_subsystem = GetModalSubsystem();
-  // return modal_subsystem->get_symbolic_discrete_states();
-  //};
+  /// Returns a pointer to the discrete symbolic state vector.
+  const std::vector<symbolic::Variable>& get_symbolic_discrete_states() const {
+    ModalSubsystem<T>* modal_subsystem = GetModalSubsystem();
+    DRAKE_DEMAND(modal_subsystem != nullptr);
+    return modal_subsystem->get_symbolic_discrete_states();
+  };
 
   /// @name Mandatory overrides.
   /// Returns a reference to the state vector.
   const State<T>& get_state() const override { return *state_; }
 
   /// Returns a pointer to the state vector.
-  State<T>* get_mutable_state() override { return state_; }
+  State<T>* get_mutable_state() override { return state_.get(); }
 
  protected:
   HybridAutomatonContext<T>* DoClone() const override {
@@ -469,7 +454,7 @@ class HybridAutomatonContext : public Context<T> {
     return clone;
   }
 
-  /// The caller owns the returned memory.
+  /// Clones the states. The caller owns the returned memory.
   State<T>* DoCloneState() const override {
     HybridAutomatonState<T>* clone = new HybridAutomatonState<T>();
 
@@ -494,7 +479,7 @@ class HybridAutomatonContext : public Context<T> {
 
  private:
   // The internal state of the HA System.
-  HybridAutomatonState<T>* state_ = nullptr;
+  unique_ptr<HybridAutomatonState<T>> state_ = nullptr;
 
   // Data for the current active subsystem.
   unique_ptr<SystemOutput<T>> output_;

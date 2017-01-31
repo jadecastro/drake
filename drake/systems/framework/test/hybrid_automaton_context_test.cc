@@ -34,7 +34,7 @@ class HybridAutomatonContextTest : public ::testing::Test {
     context_.reset(new HybridAutomatonContext<double>());
     context_->set_time(kTime);
 
-    // Instantiate a new modal subsystem.  Implicitly, one input and one output
+    // Instantiate a new modal subsystem. Implicitly, one input and one output
     // are exported.
     const int mode_id = 42;
     const ModalSubsystem<double> mss0 =
@@ -78,8 +78,7 @@ class HybridAutomatonContextTest : public ::testing::Test {
 TEST_F(HybridAutomatonContextTest, RetrieveConstituents) {
   // The current active ModalSubsystem should be a leaf System.
   auto subcontext = context_->GetSubsystemContext();
-  auto context = dynamic_cast<const LeafContext<double>*>(
-      subcontext);
+  auto context = dynamic_cast<const LeafContext<double>*>(subcontext);
   EXPECT_TRUE(context != nullptr);
 
   auto output = dynamic_cast<const LeafSystemOutput<double>*>(
@@ -89,7 +88,6 @@ TEST_F(HybridAutomatonContextTest, RetrieveConstituents) {
   auto modal_subsystem = dynamic_cast<const ModalSubsystem<double>*>(
       context_->GetModalSubsystem());
   EXPECT_TRUE(modal_subsystem != nullptr);
-
 }
 
 // Tests that the time writes through to the context of the active
@@ -139,7 +137,7 @@ TEST_F(HybridAutomatonContextTest, HybridAutomatonState) {
 }
 
 // Tests that a change in the ModalSubsystem is reflected in the AbstractState.
-TEST_F(HybridAutomatonContextTest, SwapSystems) {
+TEST_F(HybridAutomatonContextTest, DeRegisterAndRegisterSubsystem) {
   const int mode_id = 555;
 
   // Register a new system as its own ModalSubsystem.
@@ -166,6 +164,8 @@ TEST_F(HybridAutomatonContextTest, SetAndGetInputPorts) {
   EXPECT_EQ(128, ReadVectorInputPort(*context_, 0)->get_value()[0]);
 }
 
+// Tests that a clone of the HybridAutomatonContext behaves precisely as the
+// original.
 TEST_F(HybridAutomatonContextTest, Clone) {
   context_->FixInputPort(0, BasicVector<double>::Make({128}));
 
@@ -181,14 +181,19 @@ TEST_F(HybridAutomatonContextTest, Clone) {
   const ContinuousState<double>* xc = clone->get_continuous_state();
   EXPECT_EQ(42.0, xc->get_vector().GetAtIndex(0));
 
-  // Verify that the cloned input port contains the same data,
-  // but with a different pointer.
+  // Verify that the cloned input port contains the same data, but with a
+  // different pointer.
   EXPECT_EQ(1, clone->get_num_input_ports());
   const BasicVector<double>* orig_port = ReadVectorInputPort(*context_, 0);
   const BasicVector<double>* clone_port = ReadVectorInputPort(*clone, 0);
   EXPECT_NE(orig_port, clone_port);
   EXPECT_TRUE(CompareMatrices(orig_port->get_value(), clone_port->get_value(),
                               1e-8, MatrixCompareType::absolute));
+}
+
+// Tests the ability to specify symbolic expressions and evaluate them.
+TEST_F(HybridAutomatonContextTest, Symbolic) {
+  
 }
 
 }  // namespace

@@ -56,8 +56,8 @@ drake_add_cc_test(single_output_vector_source_test)
 target_link_libraries(single_output_vector_source_test
   drakeSystemFramework drakeSystemPrimitives)
 
-#drake_add_cc_test(hybrid_automaton_test)
-#target_link_libraries(hybrid_automaton_test drakeSystemPrimitives)
+drake_add_cc_test(hybrid_automaton_test)
+target_link_libraries(hybrid_automaton_test drakeSystemPrimitives)
 
 #drake_add_cc_test(hybrid_automaton_builder_test)
 #target_link_libraries(hybrid_automaton_builder_test drakeSystemPrimitives)

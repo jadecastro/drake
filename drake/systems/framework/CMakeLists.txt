@@ -15,7 +15,7 @@ set(sources
   leaf_context.cc
   leaf_system.cc
   hybrid_automaton.cc
-  #hybrid_automaton_builder.cc
+  hybrid_automaton_builder.cc
   hybrid_automaton_context.cc
   output_port_listener_interface.cc
   parameters.cc
@@ -57,7 +57,7 @@ set(installed_headers
   leaf_context.h
   leaf_system.h
   hybrid_automaton.h
-  #hybrid_automaton_builder.h
+  hybrid_automaton_builder.h
   hybrid_automaton_context.h
   output_port_listener_interface.h
   parameters.h
