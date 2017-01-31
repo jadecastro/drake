@@ -58,7 +58,9 @@ class HybridAutomatonBuilder {
 
   /// Takes ownership of @p system and adds it to the builder. Returns a bare
   /// pointer to the System, which will remain valid for the lifetime of the
-  /// HybridAutomaton built by this builder.
+  /// HybridAutomaton built by this builder. The first system added sets the
+  /// precedence for all successive systems added; for instance, the number of
+  /// ports and whether or not it is direct feedthrough.
   ///
   /// @tparam S The type of system to add.
   template <template <typename Scalar> class S>

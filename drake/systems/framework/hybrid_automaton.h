@@ -219,10 +219,11 @@ class HybridAutomaton : public System<T>,
 
   // NB: The dimension of the state vector defined here is what's expected
   // whenever AllocateTimeDervatives is called.
-  void SetDefaultState(const Context<T>& context,
-                       State<T>* state) const override {
+  void SetDefaultState(const Context<T>& context, State<T>* state)
+      const override {
     auto hybrid_context =
         dynamic_cast_or_die<const HybridAutomatonContext<T>*>(&context);
+    auto hybrid_state = dynamic_cast_or_die<HybridAutomatonState<T>*>(state);
     // TODO(jadecastro): Throw if the state is inconsistent with context.
 
     // Set the default state for the HA.
@@ -231,7 +232,11 @@ class HybridAutomaton : public System<T>,
     const ModeId mode_id = hybrid_context->get_mode_id();
     DRAKE_DEMAND(mode_id < num_subsystems());
     auto subsystem = modal_subsystems_[mode_id]->get_system();
-    subsystem->SetDefaultState(*subcontext, state);
+    DRAKE_DEMAND(subsystem != nullptr);
+    auto substate = hybrid_state->get_mutable_substate();
+    DRAKE_DEMAND(substate != nullptr);
+
+    subsystem->SetDefaultState(*subcontext, substate);
   }
 
   void SetDefaults(Context<T>* context) const final {
@@ -264,8 +269,8 @@ class HybridAutomaton : public System<T>,
     return unique_ptr<SystemOutput<T>>(output.release());
   }
 
-  void EvalOutput(const Context<T>& context,
-                  SystemOutput<T>* output) const override {
+  void DoCalcOutput(const Context<T>& context,
+                    SystemOutput<T>* output) const override {
     // Down-cast the context and output to HybridAutomatonContext and
     // HybridAutomatonOutput.
     const auto hybrid_context =
@@ -301,15 +306,15 @@ class HybridAutomaton : public System<T>,
     return subsystem->AllocateDiscreteVariables();
   }
 
-  void EvalTimeDerivatives(const Context<T>& context,
-                           ContinuousState<T>* derivatives) const override {
+  void DoCalcTimeDerivatives(const Context<T>& context,
+                             ContinuousState<T>* derivatives) const override {
     const auto hybrid_context =
         dynamic_cast_or_die<const HybridAutomatonContext<T>*>(&context);
     const Context<T>* subcontext =
         hybrid_context->GetSubsystemContext();
     // Evaluate the derivative of the current modal subsystem.
     auto subsystem = hybrid_context->GetModalSubsystem()->get_system();
-    subsystem->EvalTimeDerivatives(*subcontext, derivatives);
+    subsystem->DoCalcTimeDerivatives(*subcontext, derivatives);
   }
 
   /// @name Discrete-Update Utilities
@@ -454,15 +459,11 @@ class HybridAutomaton : public System<T>,
     return subcontext->get_mutable_state();
   }
 
-  /// Retrieves the state for a particular subsystem from the @p state for the
-  /// entire diagram. Aborts if @p subsystem is not actually a subsystem of this
-  /// diagram.
+  /// Retrieves the state for the active ModalSubsystem from the @p state.
   State<T>* GetMutableSubsystemState(State<T>* state,
                                      const System<T>* subsystem) const {
-    const int i = GetSystemIndexOrAbort(subsystem);
-    auto diagram_state = dynamic_cast<DiagramState<T>*>(state);
-    DRAKE_DEMAND(diagram_state != nullptr);
-    return diagram_state->get_mutable_substate(i);
+    auto hybrid_state = dynamic_cast_or_die<HybridAutomatonState<T>*>(state);
+    return hybrid_state->get_mutable_substate();
   }
   */
 
@@ -479,7 +480,7 @@ class HybridAutomaton : public System<T>,
   /// this function.
   void EvaluateSubsystemInputPort(
       const Context<T>* context,
-      const SystemPortDescriptor<T>& descriptor) const override {
+      const InputPortDescriptor<T>& descriptor) const override {
     auto hybrid_context =
         dynamic_cast_or_die<const HybridAutomatonContext<T>*>(context);
     const ModalSubsystem<T>* mss = hybrid_context->GetModalSubsystem();
@@ -564,8 +565,9 @@ class HybridAutomaton : public System<T>,
       return;
     }
 
-    std::pair<int, UpdateActions<T1>> publisher;
-    std::pair<int, UpdateActions<T1>> updater;
+    UpdateActions<T1> publisher;
+    UpdateActions<T1> updater;
+    UpdateActions<T1> unrestricted_updater;
     // Ignore the subsystems that aren't among the most imminent updates.
     if (sub_action.time <= actions->time) {
       if (internal::HasEvent(sub_action,
@@ -581,17 +583,31 @@ class HybridAutomaton : public System<T>,
         actions->events.emplace_back(event);
       }
       if (internal::HasEvent(sub_action,
-                             DiscreteEvent<T1>::kUpdateAction)) {
+                             DiscreteEvent<T1>::kDiscreteUpdateAction)) {
         updater = std::make_pair(id, sub_action);
 
         // Request an update event, if our subsystems want it.
         DiscreteEvent<T1> event;
-        event.action = DiscreteEvent<T1>::kUpdateAction;
-        event.do_update = std::bind(&HybridAutomaton<T1>::HandleUpdate, this,
-                                    std::placeholders::_1, /* context */
-                                    std::placeholders::_2, /* difference
-                                                            * state */
-                                    updater);
+        event.action = DiscreteEvent<T1>::kDiscreteUpdateAction;
+        event.do_calc_discrete_variable_update = std::bind(
+            &HybridAutomaton<T1>::HandleUpdate, this,
+            std::placeholders::_1, /* context */
+            std::placeholders::_2, /* difference state */
+            updater);
+        actions->events.emplace_back(event);
+      }
+      if (internal::HasEvent(sub_action,
+                             DiscreteEvent<T1>::kUnrestrictedUpdateAction)) {
+        unrestricted_updater = std::make_pair(id, sub_action);
+
+        // Request an update event, if our subsystems want it.
+        DiscreteEvent<T1> event;
+        event.action = DiscreteEvent<T1>::kUnrestrictedUpdateAction;
+        event.do_unrestricted_update = std::bind(
+            &HybridAutomaton<T1>::HandleUnreastrictedUpdate, this,
+            std::placeholders::_1, /* context */
+            std::placeholders::_2, /* state */
+            unrestricted_updater);
         actions->events.emplace_back(event);
       }
     }
@@ -613,18 +629,15 @@ class HybridAutomaton : public System<T>,
 
   /// Handles Publish callbacks that were registered in DoCalcNextUpdateTime.
   /// Dispatches the Publish events to the subsystems that requested them.
-  void HandlePublish(
-      const Context<T>& context,
-      const std::pair<int, UpdateActions<T>>& sub_action) const {
+  void HandlePublish(const Context<T>& context,
+                     const UpdateActions<T>& sub_actions) const {
     const auto hybrid_context =
         dynamic_cast_or_die<const HybridAutomatonContext<T>*>(&context);
     const ModalSubsystem<T>* mss = hybrid_context->GetModalSubsystem();
-    const UpdateActions<T>& action_details = sub_action.second;
 
-    const Context<T>* subcontext =
-        hybrid_context->GetSubsystemContext();
+    const Context<T>* subcontext = hybrid_context->GetSubsystemContext();
     DRAKE_DEMAND(subcontext != nullptr);
-    for (const DiscreteEvent<T>& event : action_details.events) {
+    for (const DiscreteEvent<T>& event : sub_actions.events) {
       if (event.action == DiscreteEvent<T>::kPublishAction) {
         mss->get_system()->Publish(*subcontext, event);
       }
@@ -635,7 +648,7 @@ class HybridAutomaton : public System<T>,
   /// Dispatches the Publish events to the subsystems that requested them.
   void HandleUpdate(
       const Context<T>& context, DiscreteState<T>* discrete_update,
-      const std::pair<int, UpdateActions<T>>& sub_action) const {
+      const UpdateActions<T>& sub_actions) const {
     const auto hybrid_context =
         dynamic_cast_or_die<const HybridAutomatonContext<T>*>(&context);
 
@@ -647,21 +660,43 @@ class HybridAutomaton : public System<T>,
     }
 
     // Then, allow the subsystem to update a discrete variable.
-    //const int index = action.first;
-    const UpdateActions<T>& action_details = sub_action.second;
-
-    // Get the context and the difference state for the specified system.
-    const Context<T>* subcontext =
-        hybrid_context->GetSubsystemContext();
+    // Get the context for the specified system.
+    const Context<T>* subcontext = hybrid_context->GetSubsystemContext();
     DRAKE_DEMAND(subcontext != nullptr);
 
     // Process that system's update actions.
     const System<T>* subsystem =
         hybrid_context->GetModalSubsystem()->get_system();
-    for (const DiscreteEvent<T>& event : action_details.events) {
-      if (event.action == DiscreteEvent<T>::kUpdateAction) {
-        subsystem->EvalDiscreteVariableUpdates(*subcontext, event,
+    for (const DiscreteEvent<T>& event : sub_actions.events) {
+      if (event.action == DiscreteEvent<T>::kDiscreteUpdateAction) {
+        subsystem->CalcDiscreteVariableUpdates(*subcontext, event,
                                                discrete_update);
+      }
+    }
+  }
+
+  /// Handles Update calbacks that were registered in DoCalcNextUpdateTime.
+  /// Dispatches the Publish events to the subsystems that requested them.
+  void HandleUnrestrictedUpdate(const Context<T>& context, State<T>* state,
+                                const UpdateActions<T>& sub_actions) const {
+    const auto hybrid_context =
+        dynamic_cast_or_die<const HybridAutomatonContext<T>*>(&context);
+    auto hybrid_state = dynamic_cast_or_die<HybridAutomatonState<T>*>(state);
+
+    // No need to set state to context's state, since it has already been done
+    // in System::CalcUnrestrictedUpdate().
+
+    const Context<T>* subcontext = hybrid_context->GetSubsystemContext();
+    DRAKE_DEMAND(subcontext != nullptr);
+
+    // Process that system's update actions.
+    const System<T>* subsystem =
+        hybrid_context->GetModalSubsystem()->get_system();
+    State<T>* substate = hybrid_state->get_mutable_substate();
+    DRAKE_DEMAND(substate != nullptr);
+    for (const DiscreteEvent<T>& event : sub_actions.events) {
+      if (event.action == DiscreteEvent<T>::kDiscreteUpdateAction) {
+        subsystem->CalcUnrestrictedUpdate(*subcontext, event, substate);
       }
     }
   }
@@ -912,15 +947,9 @@ class HybridAutomaton : public System<T>,
     //GetSystemIndexOrAbort(sys);
 
     // Add this port to our externally visible topology.
-    const auto& subsystem_ports = subsystem.get_input_ports();
-    if (port_id < 0 || port_id >= static_cast<int>(subsystem_ports.size())) {
-      throw std::out_of_range("Input port out of range.");
-    }
-    const auto& subsystem_descriptor = subsystem_ports[port_id];
-    SystemPortDescriptor<T> descriptor(
-        this, kInputPort, this->get_num_input_ports(),
-        subsystem_descriptor.get_data_type(), subsystem_descriptor.get_size());
-    this->DeclareInputPort(descriptor);
+    const auto& subsystem_descriptor = subsystem.get_input_port(port_id);
+    this->DeclareInputPort(subsystem_descriptor.get_data_type(),
+                           subsystem_descriptor.size());
   }
 
   // Exposes the given port as an output of the Diagram. This function is called
@@ -930,15 +959,9 @@ class HybridAutomaton : public System<T>,
     //GetSystemIndexOrAbort(sys);
 
     // Add this port to our externally visible topology.
-    const auto& subsystem_ports = subsystem.get_output_ports();
-    if (port_id < 0 || port_id >= static_cast<int>(subsystem_ports.size())) {
-      throw std::out_of_range("Output port out of range.");
-    }
-    const auto& subsystem_descriptor = subsystem_ports[port_id];
-    SystemPortDescriptor<T> descriptor(
-        this, kOutputPort, this->get_num_output_ports(),
-        subsystem_descriptor.get_data_type(), subsystem_descriptor.get_size());
-    this->DeclareOutputPort(descriptor);
+    const auto& subsystem_descriptor = subsystem.get_input_port(port_id);
+    this->DeclareOutputPort(subsystem_descriptor.get_data_type(),
+                            subsystem_descriptor.size());
   }
 
   // Evaluates the value of the output port with the given @p id in the given
@@ -954,7 +977,7 @@ class HybridAutomaton : public System<T>,
     DRAKE_DEMAND(subsystem_context != nullptr);
     SystemOutput<T>* subsystem_output = context.GetSubsystemOutput();
     DRAKE_DEMAND(subsystem_output != nullptr);
-    subsystem->EvalOutput(*subsystem_context, subsystem_output);
+    subsystem->DoCalcOutput(*subsystem_context, subsystem_output);
   }
 
   // Sets up the OutputPort pointers in @p output to point to the subsystem

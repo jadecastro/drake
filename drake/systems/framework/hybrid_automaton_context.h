@@ -204,6 +204,7 @@ class ModalSubsystem {
   // TODO(jadecastro): Store symbolic versions of the inputs also.
 };
 
+
 /// HybridAutomatonState is a State that is annotated with pointers to the
 /// current active subsystem.
 template <typename T>
@@ -274,6 +275,7 @@ class HybridAutomatonState : public State<T> {
   std::unique_ptr<State<T>> owned_substate_;
   int mode_id_;
 };
+
 
 /// The HybridAutomatonContext contains the context and output for the active
 /// ModalSubsystem, as chosen by HybridAutomaton. In addition, it augments the
