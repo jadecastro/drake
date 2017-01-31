@@ -314,7 +314,7 @@ class HybridAutomaton : public System<T>,
         hybrid_context->GetSubsystemContext();
     // Evaluate the derivative of the current modal subsystem.
     auto subsystem = hybrid_context->GetModalSubsystem()->get_system();
-    subsystem->DoCalcTimeDerivatives(*subcontext, derivatives);
+    subsystem->CalcTimeDerivatives(*subcontext, derivatives);
   }
 
   /// @name Discrete-Update Utilities
@@ -554,7 +554,6 @@ class HybridAutomaton : public System<T>,
     const System<T1>* subsystem =
         hybrid_context->GetModalSubsystem()->get_system();
     DRAKE_DEMAND(subsystem != nullptr);
-    const ModeId id = hybrid_context->GetModalSubsystem()->get_mode_id();
 
     // Retrieve the update time for this subsystem.
     UpdateActions<T1> sub_action;
@@ -565,26 +564,21 @@ class HybridAutomaton : public System<T>,
       return;
     }
 
-    UpdateActions<T1> publisher;
-    UpdateActions<T1> updater;
-    UpdateActions<T1> unrestricted_updater;
     // Ignore the subsystems that aren't among the most imminent updates.
     if (sub_action.time <= actions->time) {
       if (internal::HasEvent(sub_action,
                              DiscreteEvent<T1>::kPublishAction)) {
-        publisher = std::make_pair(id, sub_action);
 
         // Request a publish event, if our subsystems want it.
         DiscreteEvent<T1> event;
         event.action = DiscreteEvent<T1>::kPublishAction;
         event.do_publish = std::bind(&HybridAutomaton<T1>::HandlePublish, this,
                                      std::placeholders::_1, /* context */
-                                     publisher);
+                                     sub_action);
         actions->events.emplace_back(event);
       }
       if (internal::HasEvent(sub_action,
                              DiscreteEvent<T1>::kDiscreteUpdateAction)) {
-        updater = std::make_pair(id, sub_action);
 
         // Request an update event, if our subsystems want it.
         DiscreteEvent<T1> event;
@@ -593,21 +587,20 @@ class HybridAutomaton : public System<T>,
             &HybridAutomaton<T1>::HandleUpdate, this,
             std::placeholders::_1, /* context */
             std::placeholders::_2, /* difference state */
-            updater);
+            sub_action);
         actions->events.emplace_back(event);
       }
       if (internal::HasEvent(sub_action,
                              DiscreteEvent<T1>::kUnrestrictedUpdateAction)) {
-        unrestricted_updater = std::make_pair(id, sub_action);
 
         // Request an update event, if our subsystems want it.
         DiscreteEvent<T1> event;
         event.action = DiscreteEvent<T1>::kUnrestrictedUpdateAction;
         event.do_unrestricted_update = std::bind(
-            &HybridAutomaton<T1>::HandleUnreastrictedUpdate, this,
+            &HybridAutomaton<T1>::HandleUnrestrictedUpdate, this,
             std::placeholders::_1, /* context */
             std::placeholders::_2, /* state */
-            unrestricted_updater);
+            sub_action);
         actions->events.emplace_back(event);
       }
     }
@@ -977,7 +970,7 @@ class HybridAutomaton : public System<T>,
     DRAKE_DEMAND(subsystem_context != nullptr);
     SystemOutput<T>* subsystem_output = context.GetSubsystemOutput();
     DRAKE_DEMAND(subsystem_output != nullptr);
-    subsystem->DoCalcOutput(*subsystem_context, subsystem_output);
+    subsystem->CalcOutput(*subsystem_context, subsystem_output);
   }
 
   // Sets up the OutputPort pointers in @p output to point to the subsystem
