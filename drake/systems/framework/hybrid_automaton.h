@@ -952,7 +952,7 @@ class HybridAutomaton : public System<T>,
     //GetSystemIndexOrAbort(sys);
 
     // Add this port to our externally visible topology.
-    const auto& subsystem_descriptor = subsystem.get_input_port(port_id);
+    const auto& subsystem_descriptor = subsystem.get_output_port(port_id);
     this->DeclareOutputPort(subsystem_descriptor.get_data_type(),
                             subsystem_descriptor.size());
   }

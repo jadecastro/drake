@@ -64,8 +64,6 @@ class BouncingBall : public HybridAutomaton<double> {
     // factor of kCoeffOfRestitution.
     std::vector<symbolic::Expression> reset{y, -kCoeffOfRestitution * ydot};
     builder.AddReset(bounce_transition_, reset);
-    std::cerr << " Reset size: " << bounce_transition_->get_reset().size()
-              << std::endl;
 
     builder.BuildInto(this);
   }
@@ -88,7 +86,7 @@ class HybridAutomatonTest : public ::testing::Test {
     context_ = dut_->CreateDefaultContext();
     output_ = dut_->AllocateOutput(*context_);
 
-    input0_ = BasicVector<double>::Make({1});
+    //input0_ = BasicVector<double>::Make({1});
     // Initialize the states.
     auto ball_xc = dut_->GetMutableSubsystemContext(context_.get())->
         get_mutable_continuous_state();
