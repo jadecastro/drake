@@ -54,6 +54,10 @@ bool HasEvent(const UpdateActions<T> actions,
 template <typename T>
 class HybridAutomatonOutput : public SystemOutput<T> {
  public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(HybridAutomatonOutput)
+
+  HybridAutomatonOutput() = default;
+
   // Required virtual member functions.
   int get_num_ports() const override { return static_cast<int>(ports_.size()); }
 
@@ -163,6 +167,8 @@ template <typename T>
 class HybridAutomaton : public System<T>,
                         public detail::InputPortEvaluatorInterface<T> {
  public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(HybridAutomaton)
+
   typedef int ModeId;
   typedef int PortId;
 
@@ -1007,12 +1013,6 @@ class HybridAutomaton : public System<T>,
   int num_transitions() const {
     return static_cast<int>(mode_transitions_.size());
   }
-
-  // HybridAutomaton objects are neither copyable nor moveable.
-  HybridAutomaton(const HybridAutomaton<T>& other) = delete;
-  HybridAutomaton& operator=(const HybridAutomaton<T>& other) = delete;
-  HybridAutomaton(HybridAutomaton<T>&& other) = delete;
-  HybridAutomaton& operator=(HybridAutomaton<T>&& other) = delete;
 
   // TODO(jadecastro): System swapping without the const-ness restriction on
   // direct-feedthrough of systems.

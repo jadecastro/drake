@@ -50,6 +50,8 @@ using std::shared_ptr;
 template <typename T>
 class HybridAutomatonBuilder {
  public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(HybridAutomatonBuilder)
+
   HybridAutomatonBuilder() {}
   virtual ~HybridAutomatonBuilder() {}
 
@@ -352,13 +354,6 @@ class HybridAutomatonBuilder {
 
     return state_machine;
   }
-
-  // HybridAutomatonBuilder objects are neither copyable nor moveable.
-  HybridAutomatonBuilder(const HybridAutomatonBuilder<T>& other) = delete;
-  HybridAutomatonBuilder& operator=(const HybridAutomatonBuilder<T>& other) =
-      delete;
-  HybridAutomatonBuilder(HybridAutomatonBuilder<T>&& other) = delete;
-  HybridAutomatonBuilder& operator=(HybridAutomatonBuilder<T>&& other) = delete;
 
   // TODO(jadecastro): map?
   std::vector<ModalSubsystem<T>*> modal_subsystems_;

@@ -42,7 +42,7 @@ class ModalSubsystem {
       : mode_id_(mode_id), system_(std::move(system)), invariant_(invariant),
         initial_conditions_(initial_conditions),
         input_port_ids_(input_port_ids), output_port_ids_(output_port_ids) {
-    CreateSymbolicVariables();
+    CreateSymbolicStatesAndInputs();
   }
 
   explicit ModalSubsystem(
@@ -51,7 +51,7 @@ class ModalSubsystem {
       std::vector<symbolic::Expression> initial_conditions)
       : mode_id_(mode_id), system_(std::move(system)), invariant_(invariant),
         initial_conditions_(initial_conditions) {
-    CreateSymbolicVariables();
+    CreateSymbolicStatesAndInputs();
     PopulateDefaultPorts();
   }
 
@@ -60,13 +60,13 @@ class ModalSubsystem {
       std::vector<PortId> input_port_ids, std::vector<PortId> output_port_ids)
       : mode_id_(mode_id), system_(std::move(system)),
         input_port_ids_(input_port_ids), output_port_ids_(output_port_ids) {
-    CreateSymbolicVariables();
+    CreateSymbolicStatesAndInputs();
   }
 
   explicit ModalSubsystem(
       ModeId mode_id, shared_ptr<System<T>> system)
       : mode_id_(mode_id), system_(std::move(system)) {
-    CreateSymbolicVariables();
+    CreateSymbolicStatesAndInputs();
     PopulateDefaultPorts();
   }
 
@@ -142,15 +142,14 @@ class ModalSubsystem {
 
  private:
   // Create symbolic variables based on the expected context for this subsystem.
-  void CreateSymbolicVariables() {
+  void CreateSymbolicStatesAndInputs() {
     // TODO(jadecastro): Either we need to modify the system API to allow us
     // access to the underlying state dimensions without creating a throwaway
     // context *or* we just allocate the context here and output it along with
     // the ModalSubsystem.
     std::unique_ptr<Context<T>> context = system_->AllocateContext();
 
-    // TODO(jadecastro): Implement this to handle both continuous state @p x and
-    // input @p u.
+    // TODO(jadecastro): Implement this to handle input @p u.
     const int num_xc = context->get_continuous_state_vector().size();
     for (int i = 0; i < num_xc; ++i) {
       std::ostringstream key;
@@ -159,9 +158,14 @@ class ModalSubsystem {
       xc_symbolic_.emplace_back(state_var);
     }
     const int num_xd = context->get_num_discrete_state_groups();
+    
+  }
+
+  void CreateSymbolicVariables(const enum prefix, const int size) {
+    DRAKE_DEMAND()
     for (int i = 0; i < num_xd; ++i) {
       std::ostringstream key;
-      key << "xd" << i;
+      key << prefix << i;
       symbolic::Variable state_var{key.str()};
       xd_symbolic_.emplace_back(state_var);
     }
@@ -191,8 +195,7 @@ class ModalSubsystem {
   std::vector<PortId> output_port_ids_;
   // A vector of symbolic variables for each of the continuous states in the
   // system.
-  std::vector<symbolic::Variable> xc_symbolic_;
-  std::vector<symbolic::Variable> xd_symbolic_;
+ std:map<, std::vector<symbolic::Variable>> symbolic_;
   // TODO(jadecastro): Store symbolic versions of the inputs also.
 };
 
@@ -270,23 +273,22 @@ class HybridAutomatonState : public State<T> {
 /// ModalSubsystem, as chosen by HybridAutomaton. In addition, it augments the
 /// subsystem contexts with an abstract state designating the active mode.
 ///
-/// In general, users should not need to interact with a HybridAutomatonContext
-/// directly. Use the accessors on Hybrid Automaton instead.
-///
 /// @tparam T The mathematical type of the context, which must be a valid Eigen
 ///           scalar.
 template <typename T>
 class HybridAutomatonContext : public Context<T> {
  public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(HybridAutomatonContext)
+
   typedef int ModeId;
   typedef int PortId;
 
-  /// Constructs a HybridAutomatonContext with a fixed number @p num_subsystems
+  /// Constructs a HybridAutomatonContext
   /// in a way that allows for dynamic re-sizing during discrete events.
   explicit HybridAutomatonContext() {}
 
-  // Registers the ModalSubsystem by passing ownership its constituent data
-  // structures to this context.
+  /// Registers the ModalSubsystem by passing ownership its constituent data
+  /// structures to this context.
   void RegisterSubsystem(unique_ptr<ModalSubsystem<T>> modal_subsystem,
                          unique_ptr<Context<T>> subcontext,
                          unique_ptr<SystemOutput<T>> suboutput) {
@@ -300,7 +302,7 @@ class HybridAutomatonContext : public Context<T> {
     //   `reset_context` along with `Initialize` and `release_context`?
   }
 
-  // Relinquishes ownership of the current ModalSubsystem consitutent data.
+  /// Relinquishes ownership of the current ModalSubsystem consitutent data.
   void DeRegisterSubsystem() {
     context_.release();
     output_.release();
@@ -310,7 +312,7 @@ class HybridAutomatonContext : public Context<T> {
   /// Declares that a particular input port of a particular subsystem is an
   /// input to the entire HA that allocates this Context.
   ///
-  /// User code should not call this method. It is for use during HA context
+  /// User code should not call this method. It is for use during context
   /// allocation only.
   void ExportInput(const PortId& port_id) {
     modal_subsystem_->get_mutable_input_port_ids()->emplace_back(port_id);
@@ -323,7 +325,7 @@ class HybridAutomatonContext : public Context<T> {
   /// Declares that a particular input port of a particular subsystem is an
   /// input to the entire HA that allocates this Context.
   ///
-  /// User code should not call this method. It is for use during HA context
+  /// User code should not call this method. It is for use during context
   /// allocation only.
   void ExportOutput(const PortId& port_id) {
     modal_subsystem_->get_mutable_output_port_ids()->emplace_back(port_id);
@@ -335,8 +337,8 @@ class HybridAutomatonContext : public Context<T> {
 
   /// Generates the state vector for the HA.
   ///
-  /// User code should not call this method. It is for use during
-  /// HybridAutomaton context allocation only.
+  /// User code should not call this method. It is for use during context
+  /// allocation only.
   void MakeState() {
     auto hybrid_state = std::make_unique<HybridAutomatonState<T>>();
     Context<T>* subcontext = context_.get();
@@ -349,19 +351,13 @@ class HybridAutomatonContext : public Context<T> {
     state_ = std::move(hybrid_state);
   }
 
-  /// Returns the output structure for a given constituent system at @p index.
-  /// Aborts if @p index is out of bounds, or if no system has been added to the
-  /// HybridAutomatonContext at that index.
+  /// Returns the output structure for the active ModalSubsystem.
   SystemOutput<T>* GetSubsystemOutput() const { return output_.get(); }
 
-  /// Returns the context structure for a given constituent system @p index.
-  /// Aborts if @p index is out of bounds, or if no system has been added to the
-  /// HybridAutomatonContext at that index.
+  /// Returns the context structure for the active ModalSubsystem.
   const Context<T>* GetSubsystemContext() const { return context_.get(); }
 
-  /// Returns the context structure for a given subsystem @p index.  Aborts if
-  /// @p index is out of bounds, or if no system has been added to the
-  /// HybridAutomatonContext at that index.
+  /// Returns the context structure for the active ModalSubsystem.
   Context<T>* GetMutableSubsystemContext() { return context_.get(); }
 
   /// Recursively sets the time on this context and all subcontexts.
