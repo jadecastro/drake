@@ -1,7 +1,7 @@
 #pragma once
 
 // TODO: triage this list.
-//#include <map>
+#include <map>
 #include <memory>
 #include <numeric>
 #include <set>
@@ -43,16 +43,6 @@ class ModalSubsystem {
         initial_conditions_(initial_conditions),
         input_port_ids_(input_port_ids), output_port_ids_(output_port_ids) {
     CreateSymbolicStatesAndInputs();
-  }
-
-  explicit ModalSubsystem(
-      ModeId mode_id, shared_ptr<System<T>> system,
-      std::vector<symbolic::Expression> invariant,
-      std::vector<symbolic::Expression> initial_conditions)
-      : mode_id_(mode_id), system_(std::move(system)), invariant_(invariant),
-        initial_conditions_(initial_conditions) {
-    CreateSymbolicStatesAndInputs();
-    PopulateDefaultPorts();
   }
 
   explicit ModalSubsystem(
@@ -123,10 +113,14 @@ class ModalSubsystem {
   // initial condition formulas with the given symbolic_state_.
   const std::vector<symbolic::Variable>& get_symbolic_continuous_states()
       const {
-    return xc_symbolic_;
+    return symbolic_variables_.at("xc")[0];
   };
-  const std::vector<symbolic::Variable>& get_symbolic_discrete_states() const {
-    return xd_symbolic_;
+  const std::vector<symbolic::Variable>& get_symbolic_discrete_states_at(
+      const int i) const {
+    return symbolic_variables_.at("xd")[i];
+  };
+  int get_num_symbolic_discrete_states() const {
+    return symbolic_variables_.at("xd").size();
   };
 
   /// Returns a clone that includes a deep copy of all the output ports.
@@ -149,26 +143,27 @@ class ModalSubsystem {
     // the ModalSubsystem.
     std::unique_ptr<Context<T>> context = system_->AllocateContext();
 
-    // TODO(jadecastro): Implement this to handle input @p u.
-    const int num_xc = context->get_continuous_state_vector().size();
-    for (int i = 0; i < num_xc; ++i) {
-      std::ostringstream key;
-      key << "xc" << i;
-      symbolic::Variable state_var{key.str()};
-      xc_symbolic_.emplace_back(state_var);
-    }
-    const int num_xd = context->get_num_discrete_state_groups();
-    
+    CreateSymbolicVariables("xc",
+                            context->get_continuous_state_vector().size());
+    CreateSymbolicVariables("xd", context->get_num_discrete_state_groups());
   }
 
-  void CreateSymbolicVariables(const enum prefix, const int size) {
-    DRAKE_DEMAND()
-    for (int i = 0; i < num_xd; ++i) {
-      std::ostringstream key;
-      key << prefix << i;
-      symbolic::Variable state_var{key.str()};
-      xd_symbolic_.emplace_back(state_var);
+  // Create symbolic variables according to the variable_type key word.
+  void CreateSymbolicVariables(const std::string variable_type,
+                               const int size) {
+    std::vector<std::vector<symbolic::Variable>> sym{};
+    if (symbolic_variables_.find(variable_type) != symbolic_variables_.end()) {
+      sym = symbolic_variables_.at(variable_type);
     }
+    std::vector<symbolic::Variable> row;
+    for (int i = 0; i < size; ++i) {
+      std::ostringstream key;
+      key << variable_type << i;
+      symbolic::Variable var{key.str()};
+      row.emplace_back(var);
+    }
+    sym.emplace_back(row);
+    symbolic_variables_.insert(std::make_pair(variable_type, sym));
   }
 
   // Populate the input and output ports with the full complement of system
@@ -195,7 +190,8 @@ class ModalSubsystem {
   std::vector<PortId> output_port_ids_;
   // A vector of symbolic variables for each of the continuous states in the
   // system.
- std:map<, std::vector<symbolic::Variable>> symbolic_;
+  std::map<std::string, std::vector<std::vector<symbolic::Variable>>>
+      symbolic_variables_;
   // TODO(jadecastro): Store symbolic versions of the inputs also.
 };
 
@@ -419,10 +415,11 @@ class HybridAutomatonContext : public Context<T> {
   };
 
   /// Returns a pointer to the discrete symbolic state vector.
-  const std::vector<symbolic::Variable>& get_symbolic_discrete_states() const {
+  const std::vector<symbolic::Variable>& get_symbolic_discrete_states(
+      const int i) const {
     ModalSubsystem<T>* modal_subsystem = GetModalSubsystem();
     DRAKE_DEMAND(modal_subsystem != nullptr);
-    return modal_subsystem->get_symbolic_discrete_states();
+    return modal_subsystem->get_symbolic_discrete_states_at(i);
   };
 
   /// @name Mandatory overrides.
