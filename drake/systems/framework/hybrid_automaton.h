@@ -407,10 +407,15 @@ class HybridAutomaton : public System<T>,
     //     modal_subsystems_[mode_transition.get_successor()].get();
     // *******************************
 
+    const T& time = context->get_time();
     context->DeRegisterSubsystem();  // De-register the active subsystem.
 
     // Create a pointer to a deepcopy of the 'post' subsystem.
     CreateAndRegisterSystem(mss_post, context);
+
+    // The time after the jump is the same as that just before.
+    context->set_time(time);
+
     //std::cerr << " (DoPerformTransition) Reset size: "
     //          << mode_transition.get_reset().size() << std::endl;
 
@@ -711,13 +716,6 @@ class HybridAutomaton : public System<T>,
     // TODO(jadecastro): Verify consistency of the state dimensions.
 
     const systems::VectorBase<T>& xc = context.get_continuous_state_vector();
-    DRAKE_DEMAND(xc.size() == static_cast<int>(xc_sym_.size()));
-
-    // for (int i = 0; i < context.get_num_discrete_state_groups(); ++i) {
-    //  const systems::BasicVector<T>& xd = *context.get_discrete_state(i);
-    //  DRAKE_DEMAND(xd.size() == static_cast<int>(xd_sym_[i].size()));
-    // }
-
     // TODO(jadecastro): Replace the xc_sym_ with the following implementation.
     //const std::vector<symbolic::Variable> xc_sym =
     //    context.GetModalSubsystem()->get_symbolic_continuous_states();
@@ -841,19 +839,10 @@ class HybridAutomaton : public System<T>,
     DRAKE_DEMAND(mode_transitions_.empty());
     DRAKE_DEMAND(initial_modes_.empty());
 
-    // TODO(jadecastro): Remove and replace with a ModalSubsystem accessor.
+    // TODO(jadecastro): Remove and replace with an in-place version.
     for (auto it : state_machine.modal_subsystems[0]->
              get_symbolic_continuous_states()) {
       xc_sym_.push_back(std::move(it));
-    }
-    for (int i = 0; i < state_machine.modal_subsystems[0]->
-             get_num_symbolic_discrete_states(); ++i) {
-      std::vector<symbolic::Variable> rows{};
-      for (auto it : state_machine.modal_subsystems[0]->
-               get_symbolic_discrete_states_at(i)) {
-        rows.push_back(std::move(it));
-      }
-      xd_sym_.push_back(rows);
     }
 
     for (auto& mss : state_machine.modal_subsystems) {
@@ -1052,7 +1041,6 @@ class HybridAutomaton : public System<T>,
   // Store symbolic variables here.
   // TODO(jadecatro): Remove this.
   std::vector<symbolic::Variable> xc_sym_;
-  std::vector<std::vector<symbolic::Variable>> xd_sym_;
 
   // TODO(jadecastro): symbolic::Variable throws an obscure error when a
   // variable is copied rather than moved.

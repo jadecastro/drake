@@ -34,16 +34,20 @@ class HybridAutomatonContextTest : public ::testing::Test {
     context_.reset(new HybridAutomatonContext<double>());
     context_->set_time(kTime);
 
-    // Instantiate a new modal subsystem. Implicitly, one input and one output
-    // are exported.
+    // Instantiate a new modal subsystem. Implicitly, this exports one input and
+    // one output.
     const int mode_id = 42;
-    const ModalSubsystem<double> mss0 =
-        ModalSubsystem<double>(mode_id, shared_ptr<System<double>>(
-            std::move(integrator0_)));
+    //const ModalSubsystem<double> mss0 =
+    //    ModalSubsystem<double>(mode_id, shared_ptr<System<double>>(
+    //        std::move(integrator0_)));
+    const ModalSubsystem<double> mss0 = ModalSubsystem<double>(mode_id,
+                                                               integrator0_);
 
     // Allocate the context and outputs.
-    auto subcontext0 = mss0.get_system()->CreateDefaultContext();
-    auto suboutput0 = mss0.get_system()->AllocateOutput(*subcontext0);
+    //auto subcontext0 = mss0.get_system()->CreateDefaultContext();
+    //auto suboutput0 = mss0.get_system()->AllocateOutput(*subcontext0);
+    auto subcontext0 = integrator0_->CreateDefaultContext();
+    auto suboutput0 = integrator0_->AllocateOutput(*subcontext0);
 
     // Register the system in the HA Context for the first time.
     context_->RegisterSubsystem(std::make_unique<ModalSubsystem<double>>(mss0),
@@ -55,6 +59,16 @@ class HybridAutomatonContextTest : public ::testing::Test {
     // Set the continuous state.
     ContinuousState<double>* xc = context_->get_mutable_continuous_state();
     xc->get_mutable_vector()->SetAtIndex(0, 42.0);
+
+    // *******
+    const ContinuousState<double>* integrator0_xc =
+        context_->GetSubsystemContext()->get_continuous_state();
+    // doesn't work:
+    std::cerr << " state 0: " << integrator0_xc->get_vector().GetAtIndex(0)
+              << std::endl;
+    // works:
+    std::cerr << " state 0: " << xc->get_vector().GetAtIndex(0) << std::endl;
+    // *******
 
     // Set the abstract state with the ID of the current modal subsystem.
     context_->SetModalState();
@@ -69,13 +83,13 @@ class HybridAutomatonContextTest : public ::testing::Test {
   }
 
   std::unique_ptr<HybridAutomatonContext<double>> context_;
-  std::unique_ptr<Integrator<double>> integrator0_;
-  std::unique_ptr<Integrator<double>> integrator1_;
+  std::shared_ptr<Integrator<double>> integrator0_;
+  std::shared_ptr<Integrator<double>> integrator1_;
 };
 
-// Tests that subsystems have outputs and contexts in the
-// HybridAutomatonContext.
-TEST_F(HybridAutomatonContextTest, RetrieveConstituents) {
+// Tests that the SystemOutput, Context, and ModalSubsystem structures had been
+// created within the HybridAutomatonContext.
+TEST_F(HybridAutomatonContextTest, RetrieveSubsystemAttributes) {
   // The current active ModalSubsystem should be a leaf System.
   auto subcontext = context_->GetSubsystemContext();
   auto context = dynamic_cast<const LeafContext<double>*>(subcontext);
@@ -90,8 +104,8 @@ TEST_F(HybridAutomatonContextTest, RetrieveConstituents) {
   EXPECT_TRUE(modal_subsystem != nullptr);
 }
 
-// Tests that the time writes through to the context of the active
-// ModalSubsystem.
+// Tests that the time writes through to the context of the active underlying
+// System.
 TEST_F(HybridAutomatonContextTest, Time) {
   context_->set_time(42.0);
   EXPECT_EQ(42.0, context_->get_time());
@@ -116,14 +130,14 @@ TEST_F(HybridAutomatonContextTest, State) {
   AbstractState* xa = context_->get_mutable_abstract_state();
   EXPECT_EQ(1, xa->size());
 
-  // Changes to the continuous state write through to constituent system state.
+  // Changes to the continuous state appear in the leaf system state.
   ContinuousState<double>* integrator0_xc =
       context_->GetMutableSubsystemContext()->get_mutable_continuous_state();
   EXPECT_EQ(42.0, integrator0_xc->get_vector().GetAtIndex(0));
 
-  // Changes to constituent system state appears in the HA state.
-  integrator0_xc->get_mutable_vector()->SetAtIndex(0, 1000.0);
-  EXPECT_EQ(1000.0, xc->get_vector().GetAtIndex(0));
+  // Changes to leaf system state appear in the HA state.
+  integrator0_xc->get_mutable_vector()->SetAtIndex(0, 1000.);
+  EXPECT_EQ(1000., xc->get_vector().GetAtIndex(0));
 }
 
 // Tests that the pointers to substates in the HybridAutomatonState are equal to
@@ -141,8 +155,8 @@ TEST_F(HybridAutomatonContextTest, DeRegisterAndRegisterSubsystem) {
   const int mode_id = 555;
 
   // Register a new system as its own ModalSubsystem.
-  std::unique_ptr<ModalSubsystem<double>> mss(new ModalSubsystem<double>(
-      mode_id, shared_ptr<System<double>>(std::move(integrator1_))));
+  std::unique_ptr<ModalSubsystem<double>>
+      mss(new ModalSubsystem<double>(mode_id, integrator1_));
 
   auto subcontext1 = mss->get_system()->CreateDefaultContext();
   auto suboutput1 = mss->get_system()->AllocateOutput(*subcontext1);
@@ -153,7 +167,10 @@ TEST_F(HybridAutomatonContextTest, DeRegisterAndRegisterSubsystem) {
   context_->MakeState();
   context_->SetModalState();
 
+  // Now, check that the data survives the jump.
   EXPECT_EQ(555, context_->template get_abstract_state<int>(0));
+
+  // ***** Check if state and time survive!
 }
 
 // Tests that input ports can be assigned to the HybridAutomatonContext and then
@@ -165,7 +182,7 @@ TEST_F(HybridAutomatonContextTest, SetAndGetInputPorts) {
 }
 
 // Tests that a clone of the HybridAutomatonContext behaves precisely as the
-// original.
+// original does.
 TEST_F(HybridAutomatonContextTest, Clone) {
   context_->FixInputPort(0, BasicVector<double>::Make({128}));
 
@@ -174,10 +191,10 @@ TEST_F(HybridAutomatonContextTest, Clone) {
           context_->Clone().release()));
   ASSERT_TRUE(clone != nullptr);
 
-  // Verify that the time was copied.
+  // Verify that the time has been copied.
   EXPECT_EQ(kTime, clone->get_time());
 
-  // Verify that the state was copied.
+  // Verify that the state has been copied.
   const ContinuousState<double>* xc = clone->get_continuous_state();
   EXPECT_EQ(42.0, xc->get_vector().GetAtIndex(0));
 
