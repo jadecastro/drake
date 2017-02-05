@@ -240,6 +240,9 @@ TEST_F(HybridAutomatonTest, ModeTransition) {
   ASSERT_TRUE(output0 != nullptr);
   EXPECT_EQ(expected_output0[0], output0->get_value()[0]);
   EXPECT_EQ(expected_output0[1], output0->get_value()[1]);
+
+  // *******  Check that the data survives the jump.
+
 }
 
 }  // namespace

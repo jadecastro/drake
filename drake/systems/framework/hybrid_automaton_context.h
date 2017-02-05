@@ -22,6 +22,9 @@ using std::move;
 using std::shared_ptr;
 using std::unique_ptr;
 
+using std::cerr;
+using std::endl;
+
 // TODO(jadecastro): Some comments are in order.
 template <typename T>
 class ModalSubsystem {
@@ -184,6 +187,56 @@ class ModalSubsystem {
 };
 
 
+// ***** Move into own header.
+/// COMMENTS!!!
+// (Mimicks Supervector)
+template <typename T>
+class MutableVector : public VectorBase<T> {
+ public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(MutableVector)
+
+  explicit MutableVector(VectorBase<T>* vector) : vector_(vector) {}
+
+  ~MutableVector() override {}
+
+  int size() const override { return vector_->size(); }
+
+  const T& GetAtIndex(const int index) const override {
+    return vector_->GetAtIndex(index);
+  }
+
+  T& GetAtIndex(const int index) override {
+    return vector_->GetAtIndex(index); }
+
+  VectorBase<T>* get_mutable_vector() { return vector_; }
+
+ private:
+  VectorBase<T>* vector_;
+};
+
+
+// COMMENTS!!!
+// The only purpose is to make construction of ContinuousState possible.
+template <typename T>
+class HybridAutomatonContinuousState : public ContinuousState<T> {
+ public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(HybridAutomatonContinuousState)
+
+  /// Constructs a ContinuousState that is composed of other ContinuousStates,
+  /// which are not owned by this object.
+  explicit HybridAutomatonContinuousState(VectorBase<T>* state,
+                                          int num_q, int num_v, int num_z)
+  : ContinuousState<T>(Dump(state), num_q, num_v, num_z) {}
+
+  ~HybridAutomatonContinuousState() override {}
+
+ private:
+  static std::unique_ptr<VectorBase<T>> Dump(VectorBase<T>* vector) {
+    return make_unique<MutableVector<T>>(vector);
+  }
+};
+
+
 /// HybridAutomatonState is a State that is annotated with pointers to the
 /// current active subsystem.
 template <typename T>
@@ -220,17 +273,18 @@ class HybridAutomatonState : public State<T> {
     finalized_ = true;
 
     // Create the continuous and discrete states.
-    if (substate_->get_continuous_state() != nullptr) {
-      const ContinuousState<T>& xc = *substate_->get_continuous_state();
-      const int num_q = xc.get_generalized_position().size();
-      const int num_v = xc.get_generalized_velocity().size();
-      const int num_z = xc.get_misc_continuous_state().size();
-      const BasicVector<T>& xc_vector =
-          dynamic_cast<const BasicVector<T>&>(xc.get_vector());
-      this->set_continuous_state(std::make_unique<ContinuousState<T>>(
-          xc_vector.Clone(), num_q, num_v, num_z));
-    }
-    this->set_discrete_state(substate_->get_discrete_state()->Clone());
+    DRAKE_DEMAND(substate_->get_continuous_state() != nullptr);
+    ContinuousState<T>* xc = substate_->get_mutable_continuous_state();
+    VectorBase<T>* x = xc->get_mutable_vector();
+    int num_q = xc->get_generalized_position().size();
+    int num_v = xc->get_generalized_velocity().size();
+    int num_z = xc->get_misc_continuous_state().size();
+    this->set_continuous_state(make_unique<HybridAutomatonContinuousState<T>>(
+        x, num_q, num_v, num_z));
+
+    const std::vector<BasicVector<T>*>& xd =
+        substate_->get_mutable_discrete_state()->get_data();
+    this->set_discrete_state(std::make_unique<DiscreteState<T>>(xd));
 
     // Combine the current abstract state with the active modal subsystem state.
     AbstractState* subsystem_xm = substate_->get_mutable_abstract_state();
@@ -250,7 +304,6 @@ class HybridAutomatonState : public State<T> {
   std::unique_ptr<State<T>> owned_substate_;
   int mode_id_;
 };
-
 
 /// The HybridAutomatonContext contains the context and output for the active
 /// ModalSubsystem, as chosen by HybridAutomaton. In addition, it augments the
@@ -276,33 +329,12 @@ class HybridAutomatonContext : public Context<T> {
                          unique_ptr<SystemOutput<T>> suboutput) {
     subcontext->set_parent(this);
 
-    context_ = move(subcontext);
-    output_ = move(suboutput);
-    modal_subsystem_ = move(modal_subsystem);
-
-    // *******
-    // Set the continuous state.
-    //ContinuousState<double>* xc = this->get_mutable_continuous_state();
-    //xc->get_mutable_vector()->SetAtIndex(0, 673.0);
-
-    //ContinuousState<double>* integrator0_xc =
-    //    GetMutableSubsystemContext()->get_mutable_continuous_state();
-    // doesn't work:
-    //std::cerr << " state 0: " << integrator0_xc->get_vector().GetAtIndex(0)
-    //          << std::endl;
-    // works:
-    //std::cerr << " state 0: " << xc->get_vector().GetAtIndex(0) << std::endl;
-    // *******
+    context_.swap(subcontext);
+    output_.swap(suboutput);
+    modal_subsystem_.swap(modal_subsystem);
 
     // TODO(jadecastro): Need to involve the simulator too.
     //   `reset_context` along with `Initialize` and `release_context`?
-  }
-
-  /// Relinquishes ownership of the current ModalSubsystem consitutent data.
-  void DeRegisterSubsystem() {
-    context_.reset();
-    output_.reset();
-    // modal_subsystem_.reset();  // <----- Okay?
   }
 
   /// Declares that a particular input port of the active subsystem is an input

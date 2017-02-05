@@ -21,7 +21,6 @@ namespace systems {
 namespace {
 
 constexpr int kSize = 1;
-constexpr int kNumSystems = 2;
 constexpr double kTime = 12.0;
 
 class HybridAutomatonContextTest : public ::testing::Test {
@@ -34,20 +33,15 @@ class HybridAutomatonContextTest : public ::testing::Test {
     context_.reset(new HybridAutomatonContext<double>());
     context_->set_time(kTime);
 
-    // Instantiate a new modal subsystem. Implicitly, this exports one input and
-    // one output.
+    // Instantiate a new modal subsystem. Implicitly, one input and one output
+    // are exported as freestanding.
     const int mode_id = 42;
-    //const ModalSubsystem<double> mss0 =
-    //    ModalSubsystem<double>(mode_id, shared_ptr<System<double>>(
-    //        std::move(integrator0_)));
     const ModalSubsystem<double> mss0 = ModalSubsystem<double>(mode_id,
                                                                integrator0_);
 
     // Allocate the context and outputs.
-    //auto subcontext0 = mss0.get_system()->CreateDefaultContext();
-    //auto suboutput0 = mss0.get_system()->AllocateOutput(*subcontext0);
-    auto subcontext0 = integrator0_->CreateDefaultContext();
-    auto suboutput0 = integrator0_->AllocateOutput(*subcontext0);
+    auto subcontext0 = mss0.get_system()->CreateDefaultContext();
+    auto suboutput0 = mss0.get_system()->AllocateOutput(*subcontext0);
 
     // Register the system in the HA Context for the first time.
     context_->RegisterSubsystem(std::make_unique<ModalSubsystem<double>>(mss0),
@@ -57,25 +51,16 @@ class HybridAutomatonContextTest : public ::testing::Test {
     context_->SetModalState();
 
     // Set the continuous state.
-    ContinuousState<double>* xc = context_->get_mutable_continuous_state();
+    ContinuousState<double>* xc =
+        context_->get_mutable_continuous_state();
     xc->get_mutable_vector()->SetAtIndex(0, 42.0);
-
-    // *******
-    const ContinuousState<double>* integrator0_xc =
-        context_->GetSubsystemContext()->get_continuous_state();
-    // doesn't work:
-    std::cerr << " state 0: " << integrator0_xc->get_vector().GetAtIndex(0)
-              << std::endl;
-    // works:
-    std::cerr << " state 0: " << xc->get_vector().GetAtIndex(0) << std::endl;
-    // *******
 
     // Set the abstract state with the ID of the current modal subsystem.
     context_->SetModalState();
   }
 
-  // Mocks up a descriptor that's sufficient to read a FreestandingInputPort
-  // connected to @p context at @p index.
+  // Create a descriptor that reads a FreestandingInputPort connected to the
+  // context.
   static const BasicVector<double>* ReadVectorInputPort(
       const Context<double>& context, int index) {
     InputPortDescriptor<double> descriptor(nullptr, index, kVectorValued, 0);
@@ -109,15 +94,14 @@ TEST_F(HybridAutomatonContextTest, RetrieveSubsystemAttributes) {
 TEST_F(HybridAutomatonContextTest, Time) {
   context_->set_time(42.0);
   EXPECT_EQ(42.0, context_->get_time());
-  for (int i = 0; i < kNumSystems; ++i) {
-    EXPECT_EQ(42.0, context_->GetSubsystemContext()->get_time());
-  }
+  EXPECT_EQ(42.0, context_->GetSubsystemContext()->get_time());
 }
 
 // Tests that state variables appear in the diagram context, and write
 // transparently through to the constituent system contexts.
 TEST_F(HybridAutomatonContextTest, State) {
   // The integrator has a single continuous state variable.
+  ASSERT_NE(nullptr, context_->get_mutable_continuous_state());
   ContinuousState<double>* xc = context_->get_mutable_continuous_state();
   EXPECT_EQ(1, xc->size());
   EXPECT_EQ(0, xc->get_generalized_position().size());
@@ -142,12 +126,13 @@ TEST_F(HybridAutomatonContextTest, State) {
 
 // Tests that the pointers to substates in the HybridAutomatonState are equal to
 // the substates in the subsystem context.
-TEST_F(HybridAutomatonContextTest, HybridAutomatonState) {
-  auto hybrid_state = dynamic_cast<State<double>*>(
+TEST_F(HybridAutomatonContextTest, HybridAutomatonSubsystemState) {
+  ASSERT_NE(nullptr, context_->get_mutable_state());
+  auto hybrid_state = dynamic_cast<HybridAutomatonState<double>*>(
       context_->get_mutable_state());
   ASSERT_NE(nullptr, hybrid_state);
   EXPECT_EQ(context_->GetMutableSubsystemContext()->get_mutable_state(),
-            hybrid_state);
+            hybrid_state->get_mutable_substate());
 }
 
 // Tests that a change in the ModalSubsystem is reflected in the AbstractState.
@@ -161,16 +146,19 @@ TEST_F(HybridAutomatonContextTest, DeRegisterAndRegisterSubsystem) {
   auto subcontext1 = mss->get_system()->CreateDefaultContext();
   auto suboutput1 = mss->get_system()->AllocateOutput(*subcontext1);
 
-  context_->DeRegisterSubsystem();
+  //context_->DeRegisterSubsystem();
+
+  // Check that the output and context are reset.
+  //ASSERT_NE(nullptr, context_->GetSubsystemContext());
+  //ASSERT_NE(nullptr, context_->GetSubsystemOutput());
+
   context_->RegisterSubsystem(std::move(mss), std::move(subcontext1),
                               std::move(suboutput1));
   context_->MakeState();
   context_->SetModalState();
 
-  // Now, check that the data survives the jump.
+  // Verify the id of the new ModalSubsystem.
   EXPECT_EQ(555, context_->template get_abstract_state<int>(0));
-
-  // ***** Check if state and time survive!
 }
 
 // Tests that input ports can be assigned to the HybridAutomatonContext and then
@@ -181,8 +169,8 @@ TEST_F(HybridAutomatonContextTest, SetAndGetInputPorts) {
   EXPECT_EQ(128, ReadVectorInputPort(*context_, 0)->get_value()[0]);
 }
 
-// Tests that a clone of the HybridAutomatonContext behaves precisely as the
-// original does.
+// Tests that a clone of the HybridAutomatonContext contains precisely the same
+// data as the original.
 TEST_F(HybridAutomatonContextTest, Clone) {
   context_->FixInputPort(0, BasicVector<double>::Make({128}));
 
@@ -206,6 +194,27 @@ TEST_F(HybridAutomatonContextTest, Clone) {
   EXPECT_NE(orig_port, clone_port);
   EXPECT_TRUE(CompareMatrices(orig_port->get_value(), clone_port->get_value(),
                               1e-8, MatrixCompareType::absolute));
+}
+
+// Tests that a cloned version of the state contains precisely the same data as
+// the original.
+TEST_F(HybridAutomatonContextTest, CloneState) {
+  std::unique_ptr<State<double>> state = context_->CloneState();
+  // Verify that the state was copied.
+  const ContinuousState<double>* xc = (*state).get_continuous_state();
+  EXPECT_EQ(42.0, xc->get_vector().GetAtIndex(0));
+  //const DiscreteState<double>* xd = (*state).get_discrete_state();
+  //EXPECT_EQ(44.0, xd->get_discrete_state(0)->GetAtIndex(0));
+  //const AbstractState* xa = (*state).get_abstract_state();
+  //EXPECT_EQ(42, xa->get_abstract_state(0).GetValue<int>());
+
+  // Verify that the underlying type was preserved.
+  EXPECT_NE(nullptr, dynamic_cast<HybridAutomatonState<double>*>(state.get()));
+  // Verify that changes to the state do not write through to the original
+  // context.
+  (*state->get_mutable_continuous_state())[0] = 1024.;
+  EXPECT_EQ(1024., (*state->get_continuous_state())[0]);
+  EXPECT_EQ(42., (*context_->get_continuous_state())[0]);
 }
 
 // Tests the ability to specify symbolic expressions and evaluate them.
