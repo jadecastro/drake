@@ -2,10 +2,6 @@
 
 #include <memory>
 
-<<<<<<< HEAD
-=======
-#include "drake/systems/framework/hybrid_automaton.h"
->>>>>>> Update with recent system changes, namely ModalState -> AbstractState
 #include "drake/examples/bouncing_ball/ball.h"
 
 namespace drake {
@@ -66,20 +62,10 @@ class BouncingBall : public Ball<T> {
  private:
   const double restitution_coef_ = 1.0;  // Coefficient of restitution.
 
-<<<<<<< HEAD
   // Numerically intolerant signum function.
   int sgn(T x) const {
     return (T(0) < x) - (x < T(0));
   }
-=======
-  const double restitution_coef_ = 0.8;  // coefficient of restitution
-  // TODO: We lose the System-derived class types (e.g. Ball<T>, etc)...
-  // is this problematic?
-  ModalSubsystem* ball_subsystem_;
-  ModeTransition* ball_to_ball_;
-  //std::unique_ptr<ModalSubsystem> ball_subsystem_;
-  //std::unique_ptr<Ball<T>> ball_;
->>>>>>> Cleanup HybridAutomaton classes, add modal state
 };
 
 }  // namespace bouncing_ball
