@@ -34,9 +34,7 @@ constexpr double kZohSamplingPeriod{0.1};
 
 class AbstractTestSource : public LeafSystem<double> {
  public:
-  AbstractTestSource() {
-    this->DeclareOutputPort(kVectorValued, 1);
-  }
+  AbstractTestSource() { this->DeclareOutputPort(kVectorValued, 1); }
 
   unique_ptr<AbstractState> AllocateAbstractState() const override {
     std::vector<unique_ptr<AbstractValue>> values;
@@ -63,12 +61,11 @@ class ContinuousDiscreteAbstractSystem : public Diagram<double> {
     DiagramBuilder<double> builder;
 
     integrator_ = builder.template AddSystem<Integrator<double>>(kSize);
-    zoh_ = builder.template AddSystem<ZeroOrderHold<double>>(
-        kZohSamplingPeriod, kSize);
+    zoh_ = builder.template AddSystem<ZeroOrderHold<double>>(kZohSamplingPeriod,
+                                                             kSize);
     abstract_ = builder.template AddSystem<AbstractTestSource>();
 
-    builder.Connect(integrator_->get_output_port(0),
-                    zoh_->get_input_port(0));
+    builder.Connect(integrator_->get_output_port(0), zoh_->get_input_port(0));
 
     builder.ExportInput(integrator_->get_input_port(0));
     builder.ExportOutput(zoh_->get_output_port(0));
@@ -86,7 +83,6 @@ class ContinuousDiscreteAbstractSystem : public Diagram<double> {
 class HybridAutomatonContextTest : public ::testing::Test {
  protected:
   void SetUp() override {
-
     integrator_.reset(new Integrator<double>(kSize));
 
     context_.reset(new HybridAutomatonContext<double>());
@@ -95,8 +91,8 @@ class HybridAutomatonContextTest : public ::testing::Test {
     // Instantiate a new modal subsystem. Implicitly, one input and one output
     // are exported as freestanding.
     const int mode_id = 42;
-    const ModalSubsystem<double> mss = ModalSubsystem<double>(mode_id,
-                                                              integrator_);
+    const ModalSubsystem<double> mss =
+        ModalSubsystem<double>(mode_id, integrator_);
 
     // Allocate the context and outputs.
     auto subcontext = mss.get_system()->CreateDefaultContext();
@@ -140,8 +136,8 @@ class HybridAutomatonContextStateTest : public ::testing::Test {
     // Instantiate a new modal subsystem. Implicitly, one input and one output
     // are exported as freestanding.
     const int mode_id = 6;
-    const ModalSubsystem<double> mss = ModalSubsystem<double>(mode_id,
-                                                              example_system_);
+    const ModalSubsystem<double> mss =
+        ModalSubsystem<double>(mode_id, example_system_);
 
     // Allocate the context and outputs.
     auto subcontext = mss.get_system()->CreateDefaultContext();
@@ -212,8 +208,8 @@ TEST_F(HybridAutomatonContextTest, ModalSubsystemPortIds) {
   // Explicitly specify the ports for a non-trivial example via the constructor.
   shared_ptr<System<double>> example_system(
       new ContinuousDiscreteAbstractSystem());
-  const ModalSubsystem<double> mss = ModalSubsystem<double>(0, example_system,
-                                                            {0}, {1, 0});
+  const ModalSubsystem<double> mss =
+      ModalSubsystem<double>(0, example_system, {0}, {1, 0});
 
   // Verify the number and identities of the ports have passed into the object.
   EXPECT_EQ(1, mss.get_num_input_ports());
@@ -294,11 +290,11 @@ TEST_F(HybridAutomatonContextStateTest, State) {
   EXPECT_EQ(1, xc->get_misc_continuous_state().size());
 
   DiscreteState<double>* xd = context_->get_mutable_discrete_state();
-  EXPECT_EQ(1, xd->size());  /* expect one discrete state group */
+  EXPECT_EQ(1, xd->size()); /* expect one discrete state group */
   EXPECT_EQ(1, xd->get_discrete_state(0)->size());
 
   AbstractState* xa = context_->get_mutable_abstract_state();
-  EXPECT_EQ(2, xa->size());  /* expect the abstract substate and mode id */
+  EXPECT_EQ(2, xa->size()); /* expect the abstract substate and mode id */
 
   // Check that the expected continuous state appears in the leaf system state.
   ContinuousState<double>* sub_xc =
@@ -339,18 +335,16 @@ TEST_F(HybridAutomatonContextTest, SubsystemState) {
 TEST_F(HybridAutomatonContextTest, RegisterNewSubsystem) {
   const int mode_id = 555;
 
-  shared_ptr<Integrator<double>>
-      integrator1(new Integrator<double>(kSize));
+  shared_ptr<Integrator<double>> integrator1(new Integrator<double>(kSize));
 
   // Register a new system as its own ModalSubsystem.
-  unique_ptr<ModalSubsystem<double>>
-      mss(new ModalSubsystem<double>(mode_id, integrator1));
+  unique_ptr<ModalSubsystem<double>> mss(
+      new ModalSubsystem<double>(mode_id, integrator1));
 
   auto subcontext1 = mss->get_system()->CreateDefaultContext();
   auto suboutput1 = mss->get_system()->AllocateOutput(*subcontext1);
 
-  context_->RegisterSubsystem(move(mss), move(subcontext1),
-                              move(suboutput1));
+  context_->RegisterSubsystem(move(mss), move(subcontext1), move(suboutput1));
   context_->MakeState();
   context_->SetModalState();
 

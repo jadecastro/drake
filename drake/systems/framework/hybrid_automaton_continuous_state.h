@@ -9,8 +9,8 @@
 #include <utility>
 #include <vector>
 
-#include "drake/systems/framework/vector_base.h"
 #include "drake/systems/framework/continuous_state.h"
+#include "drake/systems/framework/vector_base.h"
 
 namespace drake {
 namespace systems {
@@ -38,9 +38,7 @@ class MutableVector : public VectorBase<T> {
     return vector_->GetAtIndex(index);
   }
 
-  T& GetAtIndex(const int index) override {
-    return vector_->GetAtIndex(index);
-  }
+  T& GetAtIndex(const int index) override { return vector_->GetAtIndex(index); }
 
  private:
   VectorBase<T>* vector_;
@@ -56,9 +54,9 @@ class HybridAutomatonContinuousState : public ContinuousState<T> {
 
   /// Constructs a ContinuousState that is composed of other ContinuousStates,
   /// which are not owned by this object.
-  explicit HybridAutomatonContinuousState(VectorBase<T>* state,
-                                          int num_q, int num_v, int num_z)
-  : ContinuousState<T>(set_and_own(state), num_q, num_v, num_z) {}
+  explicit HybridAutomatonContinuousState(VectorBase<T>* state, int num_q,
+                                          int num_v, int num_z)
+      : ContinuousState<T>(set_and_own(state), num_q, num_v, num_z) {}
 
   ~HybridAutomatonContinuousState() override {}
 

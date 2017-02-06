@@ -28,27 +28,31 @@ class ModalSubsystem {
   typedef int ModeId;
   typedef int PortId;
 
-  explicit ModalSubsystem(
-      ModeId mode_id, shared_ptr<System<T>> system,
-      std::vector<symbolic::Expression> invariant,
-      std::vector<symbolic::Expression> initial_conditions,
-      std::vector<PortId> input_port_ids, std::vector<PortId> output_port_ids)
-      : mode_id_(mode_id), system_(move(system)), invariant_(invariant),
+  explicit ModalSubsystem(ModeId mode_id, shared_ptr<System<T>> system,
+                          std::vector<symbolic::Expression> invariant,
+                          std::vector<symbolic::Expression> initial_conditions,
+                          std::vector<PortId> input_port_ids,
+                          std::vector<PortId> output_port_ids)
+      : mode_id_(mode_id),
+        system_(move(system)),
+        invariant_(invariant),
         initial_conditions_(initial_conditions),
-        input_port_ids_(input_port_ids), output_port_ids_(output_port_ids) {
+        input_port_ids_(input_port_ids),
+        output_port_ids_(output_port_ids) {
     CreateSymbolicStatesAndInputs();
   }
 
-  explicit ModalSubsystem(
-      ModeId mode_id, shared_ptr<System<T>> system,
-      std::vector<PortId> input_port_ids, std::vector<PortId> output_port_ids)
-      : mode_id_(mode_id), system_(move(system)),
-        input_port_ids_(input_port_ids), output_port_ids_(output_port_ids) {
+  explicit ModalSubsystem(ModeId mode_id, shared_ptr<System<T>> system,
+                          std::vector<PortId> input_port_ids,
+                          std::vector<PortId> output_port_ids)
+      : mode_id_(mode_id),
+        system_(move(system)),
+        input_port_ids_(input_port_ids),
+        output_port_ids_(output_port_ids) {
     CreateSymbolicStatesAndInputs();
   }
 
-  explicit ModalSubsystem(
-      ModeId mode_id, shared_ptr<System<T>> system)
+  explicit ModalSubsystem(ModeId mode_id, shared_ptr<System<T>> system)
       : mode_id_(mode_id), system_(move(system)) {
     CreateSymbolicStatesAndInputs();
     PopulateDefaultPorts();
@@ -56,15 +60,14 @@ class ModalSubsystem {
 
   /// Accessors for the underlying data.
   ModeId get_mode_id() const { return mode_id_; }
-  System<T>* get_system() const {return system_.get(); }
+  System<T>* get_system() const { return system_.get(); }
   const std::vector<PortId> get_input_port_ids() const {
     return input_port_ids_;
   }
-  std::vector<PortId>* get_mutable_input_port_ids() {
-    return &input_port_ids_;
-  }
+  std::vector<PortId>* get_mutable_input_port_ids() { return &input_port_ids_; }
   PortId get_input_port_id(const int index) const {
-    DRAKE_DEMAND(index >=0 && index < static_cast<int>(input_port_ids_.size()));
+    DRAKE_DEMAND(index >= 0 &&
+                 index < static_cast<int>(input_port_ids_.size()));
     return input_port_ids_[index];
   }
   int get_num_input_ports() const {
@@ -77,7 +80,7 @@ class ModalSubsystem {
     return &output_port_ids_;
   }
   PortId get_output_port_id(const int index) const {
-    DRAKE_DEMAND(index >=0 &&
+    DRAKE_DEMAND(index >= 0 &&
                  index < static_cast<int>(output_port_ids_.size()));
     return output_port_ids_[index];
   }
@@ -134,8 +137,8 @@ class ModalSubsystem {
     unique_ptr<Context<T>> context = system_->AllocateContext();
 
     // Create symbolic variables for the continuous and discrete states.
-    CreateSymbolicVariables(
-        "xc", context->get_continuous_state_vector().size());
+    CreateSymbolicVariables("xc",
+                            context->get_continuous_state_vector().size());
     for (int i = 0; i < context->get_num_discrete_state_groups(); ++i) {
       CreateSymbolicVariables("xd", context->get_discrete_state(i)->size());
     }
@@ -164,9 +167,9 @@ class ModalSubsystem {
   // inputs and outputs.
   void PopulateDefaultPorts() {
     input_port_ids_.resize(system_->get_num_input_ports());
-    std::iota (std::begin(input_port_ids_), std::end(input_port_ids_), 0);
+    std::iota(std::begin(input_port_ids_), std::end(input_port_ids_), 0);
     output_port_ids_.resize(system_->get_num_output_ports());
-    std::iota (std::begin(output_port_ids_), std::end(output_port_ids_), 0);
+    std::iota(std::begin(output_port_ids_), std::end(output_port_ids_), 0);
   }
 
   // An identifier for this mode.
@@ -186,7 +189,6 @@ class ModalSubsystem {
   std::map<std::string, std::vector<std::vector<symbolic::Variable>>>
       symbolic_variables_;
 };
-
 
 /// HybridAutomatonState is a State that is annotated with pointers to the
 /// current active subsystem.
@@ -228,8 +230,8 @@ class HybridAutomatonState : public State<T> {
     int num_v = xc->get_generalized_velocity().size();
     int num_z = xc->get_misc_continuous_state().size();
     this->set_continuous_state(
-        make_unique<internal::HybridAutomatonContinuousState<T>>(
-            x, num_q, num_v, num_z));
+        make_unique<internal::HybridAutomatonContinuousState<T>>(x, num_q,
+                                                                 num_v, num_z));
 
     const std::vector<BasicVector<T>*>& xd =
         state_->get_mutable_discrete_state()->get_data();
@@ -253,7 +255,6 @@ class HybridAutomatonState : public State<T> {
   unique_ptr<State<T>> owned_state_;
   int mode_id_;
 };
-
 
 /// The HybridAutomatonContext contains the context and output for the active
 /// ModalSubsystem, as chosen by HybridAutomaton. In addition, it augments the
@@ -298,7 +299,9 @@ class HybridAutomatonContext : public Context<T> {
   }
 
   void ExportInput(const std::vector<PortId>& port_ids) {
-    for (auto& port_id : port_ids) { this->ExportInput(port_id); }
+    for (auto& port_id : port_ids) {
+      this->ExportInput(port_id);
+    }
   }
 
   /// Declares that a particular input port of the active subsystem is an input
@@ -311,7 +314,9 @@ class HybridAutomatonContext : public Context<T> {
   }
 
   void ExportOutput(const std::vector<PortId>& port_ids) {
-    for (auto& port_id : port_ids) { this->ExportOutput(port_id); }
+    for (auto& port_id : port_ids) {
+      this->ExportOutput(port_id);
+    }
   }
 
   /// Generates the state vector for the allocating HybridAutomaton.
@@ -365,10 +370,10 @@ class HybridAutomatonContext : public Context<T> {
     auto abstract_state = this->get_mutable_abstract_state();
     DRAKE_DEMAND(abstract_state != nullptr);
 
-    //ModalSubsystem<T> mss = this->
+    // ModalSubsystem<T> mss = this->
     //    template get_mutable_abstract_state<ModalSubsystem<T>>(mss_index);
     // TODO(jadecastro): int vs. ModalSubsystem<T>?
-    this->template get_mutable_abstract_state<int>(abstract_state->size()-1) =
+    this->template get_mutable_abstract_state<int>(abstract_state->size() - 1) =
         GetModalSubsystem()->get_mode_id();
   }
 
@@ -406,8 +411,7 @@ class HybridAutomatonContext : public Context<T> {
     const ModalSubsystem<T>* modal_subsystem = GetModalSubsystem();
     DRAKE_DEMAND(modal_subsystem != nullptr);
     PortId subsystem_port_id = modal_subsystem->get_input_port_id(port_index);
-    GetMutableSubsystemContext()
-        ->SetInputPort(subsystem_port_id, move(port));
+    GetMutableSubsystemContext()->SetInputPort(subsystem_port_id, move(port));
   }
 
  protected:

@@ -18,8 +18,7 @@ class HybridAutomatonContinuousStateTest : public ::testing::Test {
  protected:
   void SetUp() override {
     basic_vector_ = BasicVector<int>::Make({1, 1, 2, 3, 5, 8});
-    mutable_vector_ = std::make_unique<MutableVector<int>>(
-        basic_vector_.get());
+    mutable_vector_ = std::make_unique<MutableVector<int>>(basic_vector_.get());
   }
 
   std::unique_ptr<VectorBase<int>> basic_vector_;
@@ -50,8 +49,8 @@ TEST_F(HybridAutomatonContinuousStateTest, ContinuousState) {
   std::unique_ptr<VectorBase<double>> vector =
       BasicVector<double>::Make({1., 1., 2., 3., 5., 8.});
   std::unique_ptr<HybridAutomatonContinuousState<double>> hybrid_cs =
-      make_unique<HybridAutomatonContinuousState<double>>(vector.get(),
-                                                          kSize, 0, 0);
+      make_unique<HybridAutomatonContinuousState<double>>(vector.get(), kSize,
+                                                          0, 0);
 
   EXPECT_EQ(kSize, hybrid_cs->size());
   EXPECT_EQ(kSize, hybrid_cs->get_generalized_position().size());
