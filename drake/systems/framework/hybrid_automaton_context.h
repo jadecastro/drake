@@ -22,9 +22,6 @@ using std::move;
 using std::shared_ptr;
 using std::unique_ptr;
 
-using std::cerr;
-using std::endl;
-
 // TODO(jadecastro): Some comments are in order.
 template <typename T>
 class ModalSubsystem {
@@ -88,6 +85,11 @@ class ModalSubsystem {
   int get_num_output_ports() const {
     return static_cast<int>(output_port_ids_.size());
   }
+
+  /// Accessors for the symbolic::Expressions for the invariants and initial
+  /// condition state sets for this ModalSubsystem. Their defining sets are
+  /// semialgebraic: a state assignment is within the set iff it evaluates to a
+  /// non-negative value.
   const std::vector<symbolic::Expression> get_invariant() const {
     return invariant_;
   }
@@ -115,7 +117,7 @@ class ModalSubsystem {
     return symbolic_variables_.at("xd").size();
   };
 
-  /// Returns a clone that includes a deep copy of all the output ports.
+  /// Returns a clone that includes a deep copy of all the underlying data.
   unique_ptr<ModalSubsystem<T>> Clone() const {
     DRAKE_DEMAND(system_ != nullptr);
     shared_ptr<System<T>> sys = system_;
@@ -129,15 +131,15 @@ class ModalSubsystem {
  private:
   // Create symbolic variables based on the expected context for this subsystem.
   void CreateSymbolicStatesAndInputs() {
-    // Temporarily create a context to extract the needed dimensions.
-    std::unique_ptr<Context<T>> context = system_->AllocateContext();
+    // Create a temporary context to extract the needed dimensions.
+    unique_ptr<Context<T>> context = system_->AllocateContext();
 
+    // Create symbolic variables for the continuous and discrete states.
     CreateSymbolicVariables(
         "xc", context->get_continuous_state_vector().size());
     for (int i = 0; i < context->get_num_discrete_state_groups(); ++i) {
       CreateSymbolicVariables("xd", context->get_discrete_state(i)->size());
     }
-
     context.reset();
   }
 
@@ -169,7 +171,7 @@ class ModalSubsystem {
   }
 
   // An identifier for this mode.
-  // TODO(jadecastro): Allow ModeId to take on a name in place of the int.
+  // TODO(jadecastro): Allow ModeId to take on a descriptor in place of the int.
   ModeId mode_id_;
   // The system model.
   shared_ptr<System<T>> system_;
@@ -231,7 +233,7 @@ class HybridAutomatonContinuousState : public ContinuousState<T> {
   ~HybridAutomatonContinuousState() override {}
 
  private:
-  static std::unique_ptr<VectorBase<T>> Dump(VectorBase<T>* vector) {
+  static unique_ptr<VectorBase<T>> Dump(VectorBase<T>* vector) {
     return make_unique<MutableVector<T>>(vector);
   }
 };
@@ -245,26 +247,23 @@ class HybridAutomatonState : public State<T> {
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(HybridAutomatonState)
 
   /// Constructs a DiagramState consisting of @p size substates.
-  explicit HybridAutomatonState<T>() :
-      State<T>(),
-      substate_(),
-      owned_substate_() {}
+  explicit HybridAutomatonState<T>() : State<T>(), state_(), owned_state_() {}
 
   /// Sets the @p mode_id for the current active subsystem.
   void set_mode_id(int mode_id) { mode_id_ = mode_id; }
 
   /// Sets the state of the HA to @p substate, but does not take ownership
   /// of @p substate.
-  void set_substate(State<T>* substate) { substate_ = substate; }
+  void set_substate(State<T>* state) { state_ = state; }
 
   /// Sets the state of the HA to @p substate, taking ownership of @p substate.
-  void set_and_own_substate(std::unique_ptr<State<T>> substate) {
-    set_substate(substate.get());
-    owned_substate_ = move(substate);
+  void set_and_own_substate(unique_ptr<State<T>> state) {
+    state_ = state.get();
+    owned_state_ = move(state);
   }
 
   /// Returns the stored substate.
-  State<T>* get_mutable_substate() { return substate_; }
+  State<T>* get_mutable_substate() { return state_; }
 
   /// Finalizes the state, augmenting any abstract data with the current @p
   /// ModeId.
@@ -273,8 +272,8 @@ class HybridAutomatonState : public State<T> {
     finalized_ = true;
 
     // Create the continuous and discrete states.
-    DRAKE_DEMAND(substate_->get_continuous_state() != nullptr);
-    ContinuousState<T>* xc = substate_->get_mutable_continuous_state();
+    DRAKE_DEMAND(state_->get_continuous_state() != nullptr);
+    ContinuousState<T>* xc = state_->get_mutable_continuous_state();
     VectorBase<T>* x = xc->get_mutable_vector();
     int num_q = xc->get_generalized_position().size();
     int num_v = xc->get_generalized_velocity().size();
@@ -283,11 +282,11 @@ class HybridAutomatonState : public State<T> {
         x, num_q, num_v, num_z));
 
     const std::vector<BasicVector<T>*>& xd =
-        substate_->get_mutable_discrete_state()->get_data();
-    this->set_discrete_state(std::make_unique<DiscreteState<T>>(xd));
+        state_->get_mutable_discrete_state()->get_data();
+    this->set_discrete_state(make_unique<DiscreteState<T>>(xd));
 
     // Combine the current abstract state with the active modal subsystem state.
-    AbstractState* subsystem_xm = substate_->get_mutable_abstract_state();
+    AbstractState* subsystem_xm = state_->get_mutable_abstract_state();
     std::vector<unique_ptr<AbstractValue>> hybrid_xm;
     for (int i = 0; i < subsystem_xm->size(); ++i) {
       hybrid_xm.push_back(subsystem_xm->get_mutable_abstract_state(i).Clone());
@@ -295,13 +294,13 @@ class HybridAutomatonState : public State<T> {
     hybrid_xm.push_back(unique_ptr<AbstractValue>(new Value<int>(mode_id_)));
 
     // The wrapper states do not own the subsystem state.
-    this->set_abstract_state(std::make_unique<AbstractState>(move(hybrid_xm)));
+    this->set_abstract_state(make_unique<AbstractState>(move(hybrid_xm)));
   }
 
  private:
   bool finalized_{false};
-  State<T>* substate_;
-  std::unique_ptr<State<T>> owned_substate_;
+  State<T>* state_;
+  unique_ptr<State<T>> owned_state_;
   int mode_id_;
 };
 
@@ -323,7 +322,8 @@ class HybridAutomatonContext : public Context<T> {
   explicit HybridAutomatonContext() {}
 
   /// Registers the ModalSubsystem by passing ownership of its constituent data
-  /// structures into this context.
+  /// structures into this context.  If the object is already initialized, the
+  /// existing data is discarded.
   void RegisterSubsystem(unique_ptr<ModalSubsystem<T>> modal_subsystem,
                          unique_ptr<Context<T>> subcontext,
                          unique_ptr<SystemOutput<T>> suboutput) {
@@ -368,7 +368,7 @@ class HybridAutomatonContext : public Context<T> {
   /// Note: User code should not call this method. It is for use during context
   /// allocation only.
   void MakeState() {
-    auto hybrid_state = std::make_unique<HybridAutomatonState<T>>();
+    auto hybrid_state = make_unique<HybridAutomatonState<T>>();
     Context<T>* subcontext = context_.get();
     DRAKE_DEMAND(subcontext != nullptr);
     hybrid_state->set_substate(subcontext->get_mutable_state());
@@ -385,10 +385,10 @@ class HybridAutomatonContext : public Context<T> {
   /// Returns the context structure for the active ModalSubsystem.
   const Context<T>* GetSubsystemContext() const { return context_.get(); }
 
-  /// Returns the context structure for the active ModalSubsystem.
+  /// Returns the mutable context structure for the active ModalSubsystem.
   Context<T>* GetMutableSubsystemContext() { return context_.get(); }
 
-  /// Recursively sets the time in this context and the active subcontext.
+  /// Szets the time in both this context and the active subcontext.
   void set_time(const T& time_sec) override {
     Context<T>::set_time(time_sec);
     Context<T>* subcontext = GetMutableSubsystemContext();
@@ -482,7 +482,7 @@ class HybridAutomatonContext : public Context<T> {
 
     Context<T>* context = context_.get();
     clone->set_and_own_substate(context->CloneState());
-
+    clone->set_mode_id(get_mode_id());
     clone->Finalize();
     return clone;
   }

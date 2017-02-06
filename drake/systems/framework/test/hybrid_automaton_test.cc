@@ -41,7 +41,7 @@ class BouncingBall : public HybridAutomaton<double> {
     ModalSubsystem<double> mss = builder.AddModalSubsystem(
         std::move(ball), inports, outports, kModeIdBall);
 
-    ball_subsystem_ = &mss;
+    ball_subsystem_ = &mss;  // ******************* Messy: Clean this up!
     ball_ = ball_subsystem_->get_system();
     // TODO(jadecastro): Variable -> Variables?
     const std::vector<symbolic::Variable> x =

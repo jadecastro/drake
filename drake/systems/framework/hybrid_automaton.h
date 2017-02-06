@@ -408,7 +408,6 @@ class HybridAutomaton : public System<T>,
     // *******************************
 
     const T& time = context->get_time();
-    context->DeRegisterSubsystem();  // De-register the active subsystem.
 
     // Create a pointer to a deepcopy of the 'post' subsystem.
     CreateAndRegisterSystem(mss_post, context);
@@ -730,7 +729,7 @@ class HybridAutomaton : public System<T>,
     //    context.get_symbolic_state_variables();
     // std::vector<symbolic::Variable> state_sym =
     //    modal_subsystems_[0]->get_symbolic_state_variables();
-    for (int i = 0; i < xc.size(); i++) {
+    for (int i = 0; i < xc.size(); ++i) {
       xc_env.insert(xc_sym_[i], xc[i]);
     }
 
