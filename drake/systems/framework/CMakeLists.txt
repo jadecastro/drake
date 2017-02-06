@@ -17,6 +17,7 @@ set(sources
   #hybrid_automaton.cc
   #hybrid_automaton_builder.cc
   hybrid_automaton_context.cc
+  hybrid_automaton_continuous_state.cc
   output_port_listener_interface.cc
   parameters.cc
   single_output_vector_source.cc
@@ -59,6 +60,7 @@ set(installed_headers
   #hybrid_automaton.h
   #hybrid_automaton_builder.h
   hybrid_automaton_context.h
+  hybrid_automaton_continuous_state.h
   output_port_listener_interface.h
   parameters.h
   single_output_vector_source.h

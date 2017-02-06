@@ -28,9 +28,9 @@ using std::move;
 using std::shared_ptr;
 using std::unique_ptr;
 
-constexpr int kSize = 1;
-constexpr double kTime = 12.0;
-constexpr double kZohSamplingPeriod = 0.1;
+constexpr int kSize{1};
+constexpr double kTime{12.};
+constexpr double kZohSamplingPeriod{0.1};
 
 class AbstractTestSource : public LeafSystem<double> {
  public:
@@ -55,8 +55,8 @@ class AbstractTestSource : public LeafSystem<double> {
 };
 
 // A system that is an amalgamation of continuous, discrete, and abstract
-// states. Specifically, it is a diagram of an integrator in series with a
-// zero-order hold element, in parallel with an abstract test source system.
+// states. Specifically, it is a diagram of an Integrator in series with a
+// ZeroOrderHold element, in parallel with an AbstractTestSource system.
 class ContinuousDiscreteAbstractSystem : public Diagram<double> {
  public:
   explicit ContinuousDiscreteAbstractSystem() {
