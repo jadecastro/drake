@@ -25,6 +25,8 @@ using std::unique_ptr;
 template <typename T>
 class ModalSubsystem {
  public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(ModalSubsystem)
+
   typedef int ModeId;
   typedef int PortId;
 

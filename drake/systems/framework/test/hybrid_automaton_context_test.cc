@@ -84,6 +84,7 @@ class HybridAutomatonContextTest : public ::testing::Test {
  protected:
   void SetUp() override {
     integrator_.reset(new Integrator<double>(kSize));
+    integrator_->set_name("Alice");
 
     context_.reset(new HybridAutomatonContext<double>());
     context_->set_time(kTime);
@@ -91,16 +92,15 @@ class HybridAutomatonContextTest : public ::testing::Test {
     // Instantiate a new modal subsystem. Implicitly, one input and one output
     // are exported as freestanding.
     const int mode_id = 42;
-    const ModalSubsystem<double> mss =
-        ModalSubsystem<double>(mode_id, integrator_);
+    unique_ptr<ModalSubsystem<double>> mss(
+        new ModalSubsystem<double>(mode_id, integrator_));
 
     // Allocate the context and outputs.
-    auto subcontext = mss.get_system()->CreateDefaultContext();
-    auto suboutput = mss.get_system()->AllocateOutput(*subcontext);
+    auto subcontext = mss->get_system()->CreateDefaultContext();
+    auto suboutput = mss->get_system()->AllocateOutput(*subcontext);
 
     // Register the system in the HA Context for the first time.
-    context_->RegisterSubsystem(make_unique<ModalSubsystem<double>>(mss),
-                                move(subcontext), move(suboutput));
+    context_->RegisterSubsystem(move(mss), move(subcontext), move(suboutput));
     context_->MakeState();
 
     // Set the abstract state with the ID of the current modal subsystem.
@@ -136,16 +136,15 @@ class HybridAutomatonContextStateTest : public ::testing::Test {
     // Instantiate a new modal subsystem. Implicitly, one input and one output
     // are exported as freestanding.
     const int mode_id = 6;
-    const ModalSubsystem<double> mss =
-        ModalSubsystem<double>(mode_id, example_system_);
+    unique_ptr<ModalSubsystem<double>> mss(
+        new ModalSubsystem<double>(mode_id, example_system_));
 
     // Allocate the context and outputs.
-    auto subcontext = mss.get_system()->CreateDefaultContext();
-    auto suboutput = mss.get_system()->AllocateOutput(*subcontext);
+    auto subcontext = mss->get_system()->CreateDefaultContext();
+    auto suboutput = mss->get_system()->AllocateOutput(*subcontext);
 
     // Register the system in the HA Context for the first time.
-    context_->RegisterSubsystem(make_unique<ModalSubsystem<double>>(mss),
-                                move(subcontext), move(suboutput));
+    context_->RegisterSubsystem(move(mss), move(subcontext), move(suboutput));
     context_->MakeState();
 
     // Set the abstract state with the ID of the current modal subsystem.
@@ -208,7 +207,7 @@ TEST_F(HybridAutomatonContextTest, ModalSubsystemPortIds) {
   // Explicitly specify the ports for a non-trivial example via the constructor.
   shared_ptr<System<double>> example_system(
       new ContinuousDiscreteAbstractSystem());
-  const ModalSubsystem<double> mss =
+  const ModalSubsystem<double>& mss =
       ModalSubsystem<double>(0, example_system, {0}, {1, 0});
 
   // Verify the number and identities of the ports have passed into the object.
