@@ -27,7 +27,7 @@ Builder::Builder(const api::RBounds& lane_bounds,
 }
 
 
-const Connection* Builder::Connect(
+Connection* Builder::Connect(
     const std::string& id,
     const Endpoint& start,
     const double length,
@@ -43,7 +43,7 @@ const Connection* Builder::Connect(
 }
 
 
-const Connection* Builder::Connect(
+Connection* Builder::Connect(
     const std::string& id,
     const Endpoint& start,
     const ArcOffset& arc,
@@ -64,7 +64,6 @@ const Connection* Builder::Connect(
       id, start, end, cx, cy, arc.radius(), arc.d_theta()));
   return connections_.back().get();
 }
-
 
 void Builder::SetDefaultBranch(
     const Connection* in, const api::LaneEnd::Which in_end,
