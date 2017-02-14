@@ -7,8 +7,6 @@
 
 #include "drake/automotive/maliput/api/road_geometry.h"
 #include "drake/automotive/maliput/monolane/builder.h"
-#include "drake/common/eigen_autodiff_types.h"
-#include "drake/common/symbolic_expression.h"
 
 namespace drake {
 namespace automotive {

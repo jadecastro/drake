@@ -467,6 +467,15 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
+    name = "monolane_onramp_output_generator",
+    deps = [
+        "//drake/automotive:monolane_onramp_merge",
+        "//drake/automotive/maliput/utility",
+        "//drake/thirdParty:spruce",
+    ],
+)
+
+drake_cc_googletest(
     name = "simple_car_test",
     deps = [
         "//drake/automotive:simple_car",
@@ -520,14 +529,6 @@ drake_cc_googletest(
     name = "simple_powertrain_test",
     deps = [
         "//drake/automotive:simple_powertrain",
-    ],
-)
-
-drake_cc_googletest(
-    name = "monolane_onramp_merge_test",
-    deps = [
-        "//drake/automotive:monolane_onramp_merge",
-        "//drake/automotive/maliput/utility",
     ],
 )
 
