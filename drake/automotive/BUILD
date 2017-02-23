@@ -150,6 +150,16 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "powered_bicycle",
+    srcs = ["powered_bicycle.cc"],
+    hdrs = ["powered_bicycle.h"],
+    deps = [
+        ":bicycle",
+        ":simple_power_train",
+    ],
+)
+
+drake_cc_library(
     name = "simple_car",
     srcs = ["simple_car.cc"],
     hdrs = [
