@@ -155,7 +155,7 @@ drake_cc_library(
     hdrs = ["powered_bicycle.h"],
     deps = [
         ":bicycle",
-        ":simple_power_train",
+        ":simple_powertrain",
     ],
 )
 

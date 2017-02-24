@@ -60,6 +60,7 @@ drake_install_headers(
   idm_planner.h
   linear_car.h
   monolane_onramp_merge.h
+  powered_bicycle.h
   simple_car.h
   simple_car_to_euler_floating_joint.h
   simple_powertrain.h
