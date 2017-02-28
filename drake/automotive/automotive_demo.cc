@@ -80,14 +80,14 @@ void AddVehicles(RoadNetworkType road_network_type,
     const std::string name = "";
     const std::string& channel_name = MakeChannelName(name);
     drake::log()->info("Adding simple car subscribed to {}.", channel_name);
-    simulator->AddSimpleCarFromSdf(kSdfFile, name, channel_name);
+    simulator->AddIdmSimpleCarFromSdf(kSdfFile, name, channel_name);
   } else {
     std::istringstream simple_car_name_stream(FLAGS_simple_car_names);
     std::string name;
     while (getline(simple_car_name_stream, name, ',')) {
       const std::string& channel_name = MakeChannelName(name);
       drake::log()->info("Adding simple car subscribed to {}.", channel_name);
-      simulator->AddSimpleCarFromSdf(kSdfFile, name, channel_name);
+      simulator->AddIdmSimpleCarFromSdf(kSdfFile, name, channel_name);
     }
   }
 

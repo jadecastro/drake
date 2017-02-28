@@ -12,6 +12,7 @@
 #include "drake/automotive/dev/infinite_circuit_road.h"
 #include "drake/automotive/gen/endless_road_car_state.h"
 #include "drake/automotive/maliput/api/road_geometry.h"
+#include "drake/automotive/idm_controller.h"
 #include "drake/automotive/simple_car.h"
 #include "drake/automotive/simple_car_to_euler_floating_joint.h"
 #include "drake/automotive/trajectory_car.h"
@@ -55,6 +56,10 @@ class AutomotiveSimulator {
   /// method invokes RigidBodyTree::compile, which may substantially update the
   /// tree representation.
   const RigidBodyTree<T>& get_rigid_body_tree();
+
+  int AddIdmSimpleCarFromSdf(const std::string& sdf_filename,
+                             const std::string& model_name,
+                             const std::string& channel_name);
 
   /// Adds a SimpleCar system to this simulation, including its DrivingCommand
   /// LCM input and EulerFloatingJoint output.
@@ -242,6 +247,9 @@ class AutomotiveSimulator {
   std::unique_ptr<const maliput::api::RoadGeometry> road_{};
   std::unique_ptr<const maliput::utility::InfiniteCircuitRoad> endless_road_{};
   std::map<EndlessRoadCar<T>*, EndlessRoadCarState<T>> endless_road_cars_;
+  TrajectoryCar<T>* stored_trajectory_car_{nullptr};
+  SimpleCar<T>* stored_simple_car_{nullptr};
+  IdmController<T>* stored_idm_{nullptr};
 
   // === Start for building. ===
   std::unique_ptr<systems::DiagramBuilder<T>> builder_{

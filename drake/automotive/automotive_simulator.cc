@@ -13,6 +13,7 @@
 #include "drake/automotive/gen/euler_floating_joint_state_translator.h"
 #include "drake/automotive/gen/simple_car_state_translator.h"
 #include "drake/automotive/maliput/utility/generate_urdf.h"
+#include "drake/automotive/idm_controller.h"
 #include "drake/automotive/simple_car.h"
 #include "drake/automotive/simple_car_to_euler_floating_joint.h"
 #include "drake/automotive/trajectory_car.h"
@@ -72,6 +73,29 @@ const RigidBodyTree<T>& AutomotiveSimulator<T>::get_rigid_body_tree() {
 }
 
 template <typename T>
+int AutomotiveSimulator<T>::AddIdmSimpleCarFromSdf(
+    const std::string& sdf_filename,
+    const std::string& model_name, const std::string& channel_name) {
+  DRAKE_DEMAND(!started_);
+  const int vehicle_number = allocate_vehicle_number();
+
+  auto idm_controller = builder_->template AddSystem<IdmController<T>>(20.);
+  auto simple_car = builder_->template AddSystem<SimpleCar<T>>();
+  auto coord_transform =
+      builder_->template AddSystem<SimpleCarToEulerFloatingJoint<T>>();
+
+  // Store the idm and simple car for now, until we have PoseAggregator.
+  stored_simple_car_ = simple_car;
+  stored_idm_ = idm_controller;
+
+  builder_->Connect(simple_car->pose_output(),
+                    idm_controller->get_ego_input());
+  AddPublisher(*simple_car, vehicle_number);
+  AddPublisher(*coord_transform, vehicle_number);
+  return AddSdfModel(sdf_filename, coord_transform, model_name);
+}
+
+template <typename T>
 int AutomotiveSimulator<T>::AddSimpleCarFromSdf(
     const std::string& sdf_filename,
     const std::string& model_name, const std::string& channel_name) {
@@ -108,6 +132,9 @@ int AutomotiveSimulator<T>::AddTrajectoryCarFromSdf(
       builder_->template AddSystem<TrajectoryCar<T>>(curve, speed, start_time);
   auto coord_transform =
       builder_->template AddSystem<SimpleCarToEulerFloatingJoint<T>>();
+
+  // Store the trajectory car for now, until we have PoseAggregator.
+  stored_trajectory_car_ = trajectory_car;
 
   builder_->Connect(*trajectory_car, *coord_transform);
   AddPublisher(*trajectory_car, vehicle_number);
@@ -508,6 +535,13 @@ void AutomotiveSimulator<T>::Start(double target_realtime_rate) {
       }
       ++i;
     }
+  }
+
+  if (stored_trajectory_car_ != nullptr && stored_simple_car_ != nullptr &&
+      stored_idm_ != nullptr) {
+    builder_->Connect(stored_simple_car_->pose_output(),
+                      stored_idm_->get_ego_input());
+    
   }
 
   diagram_ = builder_->Build();

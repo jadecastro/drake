@@ -215,6 +215,7 @@ drake_cc_library(
         ":endless_road_oracle",
         ":generated_translators",
         ":generated_vectors",
+        ":idm_controller",
         ":simple_car",
         ":trajectory_car",
         "//drake/automotive/maliput/api",

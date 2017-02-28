@@ -50,6 +50,9 @@ class IdmController : public systems::LeafSystem<T> {
   // The output of this system is an algebraic relation of its inputs.
   bool has_any_direct_feedthrough() const override { return true; }
 
+  std::unique_ptr<systems::BasicVector<T>> AllocateOutputVector(
+      const systems::OutputPortDescriptor<T>& descriptor) const override;
+
   std::unique_ptr<systems::Parameters<T>> AllocateParameters() const override;
 
   void SetDefaultParameters(const systems::LeafContext<T>& context,
@@ -65,14 +68,16 @@ class IdmController : public systems::LeafSystem<T> {
     const T& s_0 = params.s_0();
     const T& time_headway = params.time_headway();
     const T& delta = params.delta();
-    const T& l_a = params.l_a();
+
+    DRAKE_DEMAND(a > 0.0);
+    DRAKE_DEMAND(b > 0.0);
 
     const T position_deficit =
         ego_velocity * closing_velocity / (2 * sqrt(a * b));
 
     return a * (1. - pow(ego_velocity / v_ref, delta) -
                 pow((s_0 + ego_velocity * time_headway + position_deficit) /
-                    (net_distance - l_a), 2.));
+                    net_distance, 2.));
   };
 
  private:
