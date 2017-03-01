@@ -90,6 +90,7 @@ int AutomotiveSimulator<T>::AddIdmSimpleCarFromSdf(
 
   builder_->Connect(simple_car->pose_output(),
                     idm_controller->get_ego_input());
+
   AddPublisher(*simple_car, vehicle_number);
   AddPublisher(*coord_transform, vehicle_number);
   return AddSdfModel(sdf_filename, coord_transform, model_name);
@@ -501,6 +502,8 @@ void AutomotiveSimulator<T>::Start(double target_realtime_rate) {
   // in an abundance of caution, the following line calls `compile()` again.
   rigid_body_tree_->compile();
 
+  std::cerr << " Start" << std::endl;
+
   ConnectJointStateSourcesToVisualizer();
 
   if (endless_road_) {
@@ -537,12 +540,15 @@ void AutomotiveSimulator<T>::Start(double target_realtime_rate) {
     }
   }
 
+  /*
   if (stored_trajectory_car_ != nullptr && stored_simple_car_ != nullptr &&
       stored_idm_ != nullptr) {
-    builder_->Connect(stored_simple_car_->pose_output(),
+    std::cerr << " Start1" << std::endl;
+    builder_->Connect(stored_s_->pose_output(),
                       stored_idm_->get_ego_input());
-    
+    std::cerr << " Start2" << std::endl;
   }
+  */
 
   diagram_ = builder_->Build();
   simulator_ = std::make_unique<systems::Simulator<T>>(*diagram_);

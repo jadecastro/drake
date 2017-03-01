@@ -21,13 +21,11 @@ IdmController<T>::IdmController(const T& v_ref) : v_ref_(v_ref) {
   // The reference velocity must be strictly positive.
   DRAKE_ASSERT(v_ref > 0);
 
-  const int kEgoCarOutputVectorSize = 2;
-  const int kAgentCarOutputVectorSize = 2;
   const int kLinearAccelerationSize = 1;
   // Declare the ego car input port.
-  this->DeclareInputPort(systems::kVectorValued, kEgoCarOutputVectorSize);
+  this->DeclareInputPort(systems::kVectorValued, PoseVector<T>::kSize);
   // Declare the agent car input port.
-  this->DeclareInputPort(systems::kVectorValued, kAgentCarOutputVectorSize);
+  this->DeclareInputPort(systems::kVectorValued, PoseVector<T>::kSize);
   // Declare the output port.
   this->DeclareOutputPort(systems::kVectorValued, kLinearAccelerationSize);
 }
@@ -96,7 +94,7 @@ void IdmController<T>::ImplDoCalcOutput(const PoseVector<T>& ego_pose,
 
   // Ensure that we are supplying the planner with sane parameters and
   // input values.
-  const T net_distance = x_agent - x_ego - params.l_a();
+  const T net_distance = x_agent - x_ego - 4.5;  // <---- TODO
   DRAKE_DEMAND(net_distance > 0.);
   const T closing_velocity = v_ego - v_agent;
 
@@ -132,7 +130,6 @@ void IdmController<T>::SetDefaultParameters(
   idm_params->set_s_0(T(1.0));           // minimum desired net distance.
   idm_params->set_time_headway(T(0.1));  // desired headway to lead vehicle.
   idm_params->set_delta(T(4.0));  // recommended choice of free-road exponent.
-  idm_params->set_l_a(T(4.5));    // length of leading car.
 }
 
 // These instantiations must match the API documentation in
