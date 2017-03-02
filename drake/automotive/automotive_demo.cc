@@ -70,7 +70,7 @@ void AddVehicles(RoadNetworkType road_network_type,
     AutomotiveSimulator<double>* simulator) {
   // TODO(liang.fok): Generalize this demo to allow arbitrary models to be
   // specified via command line parameters. This will involve removing some
-  // hard-coded assumptions about the model's geometry. For exeample, the call
+  // hard-coded assumptions about the model's geometry. For example, the call
   // to CreateTrajectoryParams() below expects a "car" to have a particular
   // length and width.
   const std::string kSdfFile =
@@ -183,6 +183,7 @@ int main(int argc, char* argv[]) {
   auto simulator = std::make_unique<AutomotiveSimulator<double>>();
   const maliput::api::RoadGeometry* road_geometry =
       AddTerrain(road_network_type, simulator.get());
+  // TODO(jadecastro): Add PoseAggregator here.
   AddVehicles(road_network_type, road_geometry, simulator.get());
   simulator->Start(FLAGS_target_realtime_rate);
   simulator->StepBy(FLAGS_simulation_sec);

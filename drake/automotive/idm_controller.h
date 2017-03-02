@@ -4,6 +4,7 @@
 
 #include "drake/automotive/gen/driving_command.h"
 #include "drake/automotive/gen/idm_planner_parameters.h"
+#include "drake/automotive/idm_planner.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/systems/framework/leaf_system.h"
 #include "drake/systems/rendering/pose_vector.h"
@@ -57,28 +58,6 @@ class IdmController : public systems::LeafSystem<T> {
 
   void SetDefaultParameters(const systems::LeafContext<T>& context,
                             systems::Parameters<T>* params) const override;
-
-  static T IdmModel(const T& net_distance,
-                    const T& closing_velocity,
-                    const T& ego_velocity,
-                    const IdmPlannerParameters<T>& params) {
-    const T& v_ref = params.v_ref();
-    const T& a = params.a();
-    const T& b = params.b();
-    const T& s_0 = params.s_0();
-    const T& time_headway = params.time_headway();
-    const T& delta = params.delta();
-
-    DRAKE_DEMAND(a > 0.0);
-    DRAKE_DEMAND(b > 0.0);
-
-    const T position_deficit =
-        ego_velocity * closing_velocity / (2 * sqrt(a * b));
-
-    return a * (1. - pow(ego_velocity / v_ref, delta) -
-                pow((s_0 + ego_velocity * time_headway + position_deficit) /
-                    net_distance, 2.));
-  };
 
  private:
   void DoCalcOutput(const systems::Context<T>& context,

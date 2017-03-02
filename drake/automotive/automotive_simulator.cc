@@ -80,16 +80,25 @@ int AutomotiveSimulator<T>::AddIdmSimpleCarFromSdf(
   const int vehicle_number = allocate_vehicle_number();
 
   auto idm_controller = builder_->template AddSystem<IdmController<T>>(20.);
+  //static const DrivingCommandTranslator driving_command_translator;
+  //auto command_subscriber =
+  //    builder_->template AddSystem<systems::lcm::LcmSubscriberSystem>(
+  //        channel_name, driving_command_translator, lcm_.get());
   auto simple_car = builder_->template AddSystem<SimpleCar<T>>();
   auto coord_transform =
       builder_->template AddSystem<SimpleCarToEulerFloatingJoint<T>>();
 
   // Store the idm and simple car for now, until we have PoseAggregator.
   stored_simple_car_ = simple_car;
-  stored_idm_ = idm_controller;
+  //stored_idm_ = idm_controller;
 
   builder_->Connect(simple_car->pose_output(),
                     idm_controller->get_ego_input());
+  builder_->Connect(*idm_controller, *simple_car);
+
+  //builder_->Connect(*command_subscriber, *simple_car);
+  builder_->Connect(simple_car->state_output(),
+                    coord_transform->get_input_port(0));
 
   AddPublisher(*simple_car, vehicle_number);
   AddPublisher(*coord_transform, vehicle_number);
@@ -502,8 +511,6 @@ void AutomotiveSimulator<T>::Start(double target_realtime_rate) {
   // in an abundance of caution, the following line calls `compile()` again.
   rigid_body_tree_->compile();
 
-  std::cerr << " Start" << std::endl;
-
   ConnectJointStateSourcesToVisualizer();
 
   if (endless_road_) {
@@ -539,16 +546,6 @@ void AutomotiveSimulator<T>::Start(double target_realtime_rate) {
       ++i;
     }
   }
-
-  /*
-  if (stored_trajectory_car_ != nullptr && stored_simple_car_ != nullptr &&
-      stored_idm_ != nullptr) {
-    std::cerr << " Start1" << std::endl;
-    builder_->Connect(stored_s_->pose_output(),
-                      stored_idm_->get_ego_input());
-    std::cerr << " Start2" << std::endl;
-  }
-  */
 
   diagram_ = builder_->Build();
   simulator_ = std::make_unique<systems::Simulator<T>>(*diagram_);

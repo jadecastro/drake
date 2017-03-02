@@ -6,6 +6,7 @@
 
 #include <Eigen/Geometry>
 
+#include "drake/common/cond.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/symbolic_formula.h"
 
@@ -21,13 +22,13 @@ IdmController<T>::IdmController(const T& v_ref) : v_ref_(v_ref) {
   // The reference velocity must be strictly positive.
   DRAKE_ASSERT(v_ref > 0);
 
-  const int kLinearAccelerationSize = 1;
   // Declare the ego car input port.
   this->DeclareInputPort(systems::kVectorValued, PoseVector<T>::kSize);
   // Declare the agent car input port.
   this->DeclareInputPort(systems::kVectorValued, PoseVector<T>::kSize);
   // Declare the output port.
-  this->DeclareOutputPort(systems::kVectorValued, kLinearAccelerationSize);
+  this->DeclareOutputPort(systems::kVectorValued,
+                          DrivingCommandIndices::kNumCoordinates);
 }
 
 template <typename T>
@@ -84,22 +85,29 @@ void IdmController<T>::ImplDoCalcOutput(const PoseVector<T>& ego_pose,
                                         const PoseVector<T>& agents_pose,
                                         const IdmPlannerParameters<T>& params,
                                         DrivingCommand<T>* command) const {
-  const auto ego_position = ego_pose.get_translation();
-  const T& x_ego = ego_position.translation().x();
+  const T car_length = 4.5;
+
+  const T& x_ego = ego_pose.get_translation().translation().x();
   const T& v_ego = 10.;  // TODO(jadecastro): Require velocity from SimpleCar.
   // const auto agent_position = agents_pose.get_translation();
   const T& x_agent = 100.; // agent_position.translation().x();
   const T& v_agent = 0.;  // TODO(jadecastro): Require velocity from
                           // TrajectoryCar.
 
-  // Ensure that we are supplying the planner with sane parameters and
-  // input values.
-  const T net_distance = x_agent - x_ego - 4.5;  // <---- TODO
+  // Ensure that we are supplying the planner with sane parameters and input
+  // values.
+  const T net_distance = x_agent - x_ego - car_length;  // <---- TODO
   DRAKE_DEMAND(net_distance > 0.);
   const T closing_velocity = v_ego - v_agent;
 
+  // Output the acceleration command.
+  const T command_acceleration =
+      IdmPlanner<T>::Evaluate(params, v_ego, net_distance, closing_velocity);
   command->set_throttle(
-      IdmModel(net_distance, closing_velocity, v_ego, params));
+      cond(command_acceleration < T(0.), T(0.), command_acceleration));
+  command->set_brake(
+      cond(command_acceleration >= T(0.), T(0.), -command_acceleration));
+  command->set_steering_angle(0.);
 }
 
 template <typename T>

@@ -135,6 +135,8 @@ drake_cc_library(
     hdrs = ["idm_controller.h"],
     deps = [
         ":generated_vectors",
+        ":idm_planner",
+        "//drake/common:cond",
         "//drake/common:symbolic",
         "//drake/systems/rendering:pose_vector",
     ],
