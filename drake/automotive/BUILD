@@ -138,6 +138,7 @@ drake_cc_library(
         ":idm_planner",
         "//drake/common:cond",
         "//drake/common:symbolic",
+        "//drake/systems/rendering:pose_bundle",
         "//drake/systems/rendering:pose_vector",
     ],
 )
@@ -205,6 +206,7 @@ drake_cc_library(
     deps = [
         ":curve2",
         ":generated_vectors",
+        "//drake/systems/rendering:pose_vector",
     ],
 )
 
@@ -229,6 +231,7 @@ drake_cc_library(
         "//drake/systems/lcm",
         "//drake/systems/primitives:constant_vector_source",
         "//drake/systems/primitives:multiplexer",
+        "//drake/systems/rendering:pose_aggregator",
     ],
 )
 

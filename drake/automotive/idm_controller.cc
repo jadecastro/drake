@@ -12,6 +12,7 @@
 
 namespace drake {
 
+using systems::rendering::PoseBundle;
 using systems::rendering::PoseVector;
 
 namespace automotive {
@@ -22,10 +23,10 @@ IdmController<T>::IdmController(const T& v_ref) : v_ref_(v_ref) {
   // The reference velocity must be strictly positive.
   DRAKE_ASSERT(v_ref > 0);
 
-  // Declare the ego car input port.
+  // Declare the input for the ego car.
   this->DeclareInputPort(systems::kVectorValued, PoseVector<T>::kSize);
-  // Declare the agent car input port.
-  this->DeclareInputPort(systems::kVectorValued, PoseVector<T>::kSize);
+  // Declare the inputs for the traffic cars.
+  this->DeclareAbstractInputPort();
   // Declare the output port.
   this->DeclareOutputPort(systems::kVectorValued,
                           DrivingCommandIndices::kNumCoordinates);
@@ -35,34 +36,31 @@ template <typename T>
 IdmController<T>::~IdmController() {}
 
 template <typename T>
-const systems::InputPortDescriptor<T>& IdmController<T>::get_ego_input() const {
+const systems::InputPortDescriptor<T>& IdmController<T>::ego_pose_input()
+    const {
   return systems::System<T>::get_input_port(0);
 }
 
 template <typename T>
-const systems::InputPortDescriptor<T>& IdmController<T>::get_agent_input()
-    const {
+const systems::InputPortDescriptor<T>&
+IdmController<T>::agent_pose_bundle_input() const {
   return systems::System<T>::get_input_port(1);
 }
 
 template <typename T>
 void IdmController<T>::DoCalcOutput(const systems::Context<T>& context,
                                     systems::SystemOutput<T>* output) const {
-  // Obtain the input/output structures we need to read from and write into.
-  const systems::VectorBase<T>* ego_input_vector =
-      this->EvalVectorInput(context, this->get_ego_input().get_index());
-  DRAKE_ASSERT(ego_input_vector != nullptr);
+  // Obtain the input/output data structures.
   const PoseVector<T>* const ego_pose =
-      dynamic_cast<const PoseVector<T>*>(ego_input_vector);
+      this->template EvalVectorInput<PoseVector>(
+          context, this->ego_pose_input().get_index());
   DRAKE_ASSERT(ego_pose != nullptr);
 
   // TODO(jadecastro): Make this PoseBundle and select a certain PoseVector.
-  const systems::VectorBase<T>* agents_input_vector =
-      this->EvalVectorInput(context, this->get_agent_input().get_index());
-  DRAKE_ASSERT(agents_input_vector != nullptr);
-  const PoseVector<T>* const agents_pose =
-      dynamic_cast<const PoseVector<T>*>(agents_input_vector);
-  DRAKE_ASSERT(agents_pose != nullptr);
+  const PoseBundle<T>* const agent_poses =
+      this->template EvalInputValue<PoseBundle<T>>(
+          context, this->agent_pose_bundle_input().get_index());
+  DRAKE_ASSERT(agent_poses != nullptr);
 
   systems::BasicVector<T>* const command_output_vector =
       output->GetMutableVectorData(0);
@@ -77,12 +75,21 @@ void IdmController<T>::DoCalcOutput(const systems::Context<T>& context,
       this->template GetNumericParameter<IdmPlannerParameters>(context,
                                                                kParamsIndex);
 
-  ImplDoCalcOutput(*ego_pose, *agents_pose, params, driving_command);
+  const Isometry3<T>& agent_pose = SelectNearest(*ego_pose, *agent_poses);
+  ImplDoCalcOutput(*ego_pose, agent_pose, params, driving_command);
+}
+
+template <typename T>
+const Isometry3<T>&
+IdmController<T>::SelectNearest(const PoseVector<T>& ego_pose,
+                                const PoseBundle<T>& agent_poses) const {
+  // TODO(jadcastro): Implement the actual selection logic.
+  return agent_poses.get_pose(0);  // Hard code the agent as the 0th element.
 }
 
 template <typename T>
 void IdmController<T>::ImplDoCalcOutput(const PoseVector<T>& ego_pose,
-                                        const PoseVector<T>& agents_pose,
+                                        const Isometry3<T>& agent_pose,
                                         const IdmPlannerParameters<T>& params,
                                         DrivingCommand<T>* command) const {
   const T car_length = 4.5;
@@ -90,7 +97,7 @@ void IdmController<T>::ImplDoCalcOutput(const PoseVector<T>& ego_pose,
   const T& x_ego = ego_pose.get_translation().translation().x();
   const T& v_ego = 10.;  // TODO(jadecastro): Require velocity from SimpleCar.
   // const auto agent_position = agents_pose.get_translation();
-  const T& x_agent = 100.; // agent_position.translation().x();
+  const T& x_agent = 100; //agent_pose.translation().x();
   const T& v_agent = 0.;  // TODO(jadecastro): Require velocity from
                           // TrajectoryCar.
 

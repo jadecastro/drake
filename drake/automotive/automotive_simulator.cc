@@ -32,11 +32,13 @@
 #include "drake/systems/lcm/lcm_subscriber_system.h"
 #include "drake/systems/primitives/constant_vector_source.h"
 #include "drake/systems/primitives/multiplexer.h"
+#include "drake/systems/rendering/pose_aggregator.h"
 
 namespace drake {
 
 using multibody::joints::kFixed;
 using multibody::joints::kRollPitchYaw;
+using systems::rendering::PoseAggregator;
 
 namespace automotive {
 
@@ -90,10 +92,8 @@ int AutomotiveSimulator<T>::AddIdmSimpleCarFromSdf(
 
   // Store the idm and simple car for now, until we have PoseAggregator.
   stored_simple_car_ = simple_car;
-  //stored_idm_ = idm_controller;
+  stored_idm_ = idm_controller;
 
-  builder_->Connect(simple_car->pose_output(),
-                    idm_controller->get_ego_input());
   builder_->Connect(*idm_controller, *simple_car);
 
   //builder_->Connect(*command_subscriber, *simple_car);
@@ -146,7 +146,8 @@ int AutomotiveSimulator<T>::AddTrajectoryCarFromSdf(
   // Store the trajectory car for now, until we have PoseAggregator.
   stored_trajectory_car_ = trajectory_car;
 
-  builder_->Connect(*trajectory_car, *coord_transform);
+  builder_->Connect(trajectory_car->state_output(),
+                    coord_transform->get_input_port(0));
   AddPublisher(*trajectory_car, vehicle_number);
   AddPublisher(*coord_transform, vehicle_number);
   return AddSdfModel(sdf_filename, coord_transform, ""/* model_name */);
@@ -512,6 +513,17 @@ void AutomotiveSimulator<T>::Start(double target_realtime_rate) {
   rigid_body_tree_->compile();
 
   ConnectJointStateSourcesToVisualizer();
+
+  if (stored_idm_ != nullptr && stored_simple_car_ != nullptr &&
+      stored_trajectory_car_ != nullptr) {
+    //auto aggregator = builder_->template AddSystem<PoseAggregator<T>>();
+    //aggregator->AddSingleInput("agent");
+
+    builder_->Connect(stored_simple_car_->pose_output(),
+                      stored_idm_->ego_pose_input());
+    //builder_->Connect(stored_trajectory_car_->pose_output(),
+    //                  aggregator->get_input_port(0));
+  }
 
   if (endless_road_) {
     // Now that we have all the cars, construct an appropriately tentacled

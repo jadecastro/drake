@@ -7,6 +7,7 @@
 #include "drake/automotive/idm_planner.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/systems/framework/leaf_system.h"
+#include "drake/systems/rendering/pose_bundle.h"
 #include "drake/systems/rendering/pose_vector.h"
 
 namespace drake {
@@ -44,8 +45,8 @@ class IdmController : public systems::LeafSystem<T> {
   ~IdmController() override;
 
   /// Returns the port to the ego car input subvector.
-  const systems::InputPortDescriptor<T>& get_ego_input() const;
-  const systems::InputPortDescriptor<T>& get_agent_input() const;
+  const systems::InputPortDescriptor<T>& ego_pose_input() const;
+  const systems::InputPortDescriptor<T>& agent_pose_bundle_input() const;
 
   // System<T> overrides.
   // The output of this system is an algebraic relation of its inputs.
@@ -60,11 +61,16 @@ class IdmController : public systems::LeafSystem<T> {
                             systems::Parameters<T>* params) const override;
 
  private:
+  /// 
+  const Isometry3<T>& SelectNearest(
+      const systems::rendering::PoseVector<T>& ego_pose,
+      const systems::rendering::PoseBundle<T>& agent_poses) const;
+
   void DoCalcOutput(const systems::Context<T>& context,
                     systems::SystemOutput<T>* output) const override;
 
   void ImplDoCalcOutput(const systems::rendering::PoseVector<T>& ego_pose,
-                        const systems::rendering::PoseVector<T>& agents_pose,
+                        const Isometry3<T>& agent_pose,
                         const IdmPlannerParameters<T>& params,
                         DrivingCommand<T>* output) const;
 
