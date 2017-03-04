@@ -18,11 +18,7 @@ using systems::rendering::PoseVector;
 namespace automotive {
 
 template <typename T>
-IdmController<T>::IdmController(const T& v_ref) : v_ref_(v_ref) {
-  // TODO(jadecastro): Remove v_ref from the constructor.
-  // The reference velocity must be strictly positive.
-  DRAKE_ASSERT(v_ref > 0);
-
+IdmController<T>::IdmController() {
   // Declare the input for the ego car.
   this->DeclareInputPort(systems::kVectorValued, PoseVector<T>::kSize);
   // Declare the inputs for the traffic cars.
@@ -97,7 +93,7 @@ void IdmController<T>::ImplDoCalcOutput(const PoseVector<T>& ego_pose,
   const T& x_ego = ego_pose.get_translation().translation().x();
   const T& v_ego = 10.;  // TODO(jadecastro): Require velocity from SimpleCar.
   // const auto agent_position = agents_pose.get_translation();
-  const T& x_agent = 100; //agent_pose.translation().x();
+  const T& x_agent = agent_pose.translation().x();
   const T& v_agent = 0.;  // TODO(jadecastro): Require velocity from
                           // TrajectoryCar.
 
@@ -133,18 +129,11 @@ std::unique_ptr<systems::Parameters<T>> IdmController<T>::AllocateParameters()
 
 template <typename T>
 void IdmController<T>::SetDefaultParameters(
-    const systems::LeafContext<T>& context,
-    systems::Parameters<T>* params) const {
-  // Default values from https://en.wikipedia.org/wiki/Intelligent_driver_model.
+    const systems::LeafContext<T>& context, systems::Parameters<T>* params)
+    const {
   auto idm_params = dynamic_cast<IdmPlannerParameters<T>*>(
       params->get_mutable_numeric_parameter(0));
-  DRAKE_DEMAND(idm_params != nullptr);
-  idm_params->set_v_ref(v_ref_);         // desired velocity in free traffic.
-  idm_params->set_a(T(1.0));             // max acceleration.
-  idm_params->set_b(T(3.0));             // comfortable braking deceleration.
-  idm_params->set_s_0(T(1.0));           // minimum desired net distance.
-  idm_params->set_time_headway(T(0.1));  // desired headway to lead vehicle.
-  idm_params->set_delta(T(4.0));  // recommended choice of free-road exponent.
+  IdmPlanner<T>::SetDefaultParameters(idm_params);
 }
 
 // These instantiations must match the API documentation in

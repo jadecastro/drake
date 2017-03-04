@@ -40,7 +40,7 @@ std::tuple<Curve2<double>, double, double> CreateTrajectoryParams(int index);
  */
 std::tuple<Curve2<double>, double, double> CreateTrajectoryParamsForDragway(
     const maliput::dragway::RoadGeometry& road_geometry, int index,
-    double speed, double start_time);
+    const double speed, const double start_time, const double s_offset);
 
 }  // namespace automotive
 }  // namespace drake

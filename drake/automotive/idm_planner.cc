@@ -45,7 +45,7 @@ template <typename T>
 void IdmPlanner<T>::SetDefaultParameters(IdmPlannerParameters<T>* idm_params) {
   // Default values from https://en.wikipedia.org/wiki/Intelligent_driver_model.
   DRAKE_DEMAND(idm_params != nullptr);
-  idm_params->set_v_ref(10.);  // desired velocity in free traffic [m/s].
+  idm_params->set_v_ref(20.);  // desired velocity in free traffic [m/s].
   idm_params->set_a(T(1.));    // max acceleration [m/s^2].
   idm_params->set_b(T(3.));    // comfortable braking deceleration [m/s^2].
   idm_params->set_s_0(T(1.));  // minimum desired net distance [m].

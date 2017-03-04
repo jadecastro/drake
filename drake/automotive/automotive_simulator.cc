@@ -81,7 +81,8 @@ int AutomotiveSimulator<T>::AddIdmSimpleCarFromSdf(
   DRAKE_DEMAND(!started_);
   const int vehicle_number = allocate_vehicle_number();
 
-  auto idm_controller = builder_->template AddSystem<IdmController<T>>(20.);
+  auto idm_controller = builder_->template AddSystem<IdmController<T>>();
+  // TODO(jadecastro): Get rid of v_ref in the constructor!
   //static const DrivingCommandTranslator driving_command_translator;
   //auto command_subscriber =
   //    builder_->template AddSystem<systems::lcm::LcmSubscriberSystem>(
@@ -313,7 +314,7 @@ void AutomotiveSimulator<T>::AddPublisher(const TrajectoryCar<T>& system,
       builder_->template AddSystem<systems::lcm::LcmPublisherSystem>(
           std::to_string(vehicle_number) + "_SIMPLE_CAR_STATE", translator,
           lcm_.get());
-  builder_->Connect(system, *publisher);
+  builder_->Connect(system.state_output(), publisher->get_input_port(0));
 }
 
 template <typename T>
@@ -516,13 +517,15 @@ void AutomotiveSimulator<T>::Start(double target_realtime_rate) {
 
   if (stored_idm_ != nullptr && stored_simple_car_ != nullptr &&
       stored_trajectory_car_ != nullptr) {
-    //auto aggregator = builder_->template AddSystem<PoseAggregator<T>>();
-    //aggregator->AddSingleInput("agent");
+    auto aggregator = builder_->template AddSystem<PoseAggregator<T>>();
+    aggregator->AddSingleInput("agent");
 
     builder_->Connect(stored_simple_car_->pose_output(),
                       stored_idm_->ego_pose_input());
-    //builder_->Connect(stored_trajectory_car_->pose_output(),
-    //                  aggregator->get_input_port(0));
+    builder_->Connect(stored_trajectory_car_->pose_output(),
+                      aggregator->get_input_port(0));
+    builder_->Connect(aggregator->get_output_port(0),
+                      stored_idm_->agent_pose_bundle_input());
   }
 
   if (endless_road_) {

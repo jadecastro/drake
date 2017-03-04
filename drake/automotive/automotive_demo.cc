@@ -102,8 +102,9 @@ void AddVehicles(RoadNetworkType road_network_type,
           lane_index * FLAGS_dragway_lane_speed_delta;
       const double start_time = i / FLAGS_num_dragway_lanes *
            FLAGS_dragway_vehicle_delay;
+      const double s_offset = 10.;
       const auto& params = CreateTrajectoryParamsForDragway(
-          *dragway_road_geometry, lane_index, speed, start_time);
+          *dragway_road_geometry, lane_index, speed, start_time, s_offset);
       simulator->AddTrajectoryCarFromSdf(kSdfFile, std::get<0>(params),
                                          std::get<1>(params),
                                          std::get<2>(params));

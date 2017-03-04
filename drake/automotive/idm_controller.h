@@ -41,7 +41,7 @@ class IdmController : public systems::LeafSystem<T> {
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(IdmController)
 
   /// @p v_ref desired velocity of the ego car in units of m/s.
-  explicit IdmController(const T& v_ref);
+  IdmController();
   ~IdmController() override;
 
   /// Returns the port to the ego car input subvector.
@@ -73,8 +73,6 @@ class IdmController : public systems::LeafSystem<T> {
                         const Isometry3<T>& agent_pose,
                         const IdmPlannerParameters<T>& params,
                         DrivingCommand<T>* output) const;
-
-  const T v_ref_;  // Desired vehicle velocity.
 };
 
 }  // namespace automotive
