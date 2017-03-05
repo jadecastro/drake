@@ -61,8 +61,9 @@ class IdmController : public systems::LeafSystem<T> {
                             systems::Parameters<T>* params) const override;
 
  private:
-  /// 
-  const Isometry3<T>& SelectNearest(
+  /// Selects nearest agent pose that is ahead of the ego car.  If there are no
+  /// qualifying poses, a pose at an x-value of infinity is returned.
+  const Isometry3<T> SelectNearestTargetAhead(
       const systems::rendering::PoseVector<T>& ego_pose,
       const systems::rendering::PoseBundle<T>& agent_poses) const;
 

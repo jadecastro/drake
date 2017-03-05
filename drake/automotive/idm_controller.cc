@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <utility>
 
 #include <Eigen/Geometry>
@@ -71,16 +72,29 @@ void IdmController<T>::DoCalcOutput(const systems::Context<T>& context,
       this->template GetNumericParameter<IdmPlannerParameters>(context,
                                                                kParamsIndex);
 
-  const Isometry3<T>& agent_pose = SelectNearest(*ego_pose, *agent_poses);
+  const Isometry3<T>& agent_pose =
+      SelectNearestTargetAhead(*ego_pose, *agent_poses);
   ImplDoCalcOutput(*ego_pose, agent_pose, params, driving_command);
 }
 
 template <typename T>
-const Isometry3<T>&
-IdmController<T>::SelectNearest(const PoseVector<T>& ego_pose,
-                                const PoseBundle<T>& agent_poses) const {
-  // TODO(jadcastro): Implement the actual selection logic.
-  return agent_poses.get_pose(0);  // Hard code the agent as the 0th element.
+const Isometry3<T>
+IdmController<T>::SelectNearestTargetAhead(
+    const PoseVector<T>& ego_pose, const PoseBundle<T>& agent_poses) const {
+  const T car_length = 4.5;  // TODO(jadecastro): Car length needs to go
+                             // somewhere else.
+
+  // TODO(jadcastro): Check if in lane or not.
+  Isometry3<T> pose_result = Isometry3<T>::Identity();
+  pose_result.translate(Vector3<T>(
+      std::numeric_limits<double>::infinity(), 0, 0));
+  const T& x_ego = ego_pose.get_translation().translation().x();
+  for (int i = 0; i < agent_poses.get_num_poses(); ++i) {
+    const T& x_agent = agent_poses.get_pose(i).translation().x();
+    if (x_agent > x_ego + car_length && x_agent < pose_result.translation().x())
+      pose_result = agent_poses.get_pose(i);
+  }
+  return pose_result;
 }
 
 template <typename T>
@@ -90,6 +104,7 @@ void IdmController<T>::ImplDoCalcOutput(const PoseVector<T>& ego_pose,
                                         DrivingCommand<T>* command) const {
   const T car_length = 4.5;
 
+  // TODO(jadecastro): Convert this to Lane coordinates.
   const T& x_ego = ego_pose.get_translation().translation().x();
   const T& v_ego = 10.;  // TODO(jadecastro): Require velocity from SimpleCar.
   // const auto agent_position = agents_pose.get_translation();

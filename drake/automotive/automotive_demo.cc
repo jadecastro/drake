@@ -14,6 +14,8 @@ DEFINE_string(simple_car_names, "",
               "A comma-separated list (e.g. 'Russ,Jeremy,Liang' would spawn 3 "
               "cars subscribed to DRIVING_COMMAND_Russ, "
               "DRIVING_COMMAND_Jeremy, and DRIVING_COMMAND_Liang)");
+DEFINE_int32(num_idm_car, 1, "Number of IDM-controlled SimpleCar vehicles");
+DEFINE_int32(num_mobil_car, 1, "Number of MOBIL-controlled SimpleCar vehicles");
 DEFINE_int32(num_trajectory_car, 1, "Number of TrajectoryCar vehicles");
 DEFINE_double(target_realtime_rate, 1.0,
               "Playback speed.  See documentation for "
@@ -80,14 +82,14 @@ void AddVehicles(RoadNetworkType road_network_type,
     const std::string name = "";
     const std::string& channel_name = MakeChannelName(name);
     drake::log()->info("Adding simple car subscribed to {}.", channel_name);
-    simulator->AddIdmSimpleCarFromSdf(kSdfFile, name, channel_name);
+    simulator->AddSimpleCarFromSdf(kSdfFile, name, channel_name);
   } else {
     std::istringstream simple_car_name_stream(FLAGS_simple_car_names);
     std::string name;
     while (getline(simple_car_name_stream, name, ',')) {
       const std::string& channel_name = MakeChannelName(name);
       drake::log()->info("Adding simple car subscribed to {}.", channel_name);
-      simulator->AddIdmSimpleCarFromSdf(kSdfFile, name, channel_name);
+      simulator->AddSimpleCarFromSdf(kSdfFile, name, channel_name);
     }
   }
 
@@ -109,6 +111,18 @@ void AddVehicles(RoadNetworkType road_network_type,
                                          std::get<1>(params),
                                          std::get<2>(params));
     }
+    for (int i = 0; i < FLAGS_num_idm_car; ++i) {
+      const std::string name = "";
+      const std::string& channel_name = MakeChannelName(name);
+      drake::log()->info("Adding idm-driven simple car subscribed to {}.",
+                         channel_name);
+      simulator->AddIdmControlledSimpleCarFromSdf(kSdfFile, name, channel_name);
+    }
+    for (int i = 0; i < FLAGS_num_mobil_car; ++i) {
+      // TODO(jadecastro): Implement the MOBIL model.
+      continue;
+    }
+
   } else {
     for (int i = 0; i < FLAGS_num_trajectory_car; ++i) {
       const auto& params = CreateTrajectoryParams(i);
@@ -117,6 +131,11 @@ void AddVehicles(RoadNetworkType road_network_type,
                                          std::get<2>(params));
     }
   }
+}
+
+// Adds PoseAggregator through which we wire all the spawned cars.
+void AddPoseAggregator(AutomotiveSimulator<double>* simulator) {
+  simulator->AddPoseAggregator();
 }
 
 // Adds a flat terrain to the provided `simulator`.
@@ -186,6 +205,7 @@ int main(int argc, char* argv[]) {
       AddTerrain(road_network_type, simulator.get());
   // TODO(jadecastro): Add PoseAggregator here.
   AddVehicles(road_network_type, road_geometry, simulator.get());
+  AddPoseAggregator(simulator.get());
   simulator->Start(FLAGS_target_realtime_rate);
   simulator->StepBy(FLAGS_simulation_sec);
   return 0;

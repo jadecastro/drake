@@ -75,32 +75,27 @@ const RigidBodyTree<T>& AutomotiveSimulator<T>::get_rigid_body_tree() {
 }
 
 template <typename T>
-int AutomotiveSimulator<T>::AddIdmSimpleCarFromSdf(
+int AutomotiveSimulator<T>::AddIdmControlledSimpleCarFromSdf(
     const std::string& sdf_filename,
     const std::string& model_name, const std::string& channel_name) {
   DRAKE_DEMAND(!started_);
   const int vehicle_number = allocate_vehicle_number();
 
   auto idm_controller = builder_->template AddSystem<IdmController<T>>();
-  // TODO(jadecastro): Get rid of v_ref in the constructor!
-  //static const DrivingCommandTranslator driving_command_translator;
-  //auto command_subscriber =
-  //    builder_->template AddSystem<systems::lcm::LcmSubscriberSystem>(
-  //        channel_name, driving_command_translator, lcm_.get());
   auto simple_car = builder_->template AddSystem<SimpleCar<T>>();
   auto coord_transform =
       builder_->template AddSystem<SimpleCarToEulerFloatingJoint<T>>();
 
-  // Store the idm and simple car for now, until we have PoseAggregator.
-  stored_simple_car_ = simple_car;
-  stored_idm_ = idm_controller;
+  idm_cars_.emplace_back(simple_car);
+  idm_controllers_.emplace_back(idm_controller);
 
+  // Wire up the controller.
   builder_->Connect(*idm_controller, *simple_car);
+  builder_->Connect(simple_car->pose_output(),
+                    idm_controller->ego_pose_input());
 
-  //builder_->Connect(*command_subscriber, *simple_car);
   builder_->Connect(simple_car->state_output(),
                     coord_transform->get_input_port(0));
-
   AddPublisher(*simple_car, vehicle_number);
   AddPublisher(*coord_transform, vehicle_number);
   return AddSdfModel(sdf_filename, coord_transform, model_name);
@@ -121,6 +116,8 @@ int AutomotiveSimulator<T>::AddSimpleCarFromSdf(
   auto simple_car = builder_->template AddSystem<SimpleCar<T>>();
   auto coord_transform =
       builder_->template AddSystem<SimpleCarToEulerFloatingJoint<T>>();
+
+  simple_cars_.emplace_back(simple_car);
 
   builder_->Connect(*command_subscriber, *simple_car);
   builder_->Connect(simple_car->state_output(),
@@ -144,8 +141,7 @@ int AutomotiveSimulator<T>::AddTrajectoryCarFromSdf(
   auto coord_transform =
       builder_->template AddSystem<SimpleCarToEulerFloatingJoint<T>>();
 
-  // Store the trajectory car for now, until we have PoseAggregator.
-  stored_trajectory_car_ = trajectory_car;
+  trajectory_cars_.emplace_back(trajectory_car);
 
   builder_->Connect(trajectory_car->state_output(),
                     coord_transform->get_input_port(0));
@@ -200,6 +196,33 @@ int AutomotiveSimulator<T>::AddEndlessRoadCar(
   AddPublisher(*endless_road_car, vehicle_number);
   AddPublisher(*coord_transform, vehicle_number);
   return AddSdfModel(sdf_filename, coord_transform, id);
+}
+
+template <typename T>
+void AutomotiveSimulator<T>::AddPoseAggregator() {
+  DRAKE_DEMAND(idm_controllers_.size() == idm_cars_.size());
+
+  auto aggregator = builder_->template AddSystem<PoseAggregator<T>>();
+
+  int index{0};
+  for (int i = 0; i < static_cast<int>(simple_cars_.size()); ++i) {
+    aggregator->AddSingleInput("simple_car" + std::to_string(i));
+    builder_->Connect(simple_cars_[i]->pose_output(),
+                      aggregator->get_input_port(index++));
+  }
+  for (int i = 0; i < static_cast<int>(trajectory_cars_.size()); ++i) {
+    aggregator->AddSingleInput("trajectory_car" + std::to_string(i));
+    builder_->Connect(trajectory_cars_[i]->pose_output(),
+                      aggregator->get_input_port(index++));
+  }
+  for (int i = 0; i < static_cast<int>(idm_cars_.size()); ++i) {
+    aggregator->AddSingleInput("idm_car" + std::to_string(i));
+    builder_->Connect(idm_cars_[i]->pose_output(),
+                      aggregator->get_input_port(index++));
+    // Wire up the IdmController with oracular knowledge.
+    builder_->Connect(aggregator->get_output_port(0),
+                      idm_controllers_[i]->agent_pose_bundle_input());
+  }
 }
 
 template <typename T>
@@ -514,19 +537,6 @@ void AutomotiveSimulator<T>::Start(double target_realtime_rate) {
   rigid_body_tree_->compile();
 
   ConnectJointStateSourcesToVisualizer();
-
-  if (stored_idm_ != nullptr && stored_simple_car_ != nullptr &&
-      stored_trajectory_car_ != nullptr) {
-    auto aggregator = builder_->template AddSystem<PoseAggregator<T>>();
-    aggregator->AddSingleInput("agent");
-
-    builder_->Connect(stored_simple_car_->pose_output(),
-                      stored_idm_->ego_pose_input());
-    builder_->Connect(stored_trajectory_car_->pose_output(),
-                      aggregator->get_input_port(0));
-    builder_->Connect(aggregator->get_output_port(0),
-                      stored_idm_->agent_pose_bundle_input());
-  }
 
   if (endless_road_) {
     // Now that we have all the cars, construct an appropriately tentacled

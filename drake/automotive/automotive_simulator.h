@@ -57,9 +57,9 @@ class AutomotiveSimulator {
   /// tree representation.
   const RigidBodyTree<T>& get_rigid_body_tree();
 
-  int AddIdmSimpleCarFromSdf(const std::string& sdf_filename,
-                             const std::string& model_name,
-                             const std::string& channel_name);
+  int AddIdmControlledSimpleCarFromSdf(const std::string& sdf_filename,
+                                       const std::string& model_name,
+                                       const std::string& channel_name);
 
   /// Adds a SimpleCar system to this simulation, including its DrivingCommand
   /// LCM input and EulerFloatingJoint output.
@@ -128,6 +128,9 @@ class AutomotiveSimulator {
       const EndlessRoadCarState<T>& initial_state,
       typename EndlessRoadCar<T>::ControlType control_type,
       const std::string& channel_name);
+
+  /// Adds a PoseAggregator to this simulation.
+  void AddPoseAggregator();
 
   /// Sets the RoadGeometry for this simulation.
   ///
@@ -247,9 +250,11 @@ class AutomotiveSimulator {
   std::unique_ptr<const maliput::api::RoadGeometry> road_{};
   std::unique_ptr<const maliput::utility::InfiniteCircuitRoad> endless_road_{};
   std::map<EndlessRoadCar<T>*, EndlessRoadCarState<T>> endless_road_cars_;
-  TrajectoryCar<T>* stored_trajectory_car_{nullptr};
-  SimpleCar<T>* stored_simple_car_{nullptr};
-  IdmController<T>* stored_idm_{nullptr};
+
+  std::vector<TrajectoryCar<T>*> trajectory_cars_{};
+  std::vector<SimpleCar<T>*> simple_cars_{};
+  std::vector<SimpleCar<T>*> idm_cars_{};
+  std::vector<IdmController<T>*> idm_controllers_{};
 
   // === Start for building. ===
   std::unique_ptr<systems::DiagramBuilder<T>> builder_{
