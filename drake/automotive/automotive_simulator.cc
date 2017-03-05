@@ -81,7 +81,10 @@ int AutomotiveSimulator<T>::AddIdmControlledSimpleCarFromSdf(
   DRAKE_DEMAND(!started_);
   const int vehicle_number = allocate_vehicle_number();
 
-  auto idm_controller = builder_->template AddSystem<IdmController<T>>();
+  auto idm_controller = builder_->template AddSystem<IdmController<T>>(
+      road_.get());
+      // dynamic_cast<std::unique_ptr<maliput::dragway::RoadGeometry>>(
+      //    road_)).get());
   auto simple_car = builder_->template AddSystem<SimpleCar<T>>();
   auto coord_transform =
       builder_->template AddSystem<SimpleCarToEulerFloatingJoint<T>>();

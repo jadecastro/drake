@@ -2,9 +2,12 @@
 
 #include <memory>
 
+#include <Eigen/Geometry>
+
 #include "drake/automotive/gen/driving_command.h"
 #include "drake/automotive/gen/idm_planner_parameters.h"
 #include "drake/automotive/idm_planner.h"
+#include "drake/automotive/maliput/api/road_geometry.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/systems/framework/leaf_system.h"
 #include "drake/systems/rendering/pose_bundle.h"
@@ -41,7 +44,7 @@ class IdmController : public systems::LeafSystem<T> {
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(IdmController)
 
   /// @p v_ref desired velocity of the ego car in units of m/s.
-  IdmController();
+  IdmController(const maliput::api::RoadGeometry* road);
   ~IdmController() override;
 
   /// Returns the port to the ego car input subvector.
@@ -67,6 +70,10 @@ class IdmController : public systems::LeafSystem<T> {
       const systems::rendering::PoseVector<T>& ego_pose,
       const systems::rendering::PoseBundle<T>& agent_poses) const;
 
+  /// Retrieves the current RoadPosition for a given road and PoseVector.
+  const maliput::api::RoadPosition GetRoadPosition(const Isometry3<T>& pose)
+      const;
+
   void DoCalcOutput(const systems::Context<T>& context,
                     systems::SystemOutput<T>* output) const override;
 
@@ -74,6 +81,8 @@ class IdmController : public systems::LeafSystem<T> {
                         const Isometry3<T>& agent_pose,
                         const IdmPlannerParameters<T>& params,
                         DrivingCommand<T>* output) const;
+
+  const maliput::api::RoadGeometry* road_;
 };
 
 }  // namespace automotive

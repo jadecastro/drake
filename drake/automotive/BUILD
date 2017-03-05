@@ -136,6 +136,7 @@ drake_cc_library(
     deps = [
         ":generated_vectors",
         ":idm_planner",
+        "//drake/automotive/maliput/dragway",
         "//drake/common:cond",
         "//drake/common:symbolic",
         "//drake/systems/rendering:pose_bundle",
