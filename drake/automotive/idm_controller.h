@@ -78,7 +78,7 @@ class IdmController : public systems::LeafSystem<T> {
                     systems::SystemOutput<T>* output) const override;
 
   void ImplDoCalcOutput(const systems::rendering::PoseVector<T>& ego_pose,
-                        const Isometry3<T>& agent_pose,
+                        const maliput::api::RoadPosition& agent_pose,
                         const IdmPlannerParameters<T>& params,
                         DrivingCommand<T>* output) const;
 

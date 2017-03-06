@@ -6,7 +6,7 @@
 #include <utility>
 
 #include "drake/automotive/maliput/api/lane.h"
-//#include "drake/automotive/maliput/api/lane_data.h"
+#include "drake/automotive/pose_selector.h"
 #include "drake/common/cond.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/symbolic_formula.h"
@@ -23,9 +23,9 @@ namespace automotive {
 
 template <typename T>
 IdmController<T>::IdmController(const RoadGeometry* road) : road_(road) {
-  // Declare the input for the ego car.
+  // Declare the ego car input.
   this->DeclareInputPort(systems::kVectorValued, PoseVector<T>::kSize);
-  // Declare the inputs for the traffic cars.
+  // Declare the traffic car inputs.
   this->DeclareAbstractInputPort();
   // Declare the output port.
   this->DeclareOutputPort(systems::kVectorValued,
@@ -75,52 +75,28 @@ void IdmController<T>::DoCalcOutput(const systems::Context<T>& context,
       this->template GetNumericParameter<IdmPlannerParameters>(context,
                                                                kParamsIndex);
 
-  const Isometry3<T>& agent_pose =
-      SelectNearestTargetAhead(*ego_pose, *agent_poses);
-  ImplDoCalcOutput(*ego_pose, agent_pose, params, driving_command);
-}
-
-template <typename T>
-const Isometry3<T>
-IdmController<T>::SelectNearestTargetAhead(
-    const PoseVector<T>& ego_pose, const PoseBundle<T>& agent_poses) const {
-  const T car_length = 4.5;  // TODO(jadecastro): Car length needs to go
-                             // somewhere else.
-  const RoadPosition& ego_position = GetRoadPosition(ego_pose.get_isometry());
-  const T& s_ego = ego_position.pos.s;
-
-  Isometry3<T> pose_result = Isometry3<T>::Identity();
-  pose_result.translate(Vector3<T>(
-      std::numeric_limits<double>::infinity(), 0, 0));
-  for (int i = 0; i < agent_poses.get_num_poses(); ++i) {
-    const RoadPosition& agent_position =
-        GetRoadPosition(agent_poses.get_pose(i));
-    const T& s_agent = agent_poses.get_pose(i).translation().x();
-    // Accept this pose if it is ahead of the ego car and in the same lane.
-    if (s_agent > s_ego + car_length &&
-        s_agent < pose_result.translation().x() &&
-        agent_position.lane->id().id ==
-        ego_position.lane->id().id)
-      pose_result = agent_poses.get_pose(i);
-  }
-  return pose_result;
+  const RoadPosition& agent_position =
+      PoseSelector<T>::SelectClosestPositionAhead(*road_, *ego_pose,
+                                                  *agent_poses);
+  ImplDoCalcOutput(*ego_pose, agent_position, params, driving_command);
 }
 
 template <typename T>
 void IdmController<T>::ImplDoCalcOutput(const PoseVector<T>& ego_pose,
-                                        const Isometry3<T>& agent_pose,
+                                        const RoadPosition& agent_road_position,
                                         const IdmPlannerParameters<T>& params,
                                         DrivingCommand<T>* command) const {
   const T car_length = 4.5;
 
-  const T& s_ego = GetRoadPosition(ego_pose.get_isometry()).pos.s;
+  const T& s_ego =
+      PoseSelector<T>::GetRoadPosition(*road_, ego_pose.get_isometry()).pos.s;
   const T& s_dot_ego = 10.;  // TODO(jadecastro): Retrieve an actual velocity.
-  const T& s_agent = GetRoadPosition(agent_pose).pos.s;
+  const T& s_agent = agent_road_position.pos.s;
   const T& s_dot_agent = 0.;  // TODO(jadecastro): Retrieve an actual velocity.
 
   // Ensure that we are supplying the planner with sane parameters and input
   // values.
-  const T net_distance = s_agent - s_ego - car_length;  // <---- TODO
+  const T net_distance = s_agent - s_ego - car_length;
   DRAKE_DEMAND(net_distance > 0.);
   const T closing_velocity = s_dot_ego - s_dot_agent;
 
@@ -133,15 +109,6 @@ void IdmController<T>::ImplDoCalcOutput(const PoseVector<T>& ego_pose,
   command->set_brake(
       cond(command_acceleration >= T(0.), T(0.), -command_acceleration));
   command->set_steering_angle(0.);
-}
-
-template <typename T>
-const RoadPosition IdmController<T>::GetRoadPosition(const Isometry3<T>& pose)
-    const {
-  const GeoPosition& geo_position = GeoPosition(pose.translation().x(),
-                                                pose.translation().y(),
-                                                pose.translation().z());
-  return road_->ToRoadPosition(geo_position, nullptr, nullptr, nullptr);
 }
 
 template <typename T>
@@ -170,8 +137,8 @@ void IdmController<T>::SetDefaultParameters(
 // These instantiations must match the API documentation in
 // idm_planner.h.
 template class IdmController<double>;
-//template class IdmController<drake::TaylorVarXd>;
-//template class IdmController<drake::symbolic::Expression>;
+// template class IdmController<drake::TaylorVarXd>;
+// template class IdmController<drake::symbolic::Expression>;
 // TODO(jadecastro): Need SFNAE or some other thing here to activate the above.
 
 }  // namespace automotive

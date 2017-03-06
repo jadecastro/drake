@@ -136,7 +136,8 @@ drake_cc_library(
     deps = [
         ":generated_vectors",
         ":idm_planner",
-        "//drake/automotive/maliput/dragway",
+        "//drake/automotive/maliput/api",
+        "//drake/automotive:pose_selector",
         "//drake/common:cond",
         "//drake/common:symbolic",
         "//drake/systems/rendering:pose_bundle",
@@ -161,6 +162,18 @@ drake_cc_library(
     deps = [
         "//drake/automotive/maliput/api",
         "//drake/automotive/maliput/monolane",
+    ],
+)
+
+drake_cc_library(
+    name = "pose_selector",
+    srcs = ["pose_selector.cc"],
+    hdrs = ["pose_selector.h"],
+    deps = [
+        ":generated_vectors",
+        "//drake/automotive/maliput/api",
+        "//drake/systems/rendering:pose_bundle",
+        "//drake/systems/rendering:pose_vector",
     ],
 )
 
