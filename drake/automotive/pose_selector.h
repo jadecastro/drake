@@ -43,7 +43,7 @@ class PoseSelector {
                          const systems::rendering::PoseBundle<T>& agent_poses);
 
   ///
-  static const maliput::api::RoadPosition SelectClosestPositionAhead(
+  static const maliput::api::RoadPosition SelectClosestLeadingPosition(
       const maliput::api::RoadGeometry& road,
       const systems::rendering::PoseVector<T>& ego_pose,
       const systems::rendering::PoseBundle<T>& agent_poses);

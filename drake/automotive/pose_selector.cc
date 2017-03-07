@@ -22,34 +22,34 @@ PoseSelector<T>::SelectClosestPositions(const RoadGeometry& road,
                                         const PoseBundle<T>& agent_poses) {
   const RoadPosition& ego_position =
       GetRoadPosition(road, ego_pose.get_isometry());
+  DRAKE_DEMAND(ego_position.lane != nullptr);
   const Lane* lane = (agent_lane == nullptr) ? ego_position.lane : agent_lane;
 
-  RoadPosition result_ahead = RoadPosition(lane, LanePosition(1e6, 0, 0));
-  RoadPosition result_behind = RoadPosition(lane, LanePosition(-1e6, 0, 0));
+  RoadPosition result_leading = RoadPosition(lane, LanePosition(1e6, 0, 0));
+  RoadPosition result_trailing = RoadPosition(lane, LanePosition(-1e6, 0, 0));
   for (int i = 0; i < agent_poses.get_num_poses(); ++i) {
     const RoadPosition& agent_position =
         GetRoadPosition(road, agent_poses.get_pose(i));
     const T& s_agent = agent_position.pos.s;
 
-    // Accept this pose if it is not the ego car and it in the correct lane,
-    // then plop it into the correct bin.
+    // If this pose is not the ego car and is in the correct lane, then plop it
+    // into the correct bin.
     if (ego_position.lane->id().id != lane->id().id ||
         s_agent != ego_position.pos.s) {
       if (agent_position.lane->id().id == lane->id().id &&
-          result_behind.pos.s < s_agent && s_agent < result_ahead.pos.s) {
+          result_trailing.pos.s < s_agent && s_agent < result_leading.pos.s) {
         if (s_agent >= ego_position.pos.s)
-          result_ahead = agent_position;
+          result_leading = agent_position;
         else
-          result_behind = agent_position;
+          result_trailing = agent_position;
       }
     }
   }
-  std::cerr << " result_ahead.pos.s: " << result_ahead.pos.s << std::endl;
-  return std::make_pair(result_ahead, result_behind);
+  return std::make_pair(result_leading, result_trailing);
 }
 
 template <typename T>
-const RoadPosition PoseSelector<T>::SelectClosestPositionAhead(
+const RoadPosition PoseSelector<T>::SelectClosestLeadingPosition(
     const RoadGeometry& road, const PoseVector<T>& ego_pose,
     const PoseBundle<T>& agent_poses) {
   return SelectClosestPositions(road, nullptr, ego_pose, agent_poses).first;

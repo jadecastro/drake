@@ -1,0 +1,40 @@
+element {
+     name: "v_ref"
+     doc: "desired velocity in free traffic"
+}
+element {
+     name: "a"
+     doc: "max acceleration"
+}
+element {
+     name: "b"
+     doc: "comfortable braking deceleration"
+}
+element {
+     name: "s_0"
+     doc: "minimum desired net distance"
+}
+element {
+     name: "time_headway"
+     doc: "desired time headway to vehicle in front"
+}
+element {
+     name: "delta"
+     doc: "free-road exponent"
+}
+element {
+     name: "p"
+     doc: "politeness factor [0, 1]"
+}
+element {
+     name: "threshold"
+     doc: "acceleration threshold"
+}
+element {
+     name: "max_deceleration"
+     doc: "maximum safe deceleration"
+}
+element {
+     name: "s_lookahead"
+     doc: "distance along the s-direction to place the reference point"
+}

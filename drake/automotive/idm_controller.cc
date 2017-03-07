@@ -50,13 +50,17 @@ IdmController<T>::agent_pose_bundle_input() const {
 template <typename T>
 void IdmController<T>::DoCalcOutput(const systems::Context<T>& context,
                                     systems::SystemOutput<T>* output) const {
+  // Obtain the parameters.
+  const int kParamsIndex = 0;
+  const IdmPlannerParameters<T>& params =
+      this->template GetNumericParameter<IdmPlannerParameters>(context,
+                                                               kParamsIndex);
   // Obtain the input/output data structures.
   const PoseVector<T>* const ego_pose =
       this->template EvalVectorInput<PoseVector>(
           context, this->ego_pose_input().get_index());
   DRAKE_ASSERT(ego_pose != nullptr);
 
-  // TODO(jadecastro): Make this PoseBundle and select a certain PoseVector.
   const PoseBundle<T>* const agent_poses =
       this->template EvalInputValue<PoseBundle<T>>(
           context, this->agent_pose_bundle_input().get_index());
@@ -69,15 +73,9 @@ void IdmController<T>::DoCalcOutput(const systems::Context<T>& context,
       dynamic_cast<DrivingCommand<T>*>(command_output_vector);
   DRAKE_ASSERT(driving_command != nullptr);
 
-  // Obtain the parameters.
-  const int kParamsIndex = 0;
-  const IdmPlannerParameters<T>& params =
-      this->template GetNumericParameter<IdmPlannerParameters>(context,
-                                                               kParamsIndex);
-
   const RoadPosition& agent_position =
-      PoseSelector<T>::SelectClosestPositionAhead(*road_, *ego_pose,
-                                                  *agent_poses);
+      PoseSelector<T>::SelectClosestLeadingPosition(*road_, *ego_pose,
+                                                    *agent_poses);
   ImplDoCalcOutput(*ego_pose, agent_position, params, driving_command);
 }
 
@@ -97,10 +95,12 @@ void IdmController<T>::ImplDoCalcOutput(const PoseVector<T>& ego_pose,
   // Ensure that we are supplying the planner with sane parameters and input
   // values.
   const T net_distance = s_agent - s_ego - car_length;
+  // ********** TODO(jadecastro): Saturate this instead.
   DRAKE_DEMAND(net_distance > 0.);
   const T closing_velocity = s_dot_ego - s_dot_agent;
 
-  // Output the acceleration command.
+  // Output the acceleration command from the IDM equation and allocate the
+  // result to either the throttle or brake.
   const T command_acceleration =
       IdmPlanner<T>::Evaluate(params, s_dot_ego, net_distance,
                               closing_velocity);
