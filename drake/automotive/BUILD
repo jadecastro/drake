@@ -196,6 +196,16 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "pure_pursuit_controller",
+    srcs = ["pure_pursuit_controller.cc"],
+    hdrs = ["pure_pursuit_controller.h"],
+    deps = [
+        ":generated_vectors",
+        "//drake/systems/rendering:pose_vector",
+    ],
+)
+
+drake_cc_library(
     name = "simple_car",
     srcs = ["simple_car.cc"],
     hdrs = [
@@ -252,6 +262,8 @@ drake_cc_library(
         ":generated_translators",
         ":generated_vectors",
         ":idm_controller",
+        ":mobil_planner",
+        ":pure_pursuit_controller",
         ":simple_car",
         ":trajectory_car",
         "//drake/automotive/maliput/api",

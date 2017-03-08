@@ -43,7 +43,7 @@ class IdmController : public systems::LeafSystem<T> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(IdmController)
 
-  /// @p v_ref desired velocity of the ego car in units of m/s.
+  /// Constructor. @p road the pre-defined RoadGeometry.
   IdmController(const maliput::api::RoadGeometry* road);
   ~IdmController() override;
 

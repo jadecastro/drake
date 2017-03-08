@@ -12,8 +12,10 @@
 #include "drake/automotive/gen/endless_road_car_state_translator.h"
 #include "drake/automotive/gen/euler_floating_joint_state_translator.h"
 #include "drake/automotive/gen/simple_car_state_translator.h"
-#include "drake/automotive/maliput/utility/generate_urdf.h"
 #include "drake/automotive/idm_controller.h"
+#include "drake/automotive/maliput/utility/generate_urdf.h"
+#include "drake/automotive/mobil_planner.h"
+#include "drake/automotive/pure_pursuit_controller.h"
 #include "drake/automotive/simple_car.h"
 #include "drake/automotive/simple_car_to_euler_floating_joint.h"
 #include "drake/automotive/trajectory_car.h"
@@ -83,17 +85,52 @@ int AutomotiveSimulator<T>::AddIdmControlledSimpleCarFromSdf(
 
   auto idm_controller = builder_->template AddSystem<IdmController<T>>(
       road_.get());
+  idm_controllers_.emplace_back(idm_controller);
   auto simple_car = builder_->template AddSystem<SimpleCar<T>>();
+  idm_cars_.emplace_back(simple_car);
   auto coord_transform =
       builder_->template AddSystem<SimpleCarToEulerFloatingJoint<T>>();
-
-  idm_cars_.emplace_back(simple_car);
-  idm_controllers_.emplace_back(idm_controller);
 
   // Wire up the controller.
   builder_->Connect(*idm_controller, *simple_car);
   builder_->Connect(simple_car->pose_output(),
                     idm_controller->ego_pose_input());
+
+  builder_->Connect(simple_car->state_output(),
+                    coord_transform->get_input_port(0));
+  AddPublisher(*simple_car, vehicle_number);
+  AddPublisher(*coord_transform, vehicle_number);
+  return AddSdfModel(sdf_filename, coord_transform, model_name);
+}
+
+template <typename T>
+int AutomotiveSimulator<T>::AddMobilControlledSimpleCarFromSdf(
+    const std::string& sdf_filename,
+    const std::string& model_name, const std::string& channel_name) {
+  DRAKE_DEMAND(!started_);
+  const int vehicle_number = allocate_vehicle_number();
+
+  auto mobil_planner = builder_->template AddSystem<MobilPlanner<T>>(
+      road_.get());
+  mobil_controllers_.emplace_back(mobil_planner);
+  auto simple_car = builder_->template AddSystem<SimpleCar<T>>();
+  mobil_cars_.emplace_back(simple_car);
+  auto pursuit = builder_->template AddSystem<PurePursuitController<T>>();
+  auto coord_transform =
+      builder_->template AddSystem<SimpleCarToEulerFloatingJoint<T>>();
+
+  //std::sleep(3);
+  // Wire up the controller.
+  builder_->Connect(mobil_planner->driving_command_output(),
+                    pursuit->driving_command_input());
+  builder_->Connect(mobil_planner->goal_position_output(),
+                    pursuit->goal_position_input());
+  builder_->Connect(simple_car->pose_output(),
+                    pursuit->ego_pose_input());
+  builder_->Connect(pursuit->driving_command_output(),
+                    simple_car->get_input_port(0));
+  builder_->Connect(simple_car->pose_output(),
+                    mobil_planner->ego_pose_input());
 
   builder_->Connect(simple_car->state_output(),
                     coord_transform->get_input_port(0));
@@ -139,10 +176,9 @@ int AutomotiveSimulator<T>::AddTrajectoryCarFromSdf(
 
   auto trajectory_car =
       builder_->template AddSystem<TrajectoryCar<T>>(curve, speed, start_time);
+  trajectory_cars_.emplace_back(trajectory_car);
   auto coord_transform =
       builder_->template AddSystem<SimpleCarToEulerFloatingJoint<T>>();
-
-  trajectory_cars_.emplace_back(trajectory_car);
 
   builder_->Connect(trajectory_car->state_output(),
                     coord_transform->get_input_port(0));
@@ -202,6 +238,7 @@ int AutomotiveSimulator<T>::AddEndlessRoadCar(
 template <typename T>
 void AutomotiveSimulator<T>::AddPoseAggregator() {
   DRAKE_DEMAND(idm_controllers_.size() == idm_cars_.size());
+  DRAKE_DEMAND(mobil_controllers_.size() == mobil_cars_.size());
 
   auto aggregator = builder_->template AddSystem<PoseAggregator<T>>();
 
@@ -223,6 +260,14 @@ void AutomotiveSimulator<T>::AddPoseAggregator() {
     // Wire up the IdmController with oracular knowledge.
     builder_->Connect(aggregator->get_output_port(0),
                       idm_controllers_[i]->agent_pose_bundle_input());
+  }
+  for (int i = 0; i < static_cast<int>(mobil_cars_.size()); ++i) {
+    aggregator->AddSingleInput("mobil_car" + std::to_string(i));
+    builder_->Connect(mobil_cars_[i]->pose_output(),
+                      aggregator->get_input_port(index++));
+    // Wire up the MobilPlanner with oracular knowledge.
+    builder_->Connect(aggregator->get_output_port(0),
+                      mobil_controllers_[i]->agent_pose_bundle_input());
   }
 }
 

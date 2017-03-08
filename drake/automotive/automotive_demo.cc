@@ -14,8 +14,8 @@ DEFINE_string(simple_car_names, "",
               "A comma-separated list (e.g. 'Russ,Jeremy,Liang' would spawn 3 "
               "cars subscribed to DRIVING_COMMAND_Russ, "
               "DRIVING_COMMAND_Jeremy, and DRIVING_COMMAND_Liang)");
-DEFINE_int32(num_idm_car, 1, "Number of IDM-controlled SimpleCar vehicles");
-DEFINE_int32(num_mobil_car, 1, "Number of MOBIL-controlled SimpleCar vehicles");
+DEFINE_int32(num_idm_car, 0, "Number of IDM-controlled SimpleCar vehicles");
+DEFINE_int32(num_mobil_car, 0, "Number of MOBIL-controlled SimpleCar vehicles");
 DEFINE_int32(num_trajectory_car, 1, "Number of TrajectoryCar vehicles");
 DEFINE_double(target_realtime_rate, 1.0,
               "Playback speed.  See documentation for "
@@ -119,10 +119,13 @@ void AddVehicles(RoadNetworkType road_network_type,
       simulator->AddIdmControlledSimpleCarFromSdf(kSdfFile, name, channel_name);
     }
     for (int i = 0; i < FLAGS_num_mobil_car; ++i) {
-      // TODO(jadecastro): Implement the MOBIL model.
-      continue;
+      const std::string name = "";
+      const std::string& channel_name = MakeChannelName(name);
+      drake::log()->info("Adding mobil-driven simple car subscribed to {}.",
+                         channel_name);
+      simulator->AddMobilControlledSimpleCarFromSdf(kSdfFile, name,
+                                                    channel_name);
     }
-
   } else {
     for (int i = 0; i < FLAGS_num_trajectory_car; ++i) {
       const auto& params = CreateTrajectoryParams(i);

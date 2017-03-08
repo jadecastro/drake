@@ -11,8 +11,9 @@
 #include "drake/automotive/dev/endless_road_car_to_euler_floating_joint.h"
 #include "drake/automotive/dev/infinite_circuit_road.h"
 #include "drake/automotive/gen/endless_road_car_state.h"
-#include "drake/automotive/maliput/api/road_geometry.h"
 #include "drake/automotive/idm_controller.h"
+#include "drake/automotive/maliput/api/road_geometry.h"
+#include "drake/automotive/mobil_planner.h"
 #include "drake/automotive/simple_car.h"
 #include "drake/automotive/simple_car_to_euler_floating_joint.h"
 #include "drake/automotive/trajectory_car.h"
@@ -57,9 +58,15 @@ class AutomotiveSimulator {
   /// tree representation.
   const RigidBodyTree<T>& get_rigid_body_tree();
 
+  /// 
   int AddIdmControlledSimpleCarFromSdf(const std::string& sdf_filename,
                                        const std::string& model_name,
                                        const std::string& channel_name);
+
+  /// 
+  int AddMobilControlledSimpleCarFromSdf(const std::string& sdf_filename,
+                                         const std::string& model_name,
+                                         const std::string& channel_name);
 
   /// Adds a SimpleCar system to this simulation, including its DrivingCommand
   /// LCM input and EulerFloatingJoint output.
@@ -255,6 +262,8 @@ class AutomotiveSimulator {
   std::vector<SimpleCar<T>*> simple_cars_{};
   std::vector<SimpleCar<T>*> idm_cars_{};
   std::vector<IdmController<T>*> idm_controllers_{};
+  std::vector<SimpleCar<T>*> mobil_cars_{};
+  std::vector<MobilPlanner<T>*> mobil_controllers_{};
 
   // === Start for building. ===
   std::unique_ptr<systems::DiagramBuilder<T>> builder_{

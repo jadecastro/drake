@@ -18,7 +18,7 @@ namespace drake {
 namespace automotive {
 
 /// MobilPlanner -- MOBIL (Minimizing Overall Braking Induced by Lane Changes)
-/// is a planner .
+/// is a planner.....
 ///
 /// IDM: Intelligent Driver Model:
 ///    https://en.wikipedia.org/wiki/Intelligent_driver_model
@@ -43,13 +43,15 @@ class MobilPlanner : public systems::LeafSystem<T> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(MobilPlanner)
 
-  /// @p v_ref desired velocity of the ego car in units of m/s.
+  /// Constructor. @p road the pre-defined RoadGeometry.
   MobilPlanner(const maliput::api::RoadGeometry* road);
   ~MobilPlanner() override;
 
-  /// Returns the port to the ego car input subvector.
+  /// Returns the port to the individual input/output ports.
   const systems::InputPortDescriptor<T>& ego_pose_input() const;
   const systems::InputPortDescriptor<T>& agent_pose_bundle_input() const;
+  const systems::OutputPortDescriptor<T>& driving_command_output() const;
+  const systems::OutputPortDescriptor<T>& goal_position_output() const;
 
   // System<T> overrides.
   // The output of this system is an algebraic relation of its inputs.
@@ -67,11 +69,11 @@ class MobilPlanner : public systems::LeafSystem<T> {
   void DoCalcOutput(const systems::Context<T>& context,
                     systems::SystemOutput<T>* output) const override;
 
-  void ImplDoCalcReference(
+  void ImplDoCalcLane(
       const systems::rendering::PoseVector<T>& ego_pose,
       const systems::rendering::PoseBundle<T>& agent_poses,
       const MobilPlannerParameters<T>& params,
-      systems::BasicVector<T>* reference) const;
+      systems::BasicVector<T>* goal_output) const;
 
   void ImplDoCalcOutput(const systems::rendering::PoseVector<T>& ego_pose,
                         const systems::rendering::PoseBundle<T>& agent_poses,

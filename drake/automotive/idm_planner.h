@@ -52,6 +52,9 @@ class IdmPlanner {
   static const T Evaluate(const IdmPlannerParameters<T>& params,
                           const T& ego_velocity, const T& target_distance,
                           const T& target_distance_dot);
+  static const T Evaluate(const MobilPlannerParameters<T>& params,
+                          const T& ego_velocity, const T& target_distance,
+                          const T& target_distance_dot);
 
   /// Sets defaults for all parameters.
   static void SetDefaultParameters(IdmPlannerParameters<T>* params);
