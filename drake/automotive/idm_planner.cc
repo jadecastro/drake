@@ -53,6 +53,26 @@ void IdmPlanner<T>::SetDefaultParameters(IdmPlannerParameters<T>* idm_params) {
   idm_params->set_delta(T(4.));  // recommended choice of acceleration exponent.
 }
 
+template <typename T>
+void IdmPlanner<T>::SetDefaultParameters(
+    MobilPlannerParameters<T>* mobil_params) {
+  // Default values from https://en.wikipedia.org/wiki/Intelligent_driver_model.
+  DRAKE_DEMAND(mobil_params != nullptr);
+  mobil_params->set_v_ref(20.);  // desired velocity in free traffic [m/s].
+  mobil_params->set_a(T(1.));    // max acceleration [m/s^2].
+  mobil_params->set_b(T(3.));    // comfortable braking deceleration [m/s^2].
+  mobil_params->set_s_0(T(1.));  // minimum desired net distance [m].
+  mobil_params->set_time_headway(T(0.1));  // desired headway to lead vehicle
+                                           // [s].
+  mobil_params->set_delta(T(4.));  // recommended choice of acceleration
+                                   // exponent.
+  mobil_params->set_p(T(0.5));  // politeness factor [0, 1].
+  mobil_params->set_threshold(T(0.1));  // acceleration threshold [m/s^2].
+  mobil_params->set_max_deceleration(T(4.));  // maximum tolerable deceleration
+                                              // [m/s^2].
+  mobil_params->set_s_lookahead(T(10.));  // lookahead distance [m].
+}
+
 // These instantiations must match the API documentation in idm_planner.h.
 template class IdmPlanner<double>;
 template class IdmPlanner<drake::TaylorVarXd>;

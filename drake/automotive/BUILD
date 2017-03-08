@@ -22,6 +22,7 @@ drake_cc_library(
         "gen/endless_road_oracle_output.cc",
         "gen/euler_floating_joint_state.cc",
         "gen/idm_planner_parameters.cc",
+        "gen/mobil_planner_parameters.cc",
         "gen/simple_car_config.cc",
         "gen/simple_car_state.cc",
     ],
@@ -34,6 +35,7 @@ drake_cc_library(
         "gen/endless_road_oracle_output.h",
         "gen/euler_floating_joint_state.h",
         "gen/idm_planner_parameters.h",
+        "gen/mobil_planner_parameters.h",
         "gen/simple_car_config.h",
         "gen/simple_car_state.h",
     ],
@@ -152,6 +154,22 @@ drake_cc_library(
     deps = [
         ":generated_vectors",
         "//drake/common:symbolic",
+    ],
+)
+
+drake_cc_library(
+    name = "mobil_planner",
+    srcs = ["mobil_planner.cc"],
+    hdrs = ["mobil_planner.h"],
+    deps = [
+        ":generated_vectors",
+        ":idm_planner",
+        "//drake/automotive/maliput/api",
+        "//drake/automotive:pose_selector",
+        "//drake/common:cond",
+        "//drake/common:symbolic",
+        "//drake/systems/rendering:pose_bundle",
+        "//drake/systems/rendering:pose_vector",
     ],
 )
 

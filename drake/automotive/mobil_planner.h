@@ -6,6 +6,7 @@
 
 #include "drake/automotive/gen/driving_command.h"
 #include "drake/automotive/gen/idm_planner_parameters.h"
+#include "drake/automotive/gen/mobil_planner_parameters.h"
 #include "drake/automotive/idm_planner.h"
 #include "drake/automotive/maliput/api/road_geometry.h"
 #include "drake/common/drake_copyable.h"
@@ -24,8 +25,6 @@ namespace automotive {
 ///
 /// Instantiated templates for the following kinds of T's are provided:
 /// - double
-/// - drake::TaylorVarXd
-/// - drake::symbolic::Expression
 ///
 /// They are already available to link against in the containing library.
 ///
@@ -65,23 +64,34 @@ class MobilPlanner : public systems::LeafSystem<T> {
                             systems::Parameters<T>* params) const override;
 
  private:
-  /// Selects nearest agent pose that is ahead of the ego car.  If there are no
-  /// qualifying poses, a pose at an x-value of infinity is returned.
-  const Isometry3<T> SelectNearestTargetAhead(
-      const systems::rendering::PoseVector<T>& ego_pose,
-      const systems::rendering::PoseBundle<T>& agent_poses) const;
-
-  /// Retrieves the current RoadPosition for a given road and PoseVector.
-  const maliput::api::RoadPosition GetRoadPosition(
-      const Isometry3<T>& pose) const;
-
   void DoCalcOutput(const systems::Context<T>& context,
                     systems::SystemOutput<T>* output) const override;
 
+  void ImplDoCalcReference(
+      const systems::rendering::PoseVector<T>& ego_pose,
+      const systems::rendering::PoseBundle<T>& agent_poses,
+      const MobilPlannerParameters<T>& params,
+      systems::BasicVector<T>* reference) const;
+
   void ImplDoCalcOutput(const systems::rendering::PoseVector<T>& ego_pose,
-                        const maliput::api::RoadPosition& agent_pose,
+                        const systems::rendering::PoseBundle<T>& agent_poses,
                         const MobilPlannerParameters<T>& params,
                         DrivingCommand<T>* output) const;
+
+  const std::pair<T, T> ComputeIncentives(
+    const std::pair<const maliput::api::Lane*, const maliput::api::Lane*> lanes,
+    const MobilPlannerParameters<T>& params,
+    const systems::rendering::PoseVector<T>& ego_pose,
+    const systems::rendering::PoseBundle<T>& agent_poses) const;
+
+  const T EvaluateIdm(
+    const MobilPlannerParameters<T>& params,
+    const maliput::api::RoadPosition& ego_position,
+    const maliput::api::RoadPosition& agent_position) const;
+
+  const maliput::api::GeoPosition ComputeGoalPoint(
+      const MobilPlannerParameters<T>& params, const maliput::api::Lane* lane,
+      const maliput::api::RoadPosition& position) const;
 
   const maliput::api::RoadGeometry* road_;
 };

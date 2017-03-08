@@ -1,6 +1,7 @@
 #pragma once
 
 #include "drake/automotive/gen/idm_planner_parameters.h"
+#include "drake/automotive/gen/mobil_planner_parameters.h"
 #include "drake/common/drake_copyable.h"
 
 namespace drake {
@@ -54,6 +55,7 @@ class IdmPlanner {
 
   /// Sets defaults for all parameters.
   static void SetDefaultParameters(IdmPlannerParameters<T>* params);
+  static void SetDefaultParameters(MobilPlannerParameters<T>* params);
 };
 
 }  // namespace automotive

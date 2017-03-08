@@ -14,6 +14,8 @@
 namespace drake {
 
 using maliput::api::GeoPosition;
+using maliput::api::Lane;
+using maliput::api::LanePosition;
 using maliput::api::RoadGeometry;
 using maliput::api::RoadPosition;
 using systems::rendering::PoseBundle;
@@ -34,7 +36,7 @@ MobilPlanner<T>::MobilPlanner(const RoadGeometry* road) : road_(road) {
   // Declare the DrivingCommand output port.
   this->DeclareOutputPort(systems::kVectorValued,
                           DrivingCommandIndices::kNumCoordinates);
-  // Declare the reference r-value output port.
+  // Declare the reference Cartesian output port.
   this->DeclareOutputPort(systems::kVectorValued, kReferencePositionSize);
 }
 
@@ -57,9 +59,9 @@ void MobilPlanner<T>::DoCalcOutput(const systems::Context<T>& context,
                                    systems::SystemOutput<T>* output) const {
   // Obtain the parameters.
   const int kParamsIndex = 0;
-  const IdmPlannerParameters<T>& params =
-      this->template GetNumericParameter<IdmPlannerParameters>(context,
-                                                               kParamsIndex);
+  const MobilPlannerParameters<T>& params =
+      this->template GetNumericParameter<MobilPlannerParameters>(context,
+                                                                 kParamsIndex);
 
   // Obtain the input/output data structures.
   const PoseVector<T>* const ego_pose =
@@ -74,7 +76,7 @@ void MobilPlanner<T>::DoCalcOutput(const systems::Context<T>& context,
 
   systems::BasicVector<T>* const reference_output_vector =
       output->GetMutableVectorData(1);
-  DRAKE_ASSERT(reference_output_vector != nullptr); kParamsIndex);
+  DRAKE_ASSERT(reference_output_vector != nullptr);
 
   ImplDoCalcReference(*ego_pose, *agent_poses, params, reference_output_vector);
 
@@ -85,46 +87,50 @@ void MobilPlanner<T>::DoCalcOutput(const systems::Context<T>& context,
       dynamic_cast<DrivingCommand<T>*>(command_output_vector);
   DRAKE_ASSERT(driving_command != nullptr);
 
-  ImplDoCalcOutput(command_acceleration, driving_command);
+  ImplDoCalcOutput(*ego_pose, *agent_poses, params, driving_command);
 }
 
 template <typename T>
 void MobilPlanner<T>::ImplDoCalcReference(
-    const PoseVector<T>& ego_pose, const RoadPosition& agent_road_position,
-    const MobilPlannerParameters<T>& params, BasicVector<T>* reference) const {
+    const PoseVector<T>& ego_pose, const PoseBundle<T>& agent_poses,
+    const MobilPlannerParameters<T>& params,
+    systems::BasicVector<T>* reference) const {
   const RoadPosition& ego_position =
       PoseSelector<T>::GetRoadPosition(*road_, ego_pose.get_isometry());
   // Prepare a list of (possibly nullptr) Lanes to evaluate.
-  std::pair<Lane*, Lane*> lanes{ego_position.lane->to_left(),
-                                ego_position.lane->to_right()};
-  const Lane* new_lane{};
+  std::pair<const Lane*, const Lane*> lanes =
+      std::make_pair(ego_position.lane->to_left(),
+                     ego_position.lane->to_right());
+
+  const Lane* new_lane;
   if (lanes.first != nullptr || lanes.second != nullptr) {
     const std::pair<T, T> incentives =
         ComputeIncentives(lanes, params, ego_pose, agent_poses);
     // Choose the lane with the highest incentive score greater than zero.
     const T threshold = params.threshold();
-    new_lane = cond(
-        incentives.first >= incentives.second,
-        cond(incentives.first > threshold, lanes.first, ego_position.lane),
-        cond(incentives.second > threshold, lanes.second, ego_position.lane));
+    if (incentives.first >= incentives.second)
+      new_lane = (incentives.first > threshold) ? lanes.first :
+          ego_position.lane;
+    else
+      new_lane = (incentives.second > threshold) ? lanes.second :
+          ego_position.lane;
   }
 
   const GeoPosition goal = ComputeGoalPoint(params, new_lane, ego_position);
-
-  (*reference)[0] = goal.x();
-  (*reference)[1] = goal.y();
+  (*reference)[0] = goal.x;
+  (*reference)[1] = goal.y;
 }
 
 template <typename T>
 void MobilPlanner<T>::ImplDoCalcOutput(const PoseVector<T>& ego_pose,
-                                       const RoadPosition& agent_road_position,
+                                       const PoseBundle<T>& agent_poses,
                                        const MobilPlannerParameters<T>& params,
-                                       DrivingCommand<T>* output) const {
+                                       DrivingCommand<T>* command) const {
   const RoadPosition& ego_position =
       PoseSelector<T>::GetRoadPosition(*road_, ego_pose.get_isometry());
   const RoadPosition& agent_position =
-      PoseSelector<T>::SelectClosestLeadingPosition(*road_, *ego_pose,
-                                                    *agent_poses);
+      PoseSelector<T>::SelectClosestLeadingPosition(*road_, ego_pose,
+                                                    agent_poses);
 
   // Output the acceleration command from the IDM equation and allocate the
   // result to either the throttle or brake.
@@ -138,8 +144,8 @@ void MobilPlanner<T>::ImplDoCalcOutput(const PoseVector<T>& ego_pose,
 }
 
 template <typename T>
-const std::pair<T, T>& ComputeIncentives(
-    const std::pair<Lane*, Lane*> lanes,
+const std::pair<T, T> MobilPlanner<T>::ComputeIncentives(
+    const std::pair<const Lane*, const Lane*> lanes,
     const MobilPlannerParameters<T>& params, const PoseVector<T>& ego_pose,
     const PoseBundle<T>& agent_poses) const {
   // Initially disincentivize all lane options.
@@ -149,8 +155,8 @@ const std::pair<T, T>& ComputeIncentives(
       PoseSelector<T>::GetRoadPosition(*road_, ego_pose.get_isometry());
   DRAKE_DEMAND(ego_position.lane != nullptr);
   const std::pair<RoadPosition, RoadPosition>& positions_this =
-      PoseSelector<T>::SelectClosestPositions(*road_, ego_pose,
-                                              ego_position.lane, agent_poses);
+      PoseSelector<T>::SelectClosestPositions(*road_, nullptr, ego_pose,
+                                              agent_poses);
 
   const T ego_old_accel =
       EvaluateIdm(params, ego_position, positions_this.first);
@@ -161,10 +167,12 @@ const std::pair<T, T>& ComputeIncentives(
   // delta_trailer_this_lane?
   const T trailing_accel_this =
       trailing_this_new_accel - trailing_this_old_accel;
-  for (int i = 0; i < 2 && lanes[i] != nullptr; ++i) {
+  for (int i = 0; i < 2 && (i == 0) ? lanes.first != nullptr :
+           lanes.second != nullptr; i++) {
     const std::pair<RoadPosition, RoadPosition>& positions =
-        PoseSelector<T>::SelectClosestPositions(*road_, ego_pose, lanes[i],
-                                                agent_poses);
+        PoseSelector<T>::SelectClosestPositions(
+            *road_, (i == 0) ? lanes.first : lanes.second, ego_pose,
+            agent_poses);
     const T ego_new_accel = EvaluateIdm(params, ego_position, positions.first);
     const T trailing_old_accel =
         EvaluateIdm(params, positions.second, ego_position);
@@ -180,15 +188,17 @@ const std::pair<T, T>& ComputeIncentives(
 
     // Compute the incentive as a weighted sum of the net accelerations for the
     // ego and each immediate neighbor.
-    std::get<i>(incentive) =
+    const T result =
         ego_accel + params.p() * (trailing_accel_other + trailing_accel_this);
+    (i == 0) ? (incentive.first = result) : (incentive.second = result);
   }
   return incentive;
 }
 
-const T& EvaluateIdm(const MobilPlannerParams<T>& params,
-                     const RoadPosition& ego_position,
-                     const RoadPosition& agent_position) const {
+template <typename T>
+const T MobilPlanner<T>::EvaluateIdm(
+    const MobilPlannerParameters<T>& params, const RoadPosition& ego_position,
+    const RoadPosition& agent_position) const {
   const T car_length = 4.5;
 
   const T& s_ego = ego_position.pos.s;
@@ -208,14 +218,16 @@ const T& EvaluateIdm(const MobilPlannerParams<T>& params,
   DRAKE_DEMAND(std::abs(net_distance) > kEpsilonDistance);
   const T closing_velocity = s_dot_ego - s_dot_agent;
 
-  return IdmPlanner<T>::Evaluate(params, s_dot_ego, net_distance,
+  auto idm_params = dynamic_cast<const IdmPlannerParameters<T>*>(&params);
+  DRAKE_DEMAND(idm_params != nullptr);
+  return IdmPlanner<T>::Evaluate(*idm_params, s_dot_ego, net_distance,
                                  closing_velocity);
 }
 
 template <typename T>
-const GeoPosition ComputeGoalPoint(const MobilPlannerParameters<T>& params,
-                                   const Lane* lane,
-                                   const RoadPosition& position) const {
+const GeoPosition MobilPlanner<T>::ComputeGoalPoint(
+    const MobilPlannerParameters<T>& params, const Lane* lane,
+    const RoadPosition& position) const {
   const LanePosition lane_position(position.pos.s + params.s_lookahead(), 0, 0);
   return lane->ToGeoPosition(lane_position);
 }
@@ -246,9 +258,6 @@ void MobilPlanner<T>::SetDefaultParameters(
 // These instantiations must match the API documentation in
 // idm_planner.h.
 template class MobilPlanner<double>;
-// template class MobilPlanner<drake::TaylorVarXd>;
-// template class MobilPlanner<drake::symbolic::Expression>;
-// TODO(jadecastro): Need SFNAE or some other thing here to activate the above.
 
 }  // namespace automotive
 }  // namespace drake
