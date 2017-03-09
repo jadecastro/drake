@@ -201,6 +201,7 @@ drake_cc_library(
     hdrs = ["pure_pursuit_controller.h"],
     deps = [
         ":generated_vectors",
+        ":simple_car",
         "//drake/systems/rendering:pose_vector",
     ],
 )

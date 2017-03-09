@@ -102,7 +102,7 @@ void IdmPlanner<T>::SetDefaultParameters(
   mobil_params->set_threshold(T(0.1));  // acceleration threshold [m/s^2].
   mobil_params->set_max_deceleration(T(4.));  // maximum tolerable deceleration
                                               // [m/s^2].
-  mobil_params->set_s_lookahead(T(10.));  // lookahead distance [m].
+  mobil_params->set_s_lookahead(T(15.));  // lookahead distance [m].
 }
 
 // These instantiations must match the API documentation in idm_planner.h.

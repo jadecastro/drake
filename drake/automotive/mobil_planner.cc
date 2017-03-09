@@ -131,7 +131,6 @@ void MobilPlanner<T>::ImplDoCalcLane(
   }
   // TODO(jadecastro): Changes to the goal should be an event.
   const GeoPosition goal = ComputeGoalPoint(params, new_lane, ego_position);
-  std::cerr << " goal.y: " << goal.y << std::endl;
   (*goal_output)[0] = goal.x;
   (*goal_output)[1] = goal.y;
 }
@@ -151,7 +150,6 @@ void MobilPlanner<T>::ImplDoCalcOutput(const PoseVector<T>& ego_pose,
   // result to either the throttle or brake.
   const T command_acceleration =
       EvaluateIdm(params, ego_position, agent_position);
-  std::cerr << " command_accel: " << command_acceleration << std::endl;
   command->set_throttle(
       cond(command_acceleration < T(0.), T(0.), command_acceleration));
   command->set_brake(
