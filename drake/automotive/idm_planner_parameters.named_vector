@@ -57,3 +57,11 @@ element {
      default_value: "1e-2"
      min_value: "0.0"
 }
+element {
+     name: "bloat_diameter"
+     doc: "diameter of circle about the vehicle's pose that encloses its physical footprint"
+}
+element {
+     name: "distance_lower_limit"
+     doc: "lower saturation bound on net distance"
+}
