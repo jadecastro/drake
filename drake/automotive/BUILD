@@ -526,6 +526,14 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
+    name = "mobil_planner_test",
+    deps = [
+        "//drake/automotive:mobil_planner",
+        "//drake/automotive/maliput/dragway",
+    ],
+)
+
+drake_cc_googletest(
     name = "pose_selector_test",
     deps = [
         "//drake/automotive:pose_selector",
