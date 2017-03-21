@@ -5,7 +5,11 @@
 #include <Eigen/Geometry>
 
 #include "drake/automotive/gen/driving_command.h"
+#include "drake/automotive/gen/pure_pursuit_controller_parameters.h"
 #include "drake/automotive/gen/simple_car_config.h"
+#include "drake/automotive/gen/simple_car_config.h"
+#include "drake/automotive/maliput/api/lane.h"
+#include "drake/automotive/maliput/api/road_geometry.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/systems/framework/leaf_system.h"
 #include "drake/systems/rendering/pose_vector.h"
@@ -31,7 +35,8 @@ class PurePursuitController : public systems::LeafSystem<T> {
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(PurePursuitController)
 
   /// Constructor.
-  PurePursuitController(std::unique_ptr<RoadGeometry> road);
+  explicit PurePursuitController(std::unique_ptr<maliput::api::RoadGeometry>
+                                 road);
   ~PurePursuitController() override;
 
   /// Returns the port to the individual input/output ports.
@@ -68,6 +73,9 @@ class PurePursuitController : public systems::LeafSystem<T> {
       const PurePursuitControllerParameters<T>& params,
       const maliput::api::Lane* lane,
       const maliput::api::RoadPosition& position) const;
+
+  // Returns null if `lane_id` is not within the provided `road_`.
+  const maliput::api::Lane* GetLane(const maliput::api::LaneId& lane_id) const;
 
   const std::unique_ptr<maliput::api::RoadGeometry> road_{};
 };

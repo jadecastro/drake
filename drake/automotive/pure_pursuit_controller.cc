@@ -3,6 +3,9 @@
 #include <cmath>
 
 #include "drake/common/drake_assert.h"
+#include "drake/automotive/maliput/api/junction.h"
+#include "drake/automotive/maliput/api/segment.h"
+#include "drake/automotive/pose_selector.h"
 #include "drake/automotive/simple_car.h"
 
 namespace drake {
@@ -10,12 +13,16 @@ namespace drake {
 using maliput::api::GeoPosition;
 using maliput::api::Lane;
 using maliput::api::LanePosition;
+using maliput::api::Junction;
 using maliput::api::RoadGeometry;
+using maliput::api::RoadPosition;
+using maliput::api::Segment;
 using systems::rendering::PoseVector;
 
 namespace automotive {
 
-static constexpr int kGoalPositionSize{2};
+static constexpr int kCarParamsIndex{0};
+static constexpr int kPpParamsIndex{1};
 
 template <typename T>
 PurePursuitController<T>::PurePursuitController(
@@ -64,8 +71,12 @@ void PurePursuitController<T>::DoCalcOutput(
     const systems::Context<T>& context,
     systems::SystemOutput<T>* output) const {
   // Obtain the parameters.
-  const SimpleCarConfig<T>& config =
-      this->template GetNumericParameter<SimpleCarConfig>(context, 0);
+  const PurePursuitControllerParameters<T>& pp_params =
+      this->template GetNumericParameter<PurePursuitControllerParameters>(
+          context, kPpParamsIndex);
+  const SimpleCarConfig<T>& car_params =
+      this->template GetNumericParameter<SimpleCarConfig>(context,
+                                                          kCarParamsIndex);
 
   // Obtain the input/output data structures.
   const DrivingCommand<T>* const input_command =
@@ -73,10 +84,9 @@ void PurePursuitController<T>::DoCalcOutput(
           context, this->driving_command_input().get_index());
   DRAKE_ASSERT(input_command != nullptr);
 
-  const systems::BasicVector<T>* const goal_position =
-      this->template EvalVectorInput<systems::BasicVector>(
-          context, this->goal_position_input().get_index());
-  DRAKE_ASSERT(goal_position != nullptr);
+  const maliput::api::LaneId* lane_id =
+      this->template EvalInputValue<maliput::api::LaneId>(
+          context, this->lane_input().get_index());
 
   const PoseVector<T>* const ego_pose =
       this->template EvalVectorInput<PoseVector>(
@@ -90,7 +100,7 @@ void PurePursuitController<T>::DoCalcOutput(
       dynamic_cast<DrivingCommand<T>*>(command_output_vector);
   DRAKE_ASSERT(output_command != nullptr);
 
-  ImplDoCalcOutput(config, *input_command, *goal_position, *ego_pose,
+  ImplDoCalcOutput(pp_params, car_params, *input_command, *lane_id, *ego_pose,
                    output_command);
 }
 
@@ -99,15 +109,18 @@ void PurePursuitController<T>::ImplDoCalcOutput(
     const PurePursuitControllerParameters<T>& pp_params,
     const SimpleCarConfig<T>& car_params,
     const DrivingCommand<T>& input_command,
-    const LaneId& lane_id, const PoseVector<T>& ego_pose,
+    const maliput::api::LaneId& lane_id, const PoseVector<T>& ego_pose,
     DrivingCommand<T>* output_command) const {
   const T x = ego_pose.get_translation().translation().x();
   const T y = ego_pose.get_translation().translation().y();
   const T heading = ego_pose.get_rotation().z();
 
-  const Lane* lane = road_.GetLane(lane_id);  // <--- incomplete.
+  const Lane* lane = GetLane(lane_id);
+  DRAKE_DEMAND(lane != nullptr);
+  const RoadPosition& ego_position =
+      pose_selector::CalcRoadPosition(*road_, ego_pose.get_isometry());
   const GeoPosition goal_position =
-     ComputeGoalPoint(pp_params, lane, ego_position);
+      ComputeGoalPoint(pp_params, lane, ego_position);
 
   // Pure-pursuit method.
   const T s_lookahead = goal_position.x - x;
@@ -134,11 +147,31 @@ const GeoPosition PurePursuitController<T>::ComputeGoalPoint(
 }
 
 template <typename T>
+const Lane* PurePursuitController<T>::GetLane(
+    const maliput::api::LaneId& lane_id) const {
+  // Exhaustive searching is ridiculous.
+  const Lane* lane{nullptr};
+  for (int i = 0; i < road_->num_junctions(); ++i) {
+    const Junction* junction = road_->junction(i);
+    for (int j = 0; j < junction->num_segments(); ++j) {
+      const Segment* segment = junction->segment(j);
+      for (int k = 0; k < segment->num_lanes(); ++k) {
+        lane = segment->lane(k);
+        if (lane->id().id == lane_id.id) return lane;
+      }
+    }
+  }
+  return lane;
+}
+
+template <typename T>
 std::unique_ptr<systems::Parameters<T>>
 PurePursuitController<T>::AllocateParameters() const {
   std::vector<std::unique_ptr<systems::BasicVector<T>>> params;
-  params.push_back(std::make_unique<PurePursuitControllerParameters<T>>());
-  params.push_back(std::make_unique<SimpleCarConfig<T>>());
+  params.insert(params.begin() + kPpParamsIndex,
+                std::make_unique<PurePursuitControllerParameters<T>>());
+  params.insert(params.begin() + kCarParamsIndex,
+                std::make_unique<SimpleCarConfig<T>>());
   return std::make_unique<systems::Parameters<T>>(std::move(params));
 }
 
@@ -148,17 +181,18 @@ void PurePursuitController<T>::SetDefaultParameters(
     const {
   PurePursuitControllerParameters<T>* pp_params =
       dynamic_cast<PurePursuitControllerParameters<T>*>(
-          params->get_mutable_numeric_parameter(0));
+          params->get_mutable_numeric_parameter(kPpParamsIndex));
   DRAKE_DEMAND(pp_params != nullptr);
+  pp_params->set_s_lookahead(T(15.));  // lookahead distance [m].
 
   SimpleCarConfig<T>* config = dynamic_cast<SimpleCarConfig<T>*>(
-      params->get_mutable_numeric_parameter(1));
+      params->get_mutable_numeric_parameter(kCarParamsIndex));
   DRAKE_DEMAND(config != nullptr);
   SimpleCar<T>::SetDefaultParameters(config);
 }
 
 // These instantiations must match the API documentation in
-// idm_planner.h.
+// pure_pursuit_controller.h.
 template class PurePursuitController<double>;
 
 }  // namespace automotive
