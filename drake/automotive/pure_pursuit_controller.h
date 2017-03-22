@@ -54,8 +54,6 @@ class PurePursuitController : public systems::LeafSystem<T> {
                             systems::Parameters<T>* params) const override;
 
  protected:
-  std::unique_ptr<systems::BasicVector<T>> AllocateOutputVector(
-      const systems::OutputPortDescriptor<T>& descriptor) const override;
   std::unique_ptr<systems::Parameters<T>> AllocateParameters() const override;
 
  private:

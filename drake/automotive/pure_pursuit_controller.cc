@@ -21,8 +21,8 @@ using systems::rendering::PoseVector;
 
 namespace automotive {
 
-static constexpr int kCarParamsIndex{0};
-static constexpr int kPpParamsIndex{1};
+static constexpr int kPpParamsIndex{0};
+static constexpr int kCarParamsIndex{1};
 
 template <typename T>
 PurePursuitController<T>::PurePursuitController(
@@ -111,10 +111,6 @@ void PurePursuitController<T>::ImplDoCalcOutput(
     const DrivingCommand<T>& input_command,
     const maliput::api::LaneId& lane_id, const PoseVector<T>& ego_pose,
     DrivingCommand<T>* output_command) const {
-  const T x = ego_pose.get_translation().translation().x();
-  const T y = ego_pose.get_translation().translation().y();
-  const T heading = ego_pose.get_rotation().z();
-
   const Lane* lane = GetLane(lane_id);
   DRAKE_DEMAND(lane != nullptr);
   const RoadPosition& ego_position =
@@ -123,11 +119,13 @@ void PurePursuitController<T>::ImplDoCalcOutput(
       ComputeGoalPoint(pp_params, lane, ego_position);
 
   // Pure-pursuit method.
-  const T s_lookahead = goal_position.x - x;
-  const T delta_y = -s_lookahead * sin(heading) +
-      (goal_position.y - y) * cos(heading);
-  const T curvature = 2 * delta_y / pow(s_lookahead, 2.);
-  const T steering_angle = atan(car_params.wheelbase() * curvature);
+  const T y = ego_pose.get_translation().translation().y();
+  const T heading = ego_pose.get_rotation().z();
+
+  const T delta_y = -pp_params.s_lookahead() * std::sin(heading) +
+      (goal_position.y - y) * std::cos(heading);
+  const T curvature = 2 * delta_y / std::pow(pp_params.s_lookahead(), 2.);
+  const T steering_angle = std::atan(car_params.wheelbase() * curvature);
 
   // Pass the commanded throttle and acceleration through to the output,
   // applying the required steering angle.
@@ -149,6 +147,7 @@ const GeoPosition PurePursuitController<T>::ComputeGoalPoint(
 template <typename T>
 const Lane* PurePursuitController<T>::GetLane(
     const maliput::api::LaneId& lane_id) const {
+  // TODO(jadecastro): verify the given lane_id.
   // Exhaustive searching is ridiculous.
   const Lane* lane{nullptr};
   for (int i = 0; i < road_->num_junctions(); ++i) {
@@ -156,7 +155,7 @@ const Lane* PurePursuitController<T>::GetLane(
     for (int j = 0; j < junction->num_segments(); ++j) {
       const Segment* segment = junction->segment(j);
       for (int k = 0; k < segment->num_lanes(); ++k) {
-        lane = segment->lane(k);
+          lane = segment->lane(k);
         if (lane->id().id == lane_id.id) return lane;
       }
     }
@@ -183,12 +182,12 @@ void PurePursuitController<T>::SetDefaultParameters(
       dynamic_cast<PurePursuitControllerParameters<T>*>(
           params->get_mutable_numeric_parameter(kPpParamsIndex));
   DRAKE_DEMAND(pp_params != nullptr);
-  pp_params->set_s_lookahead(T(15.));  // lookahead distance [m].
+  pp_params->set_s_lookahead(T(15.));  // lookahead distance (> 0) [m].
 
-  SimpleCarConfig<T>* config = dynamic_cast<SimpleCarConfig<T>*>(
+  SimpleCarConfig<T>* car_params = dynamic_cast<SimpleCarConfig<T>*>(
       params->get_mutable_numeric_parameter(kCarParamsIndex));
-  DRAKE_DEMAND(config != nullptr);
-  SimpleCar<T>::SetDefaultParameters(config);
+  DRAKE_DEMAND(car_params != nullptr);
+  SimpleCar<T>::SetDefaultParameters(car_params);
 }
 
 // These instantiations must match the API documentation in

@@ -561,6 +561,14 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
+    name = "pure_pursuit_controller_test",
+    deps = [
+        "//drake/automotive:pure_pursuit_controller",
+        "//drake/automotive/maliput/dragway",
+    ],
+)
+
+drake_cc_googletest(
     name = "simple_powertrain_test",
     deps = [
         "//drake/automotive:simple_powertrain",
