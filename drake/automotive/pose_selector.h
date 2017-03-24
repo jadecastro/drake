@@ -55,9 +55,15 @@ const maliput::api::RoadPosition FindClosestLeading(
     const systems::rendering::PoseBundle<double>& traffic_poses);
 
 /// Computes the RoadPosition for a car whose @p pose is located on a given @p
+/// lane.
+const maliput::api::RoadPosition CalcRoadPosition(
+    const maliput::api::Lane* lane, const Isometry3<double>& pose);
+
+/// Computes the RoadPosition for a car whose @p pose is located on a given @p
 /// road.
 const maliput::api::RoadPosition CalcRoadPosition(
     const maliput::api::RoadGeometry& road, const Isometry3<double>& pose);
+
 
 }  // namespace pose_selector
 }  // namespace automotive

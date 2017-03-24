@@ -34,7 +34,7 @@ const std::pair<RoadPosition, RoadPosition> FindClosestPair(
       lane, LanePosition(-std::numeric_limits<double>::infinity(), 0., 0.));
   for (int i = 0; i < traffic_poses.get_num_poses(); ++i) {
     const RoadPosition& traffic_position =
-        CalcRoadPosition(road, traffic_poses.get_pose(i));
+        CalcRoadPosition(ego_position.lane, traffic_poses.get_pose(i));
     const double& s_traffic = traffic_position.pos.s;
 
     if (traffic_position.lane->id().id != lane->id().id) continue;
@@ -60,6 +60,15 @@ const RoadPosition FindClosestLeading(
     const RoadGeometry& road, const PoseVector<double>& ego_pose,
     const PoseBundle<double>& traffic_poses) {
   return FindClosestPair(road, ego_pose, traffic_poses).first;
+}
+
+const RoadPosition CalcRoadPosition(const Lane* lane,
+                                    const Isometry3<double>& pose) {
+  auto lane_position = lane->ToLanePosition(
+      maliput::api::GeoPosition(pose.translation().x(), pose.translation().y(),
+                                pose.translation().z()),
+      nullptr, nullptr);
+  return RoadPosition(lane, lane_position);
 }
 
 const RoadPosition CalcRoadPosition(const RoadGeometry& road,
