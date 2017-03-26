@@ -174,6 +174,15 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "lane_direction",
+    srcs = ["lane_direction.cc"],
+    hdrs = ["lane_direction.h"],
+    deps = [
+        "//drake/automotive/maliput/api",
+    ],
+)
+
+drake_cc_library(
     name = "linear_car",
     srcs = ["linear_car.cc"],
     hdrs = ["linear_car.h"],
@@ -231,6 +240,20 @@ drake_cc_library(
         "//drake/multibody/rigid_body_plant:create_load_robot_message",
         "//drake/systems/rendering:pose_bundle",
         "//drake/systems/rendering:pose_vector",
+    ],
+)
+
+drake_cc_library(
+    name = "road_path",
+    srcs = ["road_path.cc"],
+    hdrs = ["road_path.h"],
+    visibility = [],
+    deps = [
+        "//drake/automotive/maliput/api",
+        "//drake/automotive:lane_direction",
+        "//drake/common",
+        "//drake/common/trajectories:piecewise_polynomial",
+        "//drake/common/trajectories/qp_spline:spline_generation",
     ],
 )
 
