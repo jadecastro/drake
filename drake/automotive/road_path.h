@@ -1,10 +1,8 @@
 #pragma once
 
-#include <string>
 #include <vector>
 
 #include <Eigen/Core>
-// #include <Eigen/Dense>
 
 #include "drake/automotive/lane_direction.h"
 #include "drake/automotive/maliput/api/road_geometry.h"

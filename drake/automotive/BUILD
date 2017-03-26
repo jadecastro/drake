@@ -199,6 +199,7 @@ drake_cc_library(
     deps = [
         ":calc_smooth_acceleration",
         ":generated_vectors",
+        ":lane_direction",
         "//drake/automotive/maliput/api",
         "//drake/math:geometric_transform",
         "//drake/systems/rendering:pose_vector",
