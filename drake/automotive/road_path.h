@@ -21,6 +21,9 @@ namespace automotive {
 ///
 /// @tparam T The vector element type, which must be a valid Eigen scalar.
 ///           Only double is supported.
+//
+// TODO(jadecastro): Extract ToLeft and ToRight from RoadGeometry and shadow
+// those here.  Do we need to make these position-dependent?
 template<typename T>
 class RoadPath {
  public:
@@ -45,8 +48,9 @@ class RoadPath {
       const LaneDirection& initial_lane_dir, const double step_size,
       int num_segments);
 
-  std::vector<LaneDirection> lane_dirs_{};
   std::vector<PiecewisePolynomial<T>> path_{};
+  std::vector<T> s_knots_{};
+  std::vector<std::vector<T>> geo_knots_{};
 };
 
 }  // namespace automotive

@@ -714,6 +714,16 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
+    name = "road_path_test",
+    deps = [
+        "//drake/automotive:road_path",
+        "//drake/automotive/maliput/dragway",
+        "//drake/automotive/maliput/monolane",
+        "//drake/common:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
     name = "simple_powertrain_test",
     deps = [
         "//drake/automotive:simple_powertrain",
