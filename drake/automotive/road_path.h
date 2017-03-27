@@ -35,7 +35,7 @@ class RoadPath {
                     int num_segments);
   ~RoadPath();
 
-  const std::vector<PiecewisePolynomial<T>>& get_path() const;
+  const PiecewisePolynomial<T>& get_path() const;
 
   // const Eigen::Vector3d GetPathPosition(const Eigen::Vector3d& global_pos)
   //    const;
@@ -44,13 +44,14 @@ class RoadPath {
   // Traverse the road, starting from an initial LaneDirection, and build a
   // PiecewisePolynomial until 1) given a number of segments has been traversed,
   // or 2) the end of the road has been reached.
-  std::vector<PiecewisePolynomial<T>> MakePiecewisePolynomial(
-      const LaneDirection& initial_lane_dir, const double step_size,
+  PiecewisePolynomial<T> MakePiecewisePolynomial(
+      const LaneDirection& initial_lane_direction, const double step_size,
       int num_segments);
 
-  std::vector<PiecewisePolynomial<T>> path_{};
-  std::vector<T> s_knots_{};
-  std::vector<std::vector<T>> geo_knots_{};
+  int num_segments_{};
+  PiecewisePolynomial<T> path_{};
+  std::vector<T> s_breaks_{};
+  std::vector<MatrixX<T>> geo_knots_{};
 };
 
 }  // namespace automotive
