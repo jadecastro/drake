@@ -3,6 +3,8 @@
 #include <cmath>
 #include <utility>
 
+#include <iostream>  // Debugging!
+
 #include "drake/automotive/maliput/monolane/arc_lane.h"
 #include "drake/automotive/maliput/monolane/branch_point.h"
 #include "drake/automotive/maliput/monolane/line_lane.h"
@@ -292,6 +294,8 @@ std::unique_ptr<const api::RoadGeometry> Builder::Build(
   for (const DefaultBranch& def : default_branches_) {
     Lane* in_lane = lane_map[def.in];
     Lane* out_lane = lane_map[def.out];
+    std::cerr << " out_lane->id().id " << out_lane->id().id << std::endl;
+    std::cerr << " in_lane->id().id " << in_lane->id().id << std::endl;
     DRAKE_DEMAND((def.in_end == api::LaneEnd::kStart) ||
                  (def.in_end == api::LaneEnd::kFinish));
     ((def.in_end == api::LaneEnd::kStart) ?

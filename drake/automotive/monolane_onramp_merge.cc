@@ -7,6 +7,8 @@ namespace automotive {
 
 namespace mono = maliput::monolane;
 
+using maliput::api::LaneEnd;
+
 std::unique_ptr<const maliput::api::RoadGeometry>
 MonolaneOnrampMerge::BuildOnramp() {
   std::unique_ptr<maliput::monolane::Builder> rb(
@@ -42,7 +44,8 @@ MonolaneOnrampMerge::BuildOnramp() {
 
   // Construct the post-merge road.
   const double& kPostLinearLength = 100.;
-  rb->Connect("post0", pre5->end(), kPostLinearLength, kFlatZ);
+  const auto& post0 = rb->Connect(
+      "post0", pre5->end(), kPostLinearLength, kFlatZ);
 
   // Construct the on-ramp (starting at merge junction and working backwards).
   const double& kOnrampArcLength = 35.;
@@ -52,11 +55,14 @@ MonolaneOnrampMerge::BuildOnramp() {
       "onramp1", pre5->end(),
       mono::ArcOffset(kOnrampArcLength, kOnrampArcRadius / kOnrampArcLength),
       kFlatZ);
+  rb->Connect("onramp0", onramp1->end(), kOnrampLinearLength, kFlatZ);
 
   // Group the overlapping connections.
-  rb->MakeGroup("merge-point", {pre5, onramp1});
+  rb->MakeGroup("merge-point0", {onramp1, post0});
 
-  rb->Connect("onramp0", onramp1->end(), kOnrampLinearLength, kFlatZ);
+  // rb->SetDefaultBranch(pre5, LaneEnd::kFinish, post0, LaneEnd::kStart);
+  // rb->SetDefaultBranch(post0, LaneEnd::kStart, pre5, LaneEnd::kFinish);
+  rb->SetDefaultBranch(onramp1, LaneEnd::kFinish, post0, LaneEnd::kStart);
 
   return rb->Build({"monolane-merge-example"});
 }

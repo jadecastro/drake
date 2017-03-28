@@ -1,5 +1,7 @@
 #include "drake/automotive/maliput/monolane/branch_point.h"
 
+#include <iostream>  // Debugging!
+
 #include "drake/common/drake_assert.h"
 
 namespace drake {
@@ -53,6 +55,10 @@ void BranchPoint::SetDefault(const api::LaneEnd& lane_end,
                              const api::LaneEnd& default_branch) {
   const auto& le_ongoing = ongoing_branches_.find(lane_end);
   const auto& db_confluent = confluent_branches_.find(default_branch);
+  for (auto branch : confluent_branches_)
+    std::cerr << " confluent branch: "
+              << branch.first.lane->id().id << std::endl;
+
   // Verify that lane_end belongs to this BranchPoint.
   DRAKE_DEMAND(le_ongoing != ongoing_branches_.end());
   // Verify that default_branch belongs to this BranchPoint.
