@@ -37,6 +37,17 @@ class RoadPath {
 
   const PiecewisePolynomial<T>& get_path() const;
 
+  // Computes the closest path position of an arbitrary point to a curve.
+  // Assumes that the point is no further from the curve than the instantanous
+  // center; i.e., the road width is smaller than the radius of curvature.
+  //
+  // This is an implementation of the method in (Wang, Kearney and Atkinson,
+  // 2003).
+  //
+  // [1] Hongling Wang, Joseph Kearney, and Kendall Atkinson. "Robust and
+  //     Efficient Computation of the Closest Point on a Spline Curve." Curve
+  //     and Surface Design, Tom Lyche, Marie-Laurence Mazure, and Larry
+  //     L. Schumaker (eds.), 2003, pp. 397–405.
   const T GetClosestPathPosition(
       const Eigen::Vector3d& geo_pos, const double s_guess) const;
 
@@ -54,8 +65,8 @@ class RoadPath {
   std::vector<T> s_breaks_{};  // Here?
   std::vector<MatrixX<T>> geo_knots_{};  // Here?
   PiecewisePolynomial<T> path_{};
-  PiecewisePolynomial<T> path_jacobian_{};
-  PiecewisePolynomial<T> path_hessian_{};
+  PiecewisePolynomial<T> path_gradient_{};
+  PiecewisePolynomial<T> path_curvature_{};
 };
 
 }  // namespace automotive

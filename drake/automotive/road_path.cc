@@ -70,14 +70,14 @@ const T RoadPath<T>::GetClosestPathPosition(
   const T width{T(1.)};
   const T termination_cond{width};
 
-  std::vector<T> s{seg_start, seg_midpoint, seg_end};
-  std::vector<T> Ds(3);
-  std::cerr << " " << s[0] << " " << s[1] << " " << s[2] << std::endl;
+  std::vector<T> s{seg_start, seg_midpoint, seg_end};  /* Curve positions */
+  std::vector<T> Ds(3);  /* Distance to a given point on the curve */
+  // std::cerr << " " << s[0] << " " << s[1] << " " << s[2] << std::endl;
 
   T sk_last{0.};
   T sk_result{0.};
   for (int i = 0; i < max_iterations; ++i) {
-    std::cerr << " i: " << i << std::endl;
+    // std::cerr << " i: " << i << std::endl;
     for (int j = 0; j < 3; ++j) {
       Ds[j] = (path_.value(s[j]) - geo_pos).squaredNorm();
     }
@@ -89,26 +89,45 @@ const T RoadPath<T>::GetClosestPathPosition(
                         (s[2] * s[2] - s[0] * s[0]) * Ds[1] +
                         (s[0] * s[0] - s[1] * s[1]) * Ds[2]) / den;
     T sk_sat = math::saturate(sk, lower_bound, upper_bound);
+    // std::cerr << " sk_sat " << sk_sat << std::endl;
 
-    // Newton solver.
-    const T gradient = path_jacobian_.value(sk_sat)(0);
-    const T curvature = path_hessian_.value(sk_sat)(0);
-    DRAKE_DEMAND(curvature != 0.);
-    sk_result = math::saturate(sk_sat - gradient / curvature,
-                               lower_bound, upper_bound);
+    Vector3<T> d{};
+    for (int k = 0; k < 3; ++k) {
+      d(k) = path_.value(sk_sat)(k) - geo_pos[k];
+    }
+    const auto path_prime = path_gradient_.value(sk_sat);
+    const T gradient = 2. * (d(0) * path_prime(0) + d(1) * path_prime(1) +
+                             d(2) * path_prime(2));
+    // std::cerr << " gradient " << gradient << std::endl;
+    const auto path_dprime = path_curvature_.value(sk_sat);
+    const T curvature = 2. * (path_prime(0) + d(0) * path_dprime(0) +
+                              path_prime(1) + d(1) * path_dprime(1) +
+                              path_prime(2) + d(2) * path_dprime(2));
+    // std::cerr << " curvature " << curvature << std::endl;
 
-    // Termination criterion.
-    if (std::abs(sk_result - sk_last) <= termination_cond) return sk_result;
-    sk_last = sk_result;
+    if (curvature > upper_bound - lower_bound) {  // Apply a Newton solver.
+      DRAKE_DEMAND(curvature != 0.);
+      // The distance of point to the curve must be less than than the radius of
+      // curvature.
+      DRAKE_DEMAND((geo_pos - path_.value(sk_sat)).norm() < (1. / curvature));
+      sk_result = math::saturate(sk_sat - gradient / curvature,
+                                 lower_bound, upper_bound);
+      // std::cerr << " sk_result " << sk_result << std::endl;
 
-    // Obtain new s's.
-    const std::vector<T> Ps{EvalP(s[0], s, Ds), EvalP(s[1], s, Ds),
-          EvalP(s[2], s, Ds), EvalP(sk, s, Ds)};
-    const auto max_element = std::max_element(Ps.begin(), Ps.end());
-    int new_index = std::distance(Ps.begin(), max_element);
-    // N.B. The first three elements of Ps correspond to the the elements of s.
-    if (new_index < 3) s[new_index] = sk;
-    std::cerr << " " << s[0] << " " << s[1] << " " << s[2] << std::endl;
+      // Termination criterion.
+      if (std::abs(sk_result - sk_last) <= termination_cond) return sk_result;
+      sk_last = sk_result;
+
+      // Obtain new s's.
+      const std::vector<T> Ps{EvalP(s[0], s, Ds), EvalP(s[1], s, Ds),
+            EvalP(s[2], s, Ds), EvalP(sk, s, Ds)};
+      const auto max_element = std::max_element(Ps.begin(), Ps.end());
+      int new_index = std::distance(Ps.begin(), max_element);
+      // N.B. The first three elements of Ps correspond to the the elements of
+      // s.
+      if (new_index < 3) s[new_index] = sk;
+      // std::cerr << " " << s[0] << " " << s[1] << " " << s[2] << std::endl;
+    }
   }
 
   return sk_result;
@@ -169,8 +188,8 @@ PiecewisePolynomial<T> RoadPath<T>::MakePiecewisePolynomial(
 template <typename T>
 void RoadPath<T>::ComputeDerivatives() {
   DRAKE_DEMAND(path_.getNumberOfSegments() > 0);
-  path_jacobian_ = path_.derivative();
-  path_hessian_ = path_.derivative(2);
+  path_gradient_ = path_.derivative();
+  path_curvature_ = path_.derivative(2);
 }
 
 template class RoadPath<double>;
