@@ -2,6 +2,8 @@
 
 #include <iostream>
 
+#include <Eigen/Dense>
+
 #include "drake/automotive/maliput/api/branch_point.h"
 #include "drake/automotive/maliput/api/lane.h"
 #include "drake/automotive/maliput/api/lane_data.h"
@@ -11,6 +13,7 @@
 #include "drake/common/polynomial.h"
 #include "drake/common/cond.h"
 #include "drake/common/trajectories/qp_spline/spline_generation.h"
+#include "drake/math/saturate.h"
 
 namespace drake {
 namespace automotive {
@@ -23,12 +26,28 @@ using maliput::api::LaneEndSet;
 using maliput::api::LanePosition;
 using maliput::api::RoadGeometry;
 
+namespace {
+
+template <typename T>
+static const T EvalP(const T& sk, const std::vector<T>& s,
+                     const std::vector<T>& Ds) {
+  const T P01 = (sk - s[0]) * (sk - s[1]) / ((s[2] - s[0]) * (s[2] - s[1]));
+  const T P02 = (sk - s[0]) * (sk - s[2]) / ((s[1] - s[0]) * (s[1] - s[2]));
+  const T P12 = (sk - s[1]) * (sk - s[2]) / ((s[0] - s[1]) * (s[0] - s[2]));
+  return P01 * Ds[2]  + P02 * Ds[1] + P12 * Ds[0];
+}
+
+}  // namespace
+
 template <typename T>
 RoadPath<T>::RoadPath(const RoadGeometry& road,
                       const LaneDirection& initial_lane_dir,
                       const double step_size,
-                      int num_segments) : num_segments_(num_segments) {
-  MakePiecewisePolynomial(initial_lane_dir, step_size, num_segments);
+                      int num_breaks)
+    : num_breaks_(num_breaks),
+      geo_knots_(num_breaks, MatrixX<T>::Zero(3, 1)) {
+  MakePiecewisePolynomial(initial_lane_dir, step_size, num_breaks);
+  ComputeDerivatives();
 }
 
 template <typename T>
@@ -37,31 +56,78 @@ RoadPath<T>::~RoadPath() {}
 template <typename T>
 const PiecewisePolynomial<T>& RoadPath<T>::get_path() const { return path_; }
 
-/*
 template <typename T>
-const Eigen::Vector3d RoadPath::GetPathPosition(
-    const Eigen::Vector3d& global_pos) const {
-  // TODO(jadecastro): Use linear search as a stop-gap, so that it screams for a
-  // real implementation.
+const T RoadPath<T>::GetClosestPathPosition(
+    const Eigen::Vector3d& geo_pos, const double s_guess) const {
+  int index = path_.getSegmentIndex(s_guess);
+  const T seg_start = path_.getStartTime(index);
+  const T seg_end = path_.getEndTime(index);
+  const T seg_midpoint = (seg_start + seg_end) / 2.;
+  const T lower_bound = path_.getStartTime();
+  const T upper_bound = path_.getEndTime();
+
+  int max_iterations{20};
+  const T width{T(1.)};
+  const T termination_cond{width};
+
+  std::vector<T> s{seg_start, seg_midpoint, seg_end};
+  std::vector<T> Ds(3);
+  std::cerr << " " << s[0] << " " << s[1] << " " << s[2] << std::endl;
+
+  T sk_last{0.};
+  T sk_result{0.};
+  for (int i = 0; i < max_iterations; ++i) {
+    std::cerr << " i: " << i << std::endl;
+    for (int j = 0; j < 3; ++j) {
+      Ds[j] = (path_.value(s[j]) - geo_pos).squaredNorm();
+    }
+    // Quadratic cost.
+    const T den =
+        ((s[1] - s[2]) * Ds[0] + (s[2] - s[0]) * Ds[1] + (s[0] - s[1]) * Ds[2]);
+    DRAKE_DEMAND(den != 0.);
+    const T sk = 0.5 * ((s[1] * s[1] - s[2] * s[2]) * Ds[0] +
+                        (s[2] * s[2] - s[0] * s[0]) * Ds[1] +
+                        (s[0] * s[0] - s[1] * s[1]) * Ds[2]) / den;
+    T sk_sat = math::saturate(sk, lower_bound, upper_bound);
+
+    // Newton solver.
+    const T gradient = path_jacobian_.value(sk_sat)(0);
+    const T curvature = path_hessian_.value(sk_sat)(0);
+    DRAKE_DEMAND(curvature != 0.);
+    sk_result = math::saturate(sk_sat - gradient / curvature,
+                               lower_bound, upper_bound);
+
+    // Termination criterion.
+    if (std::abs(sk_result - sk_last) <= termination_cond) return sk_result;
+    sk_last = sk_result;
+
+    // Obtain new s's.
+    const std::vector<T> Ps{EvalP(s[0], s, Ds), EvalP(s[1], s, Ds),
+          EvalP(s[2], s, Ds), EvalP(sk, s, Ds)};
+    const auto max_element = std::max_element(Ps.begin(), Ps.end());
+    int new_index = std::distance(Ps.begin(), max_element);
+    // N.B. The first three elements of Ps correspond to the the elements of s.
+    if (new_index < 3) s[new_index] = sk;
+    std::cerr << " " << s[0] << " " << s[1] << " " << s[2] << std::endl;
+  }
+
+  return sk_result;
 }
-*/
 
 template <typename T>
 PiecewisePolynomial<T> RoadPath<T>::MakePiecewisePolynomial(
     const LaneDirection& initial_lane_direction, const double step_size,
-    int num_segments) {
+    int num_breaks) {
   LaneDirection ld = initial_lane_direction;
   T s_lane{cond(ld.with_s, T(0.), T(ld.lane->length()))};
   T s_break{0.};
 
-  for (int i = 0; i < num_segments-1; ++i) {
+  for (int i = 0; i < num_breaks-1; ++i) {
     s_breaks_.emplace_back(s_break);
     s_break += T(step_size);
 
     GeoPosition geo_pos =
         ld.lane->ToGeoPosition(LanePosition(s_lane, 0. /* r */, 0. /* h */));
-    std::cerr << "  " << geo_pos.x << "  " << geo_pos.y << "  " << geo_pos.z
-              << std::endl;
     geo_knots_[i] << T(geo_pos.x), T(geo_pos.y), T(geo_pos.z);
 
     if (ld.with_s) {
@@ -89,29 +155,22 @@ PiecewisePolynomial<T> RoadPath<T>::MakePiecewisePolynomial(
           cond(ld.with_s, out_distance, T(ld.lane->length()) - out_distance);
     }
   }
-  // Make up the distance to the end, if necessary.
-  T s_to_end{};
-  if (s_lane != ld.lane->length()) {
-    if (ld.with_s) {
-      s_to_end = ld.lane->length() - s_lane;
-      DRAKE_DEMAND(s_to_end > 0.);
-      s_lane = ld.lane->length();
-    } else {
-      s_to_end = s_lane;
-      DRAKE_DEMAND(s_to_end > 0.);
-      s_lane = 0.;
-    }
-    s_breaks_.emplace_back(s_break + s_to_end);
-    GeoPosition geo_pos =
-        ld.lane->ToGeoPosition(LanePosition(s_lane, 0. /* r */, 0. /* h */));
-    std::cerr << "  " << geo_pos.x << "  " << geo_pos.y << "  " << geo_pos.z
-              << std::endl;
-    geo_knots_[s_breaks_.size()] << T(geo_pos.x), T(geo_pos.y), T(geo_pos.z);
+
+  // Resize if necessary.
+  for (int i = 0; i < num_breaks_ - static_cast<int>(s_breaks_.size()); ++i) {
+    geo_knots_.pop_back();
   }
 
   // Create the resulting piecewise polynomial.
-  path_ = PiecewisePolynomial<double>::Cubic(s_breaks_, geo_knots_);
+  path_ = PiecewisePolynomial<T>::Cubic(s_breaks_, geo_knots_);
   return path_;
+}
+
+template <typename T>
+void RoadPath<T>::ComputeDerivatives() {
+  DRAKE_DEMAND(path_.getNumberOfSegments() > 0);
+  path_jacobian_ = path_.derivative();
+  path_hessian_ = path_.derivative(2);
 }
 
 template class RoadPath<double>;

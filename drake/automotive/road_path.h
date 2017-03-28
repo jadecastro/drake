@@ -32,13 +32,13 @@ class RoadPath {
   explicit RoadPath(const maliput::api::RoadGeometry& road,
                     const LaneDirection& initial_lane_dir,
                     const double step_size,
-                    int num_segments);
+                    int num_breaks);
   ~RoadPath();
 
   const PiecewisePolynomial<T>& get_path() const;
 
-  // const Eigen::Vector3d GetPathPosition(const Eigen::Vector3d& global_pos)
-  //    const;
+  const T GetClosestPathPosition(
+      const Eigen::Vector3d& geo_pos, const double s_guess) const;
 
  private:
   // Traverse the road, starting from an initial LaneDirection, and build a
@@ -46,12 +46,16 @@ class RoadPath {
   // or 2) the end of the road has been reached.
   PiecewisePolynomial<T> MakePiecewisePolynomial(
       const LaneDirection& initial_lane_direction, const double step_size,
-      int num_segments);
+      int num_breaks);
 
-  int num_segments_{};
+  void ComputeDerivatives();
+
+  int num_breaks_{};
+  std::vector<T> s_breaks_{};  // Here?
+  std::vector<MatrixX<T>> geo_knots_{};  // Here?
   PiecewisePolynomial<T> path_{};
-  std::vector<T> s_breaks_{};
-  std::vector<MatrixX<T>> geo_knots_{};
+  PiecewisePolynomial<T> path_jacobian_{};
+  PiecewisePolynomial<T> path_hessian_{};
 };
 
 }  // namespace automotive

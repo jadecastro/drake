@@ -255,6 +255,7 @@ drake_cc_library(
         "//drake/common",
         "//drake/common/trajectories:piecewise_polynomial",
         "//drake/common/trajectories/qp_spline:spline_generation",
+        "//drake/math:saturate",
     ],
 )
 
