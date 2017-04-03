@@ -22,31 +22,49 @@ namespace drake {
 namespace automotive {
 
 /// MOBIL (Minimizing Overall Braking Induced by Lane Changes) [1] is a planner
-/// that maximizes acceleration incentive for the ego car and (per a weighting
-/// factor) the acceleration incentives for any trailing cars in its immediate
-/// neighborhood.  The planner selects cars using the PoseSelector logic,
-/// outputs the incentive-maximizing lane, as a LaneDirection, that references a
-/// valid lane in the provided @p RoadGeometry and direction of travel.
+/// that minimizes braking requirement for the ego car while also minimizing
+/// (per a weighting factor) the braking requirements of any trailing cars
+/// within the ego car's immediate neighborhood.  Neighboring cars are defined
+/// as those cars immediately ahead and behind the ego, in the current lane and
+/// any adjacent lanes; these are computed using the PoseSelector logic applied
+/// to a multi-lane Maliput road.
 ///
-/// The planner also creates longitudinal DrivingCommands based on the IDM
+/// The induced braking by the ego car and the car following immediately behind
+/// it is compared with the induced braking by the ego and its new follower if
+/// the ego were to move to any of the neighboring lanes.  The choice that
+/// minimizes the induced braking - alternatively maximizes the ego car's
+/// "incentive" (the weighted sum of accelerations that the ego car and its
+/// neighbors gain by changing lanes) - is chosen as the new lane request.  The
+/// request is expressed as a LaneDirection, that references a valid lane in the
+/// provided RoadGeometry and the direction of travel.  MobilPlanner also
+/// creates a longitudinal DrivingCommand for the ego car based on the IDM
 /// equation (see IdmPlanner).
+///
+/// Assumptions:
+///   1) The planner supports only symmetric lane change rules, without giving
+//       preference to lanes to the left or right.
+///   2) The planner assumes all traffic behaves according to the Intelligent
+///      Driver Model (IDM).
 ///
 /// Instantiated templates for the following kinds of T's are provided:
 /// - double
 ///
 /// They are already available to link against in the containing library.
 ///
-/// Input Port 0: @p ego_pose PoseVector for the ego car.
+/// Input Port 0: A PoseVector for the ego car.
 ///   (InputPortDescriptor getter: ego_pose_input())
-/// Input Port 1: @p traffic_poses PoseBundle for the traffic cars, possibly
+/// Input Port 1: A FrameVelocity for the ego car.
+///   (InputPortDescriptor getter: ego_velocity_input())
+/// Input Port 2: A PoseBundle for the traffic cars, possibly
 ///   including the ego car's pose.
-///   (InputPortDescriptor getter: poses_bundle_input())
+///   (InputPortDescriptor getter: traffic_input())
 ///
 /// Output Port 0: A DrivingCommand with the following elements:
 ///   * steering angle (unused - outputs 0).
 ///   * acceleration.
 ///   (OutputPortDescriptor getter: driving_command_output())
-/// Output Port 1: A LaneDirection consistent with the provided @p road.
+/// Output Port 1: A LaneDirection containing a lane consistent with the
+///   provided @p road and the direction of travel along the lane.
 ///   (OutputPortDescriptor getter: lane_output())
 ///
 /// @ingroup automotive_systems
@@ -60,8 +78,10 @@ class MobilPlanner : public systems::LeafSystem<T> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(MobilPlanner)
 
-  /// Constructor.
+  /// A constructor that initializes the MOBIL planner.
   /// @param is road the pre-defined RoadGeometry.
+  /// @param initial_lane_direction is the initial lane and direction of travel
+  /// of the ego vehicle.
   explicit MobilPlanner(const maliput::api::RoadGeometry& road,
                         const LaneDirection& initial_lane_direction);
   ~MobilPlanner() override;
@@ -96,7 +116,7 @@ class MobilPlanner : public systems::LeafSystem<T> {
                        const IdmPlannerParameters<T>& idm_params,
                        DrivingCommand<T>* output) const;
 
-  // Computes a incentive measure pair for the provided neighboring lanes.
+  // Computes a pair of incentive measures for the provided neighboring lanes.
   const std::pair<T, T> ComputeIncentives(
       const std::pair<const maliput::api::Lane*, const maliput::api::Lane*>
           lanes,
@@ -127,11 +147,11 @@ class MobilPlanner : public systems::LeafSystem<T> {
   bool with_s_{true};
 
   // Indices for the input / output ports.
-  int ego_pose_index_;
-  int ego_velocity_index_;
-  int traffic_index_;
-  int command_index_;
-  int lane_index_;
+  int ego_pose_index_{};
+  int ego_velocity_index_{};
+  int traffic_index_{};
+  int command_index_{};
+  int lane_index_{};
 };
 
 }  // namespace automotive

@@ -48,19 +48,20 @@ class MobilPlannerParameters : public systems::BasicVector<T> {
 
   /// @name Getters and Setters
   //@{
-  /// politeness factor
+  /// politeness factor (0.0 is purely egoistic, higher values increase
+  /// politeness)
   /// @note @c p is expressed in units of dimensionless.
   /// @note @c p has a limited domain of [0.0, 1.0].
   const T& p() const { return this->GetAtIndex(K::kP); }
   void set_p(const T& p) { this->SetAtIndex(K::kP, p); }
-  /// acceleration threshold
+  /// acceleration threshold for changing lanes (Delta_a_th)
   /// @note @c threshold is expressed in units of m/s^2.
   /// @note @c threshold has a limited domain of [0.0, +Inf].
   const T& threshold() const { return this->GetAtIndex(K::kThreshold); }
   void set_threshold(const T& threshold) {
     this->SetAtIndex(K::kThreshold, threshold);
   }
-  /// maximum safe deceleration
+  /// maximum safe deceleration (b_safe)
   /// @note @c max_deceleration is expressed in units of m/s^2.
   /// @note @c max_deceleration has a limited domain of [0.0, +Inf].
   const T& max_deceleration() const {

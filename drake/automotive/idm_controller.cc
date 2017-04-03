@@ -10,17 +10,16 @@
 #include "drake/math/saturate.h"
 
 namespace drake {
+namespace automotive {
 
 using maliput::api::RoadGeometry;
 using maliput::api::RoadPosition;
 using maliput::api::Rotation;
 using math::saturate;
-using automotive::pose_selector::RoadOdometry;
+using pose_selector::RoadOdometry;
 using systems::rendering::FrameVelocity;
 using systems::rendering::PoseBundle;
 using systems::rendering::PoseVector;
-
-namespace automotive {
 
 static constexpr int kIdmParamsIndex{0};
 

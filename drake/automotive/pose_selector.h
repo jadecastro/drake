@@ -79,8 +79,13 @@ const RoadOdometry<double> FindClosestLeading(
 const maliput::api::RoadPosition CalcRoadPosition(
     const maliput::api::RoadGeometry& road, const Isometry3<double>& pose);
 
+<<<<<<< HEAD
 // Extracts the vehicle's `s`-direction velocity based on its RoadPosition @p
 // pos and FrameVelocity @p vel.  Assumes the road has zero elevation.
+=======
+// Extracts the vehicle's `s`-direction velocity based on its RoadOdometry @p
+// road_odom.  Assumes the road has zero elevation and superelevation.
+>>>>>>> Add MobilPlanner and asociated unit tests
 //
 // TODO(jadecastro): Generalize to three-dimensional rotations.
 double GetSVelocity(const pose_selector::RoadOdometry<double>& road_odom);

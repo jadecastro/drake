@@ -20,7 +20,7 @@ constexpr double kEgoSPosition{10.};
 constexpr int kLeadIndex{0};
 constexpr int kEgoIndex{1};
 
-// Base class for the tests on Affine and Linear Systems.
+// Base class for IdmControllerTest and MobilPlannerTest.
 class IdmTest : public ::testing::Test {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(IdmTest)
