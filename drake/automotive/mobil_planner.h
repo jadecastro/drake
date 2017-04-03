@@ -8,7 +8,6 @@
 #include "drake/automotive/gen/driving_command.h"
 #include "drake/automotive/gen/idm_planner_parameters.h"
 #include "drake/automotive/gen/mobil_planner_parameters.h"
-#include "drake/automotive/gen/simple_car_config.h"
 #include "drake/automotive/idm_planner.h"
 #include "drake/automotive/lane_direction.h"
 #include "drake/automotive/maliput/api/lane.h"
@@ -115,7 +114,6 @@ class MobilPlanner : public systems::LeafSystem<T> {
                        const systems::rendering::FrameVelocity<T>& ego_velocity,
                        const systems::rendering::PoseBundle<T>& traffic_poses,
                        const IdmPlannerParameters<T>& idm_params,
-                       const SimpleCarConfig<T>& car_params,
                        DrivingCommand<T>* output) const;
 
   // Computes a pair of incentive measures for the provided neighboring lanes.

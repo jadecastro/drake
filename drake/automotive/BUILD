@@ -22,6 +22,7 @@ drake_cc_library(
         "gen/maliput_railcar_params.cc",
         "gen/maliput_railcar_state.cc",
         "gen/mobil_planner_parameters.cc",
+        "gen/pure_pursuit_params.cc",
         "gen/simple_car_params.cc",
         "gen/simple_car_state.cc",
     ],
@@ -34,6 +35,7 @@ drake_cc_library(
         "gen/maliput_railcar_params.h",
         "gen/maliput_railcar_state.h",
         "gen/mobil_planner_parameters.h",
+        "gen/pure_pursuit_params.h",
         "gen/simple_car_params.h",
         "gen/simple_car_state.h",
     ],
@@ -228,6 +230,34 @@ drake_cc_library(
         "//drake/multibody/parsers",
         "//drake/multibody/rigid_body_plant:create_load_robot_message",
         "//drake/systems/rendering:pose_bundle",
+        "//drake/systems/rendering:pose_vector",
+    ],
+)
+
+drake_cc_library(
+    name = "pure_pursuit",
+    srcs = ["pure_pursuit.cc"],
+    hdrs = ["pure_pursuit.h"],
+    deps = [
+        ":generated_vectors",
+        ":lane_direction",
+        ":pose_selector",
+        "//drake/automotive/maliput/api",
+        "//drake/common:symbolic",
+        "//drake/systems/rendering:pose_vector",
+    ],
+)
+
+drake_cc_library(
+    name = "pure_pursuit_controller",
+    srcs = ["pure_pursuit_controller.cc"],
+    hdrs = ["pure_pursuit_controller.h"],
+    deps = [
+        ":generated_vectors",
+        ":lane_direction",
+        ":pose_selector",
+        ":pure_pursuit",
+        "//drake/automotive/maliput/api",
         "//drake/systems/rendering:pose_vector",
     ],
 )
@@ -526,14 +556,6 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
-    name = "mobil_planner_test",
-    deps = [
-        "//drake/automotive:mobil_planner",
-        "//drake/automotive/maliput/dragway",
-    ],
-)
-
-drake_cc_googletest(
     name = "pose_selector_test",
     deps = [
         "//drake/automotive:pose_selector",
@@ -557,6 +579,14 @@ drake_cc_googletest(
         "//drake/automotive/maliput/dragway",
         "//drake/automotive/maliput/monolane",
         "//drake/common:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "pure_pursuit_test",
+    deps = [
+        "//drake/automotive:pure_pursuit",
+        "//drake/automotive/maliput/dragway",
     ],
 )
 
