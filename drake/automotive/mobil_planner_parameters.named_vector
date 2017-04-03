@@ -1,0 +1,24 @@
+# The default values contained below are from Kesting, Treiber and Helbing,
+# 2007.
+element {
+     name: "p"
+     doc: "politeness factor"
+     doc_units: "dimensionless"
+     default_value: "0.5"
+     min_value: "0.0"
+     max_value: "1.0"
+}
+element {
+     name: "threshold"
+     doc: "acceleration threshold"
+     doc_units: "m/s^2"
+     default_value: "0.1"
+     min_value: "0.0"
+}
+element {
+     name: "max_deceleration"
+     doc: "maximum safe deceleration"
+     doc_units: "m/s^2"
+     default_value: "4.0"
+     min_value: "0.0"
+}
