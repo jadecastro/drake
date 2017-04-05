@@ -4,6 +4,9 @@
 
 #include <gflags/gflags.h>
 
+#include <unistd.h>
+
+
 #include "drake/automotive/automotive_simulator.h"
 #include "drake/automotive/create_trajectory_params.h"
 #include "drake/automotive/gen/maliput_railcar_params.h"
@@ -16,6 +19,8 @@ DEFINE_string(simple_car_names, "",
               "A comma-separated list (e.g. 'Russ,Jeremy,Liang' would spawn 3 "
               "cars subscribed to DRIVING_COMMAND_Russ, "
               "DRIVING_COMMAND_Jeremy, and DRIVING_COMMAND_Liang)");
+DEFINE_int32(num_idm_car, 0, "Number of IDM-controlled SimpleCar vehicles");
+DEFINE_int32(num_mobil_car, 0, "Number of MOBIL-controlled SimpleCar vehicles");
 DEFINE_int32(num_trajectory_car, 1, "Number of TrajectoryCar vehicles. This "
              "option is currently only applied when the road network is a flat "
              " plane or a dragway.");
@@ -119,6 +124,21 @@ void AddVehicles(RoadNetworkType road_network_type,
       simulator->AddPriusTrajectoryCar(std::get<0>(params),
                                        std::get<1>(params),
                                        std::get<2>(params));
+    }
+    for (int i = 0; i < FLAGS_num_idm_car; ++i) {
+      const std::string name = "IDM";
+      SimpleCarState<double> state;
+      // TODO(jadecastro): Modify the state.
+      simulator->AddIdmControlledSimpleCar(name, state);
+    }
+    for (int i = 0; i < FLAGS_num_mobil_car; ++i) {
+      const int lane_index = 0;
+      const std::string name = "MOBIL";
+      SimpleCarState<double> state;
+      // TODO(jadecastro): Modify the state.
+      const Lane* lane =
+          dragway_road_geometry->junction(0)->segment(0)->lane(lane_index);
+      simulator->AddMobilControlledSimpleCar(name, LaneDirection(lane), state);
     }
     for (int i = 0; i < FLAGS_num_maliput_railcar; ++i) {
       const int lane_index = i % FLAGS_num_dragway_lanes;

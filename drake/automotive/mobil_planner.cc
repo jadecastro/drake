@@ -6,6 +6,10 @@
 #include <utility>
 #include <vector>
 
+
+#include <unistd.h>
+
+
 #include "drake/automotive/maliput/api/junction.h"
 #include "drake/automotive/maliput/api/segment.h"
 #include "drake/common/cond.h"
@@ -187,6 +191,7 @@ void MobilPlanner<T>::ImplDoCalcAccel(const PoseVector<T>& ego_pose,
 
   // Output the acceleration command from the IDM equation and allocate the
   // result to either the throttle or brake.
+  std::cerr << " command_acceleration " << std::endl;
   const T command_acceleration =
       EvaluateIdm(idm_params, {ego_position, ego_velocity}, traffic_odometry);
   command->set_acceleration(command_acceleration);
@@ -214,12 +219,15 @@ const std::pair<T, T> MobilPlanner<T>::ComputeIncentives(
   // Current acceleration of the ego car.
   const RoadOdometry<T>& ego_odometry =
       RoadOdometry<T>(ego_position, ego_velocity);
+  std::cerr << " ego_old_accel " << std::endl;
   const T ego_old_accel =
       EvaluateIdm(idm_params, ego_odometry, leading_odometry);
   // Current acceleration of the trailing car.
+  std::cerr << " trailing_this_old_accel " << std::endl;
   const T trailing_this_old_accel =
       EvaluateIdm(idm_params, trailing_odometry, ego_odometry);
   // New acceleration of the trailing car if the ego were to change lanes.
+  std::cerr << " trailing_this_new_accel " << std::endl;
   const T trailing_this_new_accel =
       EvaluateIdm(idm_params, trailing_odometry, leading_odometry);
   const T trailing_delta_accel_this =
@@ -255,12 +263,17 @@ void MobilPlanner<T>::CompareOutOfLane(
   RoadOdometry<T> trailing_odometry{};
   std::tie(leading_odometry, trailing_odometry) = leading_trailing;
   // Acceleration of the ego car if it were to move to this lane.
+  // usleep(3 * 1e6);
+  std::cerr << " ego_new_accel " << std::endl;
   const T ego_new_accel =
       EvaluateIdm(idm_params, ego_odometry, leading_odometry);
   // Original acceleration of the trailing car in this lane.
+  std::cerr << " trailing_old_accel " << std::endl;
   const T trailing_old_accel =
       EvaluateIdm(idm_params, trailing_odometry, leading_odometry);
   // Acceleration of the trailing car in this lane if the ego moves here.
+  std::cerr << " trailing_new_accel " << std::endl;
+  std::cerr << " ego_new_accel " << std::endl;
   const T trailing_new_accel =
       EvaluateIdm(idm_params, trailing_odometry, ego_odometry);
   const T trailing_delta_accel_other = trailing_new_accel - trailing_old_accel;
@@ -286,13 +299,15 @@ const T MobilPlanner<T>::EvaluateIdm(
   const T& s_lead = lead_car_odometry.pos.s;
   const T& s_dot_lead = pose_selector::GetSVelocity(lead_car_odometry);
 
-  const T delta = s_lead - s_ego;
+  const T delta = math::saturate(
+      s_lead - s_ego, 0., std::numeric_limits<double>::infinity());
+  std::cerr << " delta " << delta << std::endl;
   // Saturate the net_distance at distance_lower_bound away from the ego car.
   // clang-format off
   const T net_distance =
-      cond(delta > T(0.), saturate(delta - idm_params.bloat_diameter(),
-                                   idm_params.distance_lower_limit(),
-                                   std::numeric_limits<T>::infinity()),
+      cond(delta >= T(0.), saturate(delta - idm_params.bloat_diameter(),
+                                    idm_params.distance_lower_limit(),
+                                    std::numeric_limits<T>::infinity()),
                           saturate(delta + idm_params.bloat_diameter(),
                                    -std::numeric_limits<T>::infinity(),
                                    -idm_params.distance_lower_limit()));
