@@ -26,8 +26,6 @@ namespace automotive {
 ///
 /// They are already available to link against in the containing library.
 ///
-/// @ingroup automotive_systems
-///
 /// [1] Coulter, R. Implementation of the Pure Pursuit Path Tracking
 ///     Algorithm. Carnegie Mellon University, Pittsburgh, Pennsylvania, Jan
 ///     1990.
@@ -46,10 +44,10 @@ class PurePursuit {
   /// @param road is the RoadGeometry.
   /// @param pose is the PoseVector for the ego vehicle.
   // TODO(jadecastro): Infer the direction of travel rather than require it.
-  static const T Evaluate(const PurePursuitParams<T>& pp_params,
-                          const SimpleCarParams<T>& car_params,
-                          bool with_s, const maliput::api::RoadGeometry& road,
-                          const systems::rendering::PoseVector<T>& pose);
+  static T Evaluate(const PurePursuitParams<T>& pp_params,
+                    const SimpleCarParams<T>& car_params,
+                    bool with_s, const maliput::api::RoadGeometry& road,
+                    const systems::rendering::PoseVector<T>& pose);
 
   /// Computes the goal point at a distance `s_lookahead` from the closest
   /// position on the curve in the intended direction of travel.

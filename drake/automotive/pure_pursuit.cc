@@ -19,10 +19,10 @@ using maliput::api::RoadPosition;
 using systems::rendering::PoseVector;
 
 template <typename T>
-const T PurePursuit<T>::Evaluate(const PurePursuitParams<T>& pp_params,
-                                 const SimpleCarParams<T>& car_params,
-                                 bool with_s, const RoadGeometry& road,
-                                 const PoseVector<T>& pose) {
+T PurePursuit<T>::Evaluate(const PurePursuitParams<T>& pp_params,
+                           const SimpleCarParams<T>& car_params,
+                           bool with_s, const RoadGeometry& road,
+                           const PoseVector<T>& pose) {
   DRAKE_DEMAND(pp_params.IsValid());
   DRAKE_DEMAND(car_params.IsValid());
 
