@@ -53,10 +53,6 @@ class PurePursuitControllerTest : public ::testing::Test {
     ego_pose->set_rotation(rotation);
     context_->FixInputPort(dut_->ego_pose_input().get_index(),
                            std::move(ego_pose));
-
-    // Set the DrivingCommand to zero.
-    context_->FixInputPort(dut_->driving_command_input().get_index(),
-                           std::make_unique<DrivingCommand<double>>());
   }
 
   std::unique_ptr<PurePursuitController<double>> dut_;  //< The device under
@@ -68,11 +64,7 @@ class PurePursuitControllerTest : public ::testing::Test {
 };
 
 TEST_F(PurePursuitControllerTest, Topology) {
-  ASSERT_EQ(3, dut_->get_num_input_ports());
-  const auto& command_input_descriptor =
-      dut_->get_output_port(dut_->driving_command_input().get_index());
-  EXPECT_EQ(systems::kVectorValued, command_input_descriptor.get_data_type());
-  EXPECT_EQ(2 /* DrivingCommand input */, command_input_descriptor.size());
+  ASSERT_EQ(2, dut_->get_num_input_ports());
   const auto& lane_input_descriptor =
       dut_->get_input_port(dut_->lane_input().get_index());
   EXPECT_EQ(systems::kAbstractValued, lane_input_descriptor.get_data_type());
@@ -85,31 +77,28 @@ TEST_F(PurePursuitControllerTest, Topology) {
   const auto& command_output_descriptor =
       dut_->get_output_port(dut_->driving_command_output().get_index());
   EXPECT_EQ(systems::kVectorValued, command_output_descriptor.get_data_type());
-  EXPECT_EQ(2 /* DrivingCommand output */, command_output_descriptor.size());
+  EXPECT_EQ(1 /* steering angle output */, command_output_descriptor.size());
 }
 
 TEST_F(PurePursuitControllerTest, Output) {
   // Define a pointer to where the DrivingCommand results end up.
   const auto result =
       output_->get_vector_data(dut_->driving_command_output().get_index());
-  const auto command = dynamic_cast<const DrivingCommand<double>*>(result);
-  ASSERT_NE(nullptr, command);
+  ASSERT_NE(nullptr, result);
 
   // Set the offset to be to one the centerline with zero orientation.
   SetDefaultInputs(0., 0.);
   dut_->CalcOutput(*context_, output_.get());
 
   // Expect steering to be zero.
-  EXPECT_EQ(0., command->steering_angle());
-  EXPECT_EQ(0., command->acceleration());  // PurePursuitController does not
-                                           // alter the acceleration
+  EXPECT_EQ(0., (*result)[0]);
 
   // Set the offset to be to the right of the centerline with zero orientation.
   SetDefaultInputs(-1., 0.);
   dut_->CalcOutput(*context_, output_.get());
 
   // Expect the car to steer toward the left (positive steering angle).
-  EXPECT_LT(0., command->steering_angle());
+  EXPECT_LT(0., (*result)[0]);
 
   // Set the offset to be to the left of the centerline, oriented at 90 degrees
   // with respect to the track.
@@ -117,7 +106,7 @@ TEST_F(PurePursuitControllerTest, Output) {
   dut_->CalcOutput(*context_, output_.get());
 
   // Expect the car to steer toward the left (positive steering angle).
-  EXPECT_LT(0., command->steering_angle());
+  EXPECT_LT(0., (*result)[0]);
 }
 
 }  // namespace
