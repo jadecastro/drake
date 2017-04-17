@@ -366,7 +366,7 @@ drake_cc_library(
         "//drake/systems/analysis",
         "//drake/systems/lcm",
         "//drake/systems/lcm:lcmt_drake_signal_translator",
-        "//drake/systems/primitives:multiplexer",
+        "//drake/systems/primitives",
         "//drake/systems/rendering:pose_aggregator",
         "//drake/systems/rendering:pose_bundle_to_draw_message",
     ],
@@ -639,6 +639,7 @@ drake_cc_googletest(
 drake_cc_googletest(
     name = "trajectory_optimization_test",
     deps = [
+        ":automotive_simulator",
         ":simple_car",
         "//drake/common:call_matlab",
         "//drake/common:eigen_matrix_compare",

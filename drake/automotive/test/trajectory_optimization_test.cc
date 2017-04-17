@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 
+#include "drake/automotive/automotive_simulator.h"
 #include "drake/automotive/simple_car.h"
 #include "drake/common/call_matlab.h"
 #include "drake/common/eigen_matrix_compare.h"
@@ -99,6 +100,35 @@ GTEST_TEST(TrajectoryOptimizationTest, SimpleCarDircolTest) {
   // Checks that the input commands found are not too large.
   EXPECT_LE(inputs.row(0).lpNorm<1>(), 0.1);
   EXPECT_LE(inputs.row(1).lpNorm<1>(), 1);
+}
+
+// Sets up a simple trajectory optimization problem that finds a series
+// of DrivingCommand's that takes the SimpleCar from an initial condition
+// off the x-axis back to the x-axis.  This test loads SimpleCar
+// via the AutomotiveSimulator class.
+GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorDircolTest) {
+  auto simulator = std::make_unique<AutomotiveSimulator<double>>();
+  simulator->AddPriusSimpleCar("Model1");
+  simulator->Build();
+  const auto& plant = simulator->GetDiagram();
+  auto context = plant.CreateDefaultContext();
+
+  const double initial_duration = 30.0;  // seconds
+  const int kNumTimeSamples = 10;
+
+  // The solved trajectory may deviate from the initial guess at a reasonable
+  // duration.
+  const double kTrajectoryTimeLowerBound = 0.8 * initial_duration,
+      kTrajectoryTimeUpperBound = 1.2 * initial_duration;
+
+  systems::DircolTrajectoryOptimization prog(&plant, *context, kNumTimeSamples,
+                                             kTrajectoryTimeLowerBound,
+                                             kTrajectoryTimeUpperBound);
+
+  // Ensure that time intervals are (relatively) evenly spaced.
+  prog.AddTimeIntervalBounds(kTrajectoryTimeLowerBound / (kNumTimeSamples - 1),
+                             kTrajectoryTimeUpperBound / (kNumTimeSamples - 1));
+
 }
 
 }  // namespace
