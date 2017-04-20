@@ -113,21 +113,27 @@ GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorDircolTest) {
   const auto& plant = simulator->GetDiagram();
   auto context = plant.CreateDefaultContext();
 
-  const double initial_duration = 30.0;  // seconds
+  // Diagram state is only SimpleCarState
+  SimpleCarState<double> x0;
+  x0.set_x(0.0);
+  x0.set_y(1.0);
+  x0.set_heading(-.02);
+  x0.set_velocity(15.0);  // m/s = ~ 33mph
+
+  const double duration = 5.0;  // seconds
   const int kNumTimeSamples = 10;
 
-  // The solved trajectory may deviate from the initial guess at a reasonable
-  // duration.
-  const double kTrajectoryTimeLowerBound = 0.8 * initial_duration,
-      kTrajectoryTimeUpperBound = 1.2 * initial_duration;
-
   systems::DircolTrajectoryOptimization prog(&plant, *context, kNumTimeSamples,
-                                             kTrajectoryTimeLowerBound,
-                                             kTrajectoryTimeUpperBound);
+                                             duration, duration);
 
-  // Ensure that time intervals are (relatively) evenly spaced.
-  prog.AddTimeIntervalBounds(kTrajectoryTimeLowerBound / (kNumTimeSamples - 1),
-                             kTrajectoryTimeUpperBound / (kNumTimeSamples - 1));
+  // Ensure that time intervals are evenly spaced.
+  // TODO(russt): Add sugar to DirectTrajectoryOptimization for this.
+  prog.AddTimeIntervalBounds(duration / (kNumTimeSamples - 1),
+                             duration / (kNumTimeSamples - 1));
+
+  prog.AddLinearConstraint( prog.initial_state() == x0.get_value() );
+
+  EXPECT_EQ( prog.Solve(), solvers::SolutionResult::kSolutionFound);
 
 }
 
