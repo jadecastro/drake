@@ -8,6 +8,7 @@
 
 #include "drake/common/drake_assert.h"
 #include "drake/math/quaternion.h"
+#include "drake/math/saturate.h"
 
 namespace drake {
 namespace automotive {
@@ -331,8 +332,12 @@ const std::vector<PoseSelector::LaneEndDistance> PoseSelector::FindBranches(
 
 const IsoLaneVelocity PoseSelector::GetIsoLaneVelocity(
     const RoadPosition& road_position, const FrameVelocity<double>& velocity) {
+  const double large_s_value{1e9};
+  const LanePosition sat_position{
+    math::saturate(-large_s_value, large_s_value, road_position.pos.s),
+        road_position.pos.r, road_position.pos.h};
   const maliput::api::Rotation rot =
-      road_position.lane->GetOrientation(road_position.pos);
+      road_position.lane->GetOrientation(sat_position);
   const Vector3<double>& vel = velocity.get_velocity().translational();
   return {vel(0) * std::cos(rot.yaw) + vel(1) * std::sin(rot.yaw),
           -vel(0) * std::sin(rot.yaw) + vel(1) * std::cos(rot.yaw), 0.};

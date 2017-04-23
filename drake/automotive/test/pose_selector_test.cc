@@ -320,6 +320,11 @@ GTEST_TEST(PoseSelectorTest, TestGetIsoVelocity) {
   iso_velocity = PoseSelector::GetIsoLaneVelocity(position, velocity);
   EXPECT_NEAR(10. * std::sqrt(2.) / 2., iso_velocity.sigma_v, 1e-12);
   EXPECT_NEAR(10. * std::sqrt(2.) / 2., iso_velocity.rho_v, 1e-12);
+
+  // Verifies the consistency of the result when the s-value is set to infinity.
+  position.pos.s = std::numeric_limits<double>::infinity();
+  iso_velocity = PoseSelector::GetIsoLaneVelocity(position, velocity);
+  EXPECT_NEAR(100. * std::sqrt(2.) / 2., iso_velocity.sigma_v, 1e-12);
 }
 
 }  // namespace

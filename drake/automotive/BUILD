@@ -216,6 +216,7 @@ drake_cc_library(
     deps = [
         "//drake/automotive:lane_direction",
         "//drake/automotive/maliput/api",
+        "//drake/math:saturate",
         "//drake/systems/rendering:pose_bundle",
         "//drake/systems/rendering:pose_vector",
     ],
