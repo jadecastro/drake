@@ -28,6 +28,9 @@ class ArcLane : public Lane {
   ///
   /// @param id,segment,lane_bounds,driveable_bounds,elevation,superelevation
   ///        See documentation for the Lane base class.
+  ///
+  /// N.B. The override ArcLane::ToLanePosition() is currently restricted to
+  /// lanes in which superelevation and elevation change are both zero.
   ArcLane(const api::LaneId& id, const api::Segment* segment,
           const V2& center, double radius,
           double theta0, double d_theta,

@@ -21,6 +21,9 @@ class LineLane : public Lane {
   ///
   /// @param id,segment,lane_bounds,driveable_bounds,elevation,superelevation
   ///        See documentation for the Lane base class.
+  ///
+  /// N.B. The override LineLane::ToLanePosition() is currently restricted to
+  /// lanes in which superelevation and elevation change are both zero.
   LineLane(const api::LaneId& id, const api::Segment* segment,
            const V2& xy0, const V2& dxy,
            const api::RBounds& lane_bounds,

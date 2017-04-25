@@ -57,11 +57,16 @@ api::RoadPosition RoadGeometry::DoToRoadPosition(
         double new_distance{};
         const api::LanePosition lane_position =
             lane->ToLanePosition(geo_position, nearest_position, &new_distance);
-        if ((lane_position.s <= lane->length() || 0. <= lane_position.s) &&
-            (new_distance < min_distance)) {
-          indices = std::make_tuple(i, j, k);
-          min_distance = new_distance;
+        if (new_distance >= min_distance) continue;
+        if (lane->length() < lane_position.s || lane_position.s < 0.) {
+          continue;
         }
+        if (lane->lane_bounds(lane_position.s).r_max <= lane_position.r
+            || lane_position.r <= lane->lane_bounds(lane_position.s).r_min) {
+          continue;
+        }
+        indices = std::make_tuple(i, j, k);
+        min_distance = new_distance;
       }
     }
   }

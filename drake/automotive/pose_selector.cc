@@ -64,6 +64,10 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestAheadAndInBranches(
   const RoadOdometry<double> result_in_path = FindSingleClosestPose(
       lane, ego_pose, ego_velocity, traffic_poses, scan_distance,
       WhichSide::kAhead, &headway_distance);
+  std::cerr << "               in-path result  "
+            << result_in_path.lane->id().id << std::endl;
+  std::cerr << "               headway_distance  "
+            << headway_distance << std::endl;
 
   const std::vector<LaneEndDistance> branches =
       FindBranches(road, ego_pose, ego_velocity, scan_distance);
@@ -97,6 +101,7 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
     const FrameVelocity<double>& ego_velocity,
     const PoseBundle<double>& traffic_poses, double scan_distance,
     const WhichSide side, double* distance) {
+  std::cerr << " FindSingleClosestPose " << std::endl;
   DRAKE_DEMAND(lane != nullptr);
   if (distance != nullptr) {
     *distance = (side == WhichSide::kAhead)
@@ -128,6 +133,7 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
                            ? ego_lane_position.s - lane->length()
                            : -ego_lane_position.s;
   }
+  std::cerr << "  distance_scanned  " << distance_scanned << std::endl;
   while (distance_scanned < scan_distance) {
     RoadOdometry<double> result = default_result;
     double distance_increment{};
@@ -143,6 +149,8 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
       const LanePosition traffic_lane_position =
           lane_direction.lane->ToLanePosition(traffic_geo_position, nullptr,
                                               nullptr);
+      std::cerr << "  traffic_lane_position  " << traffic_lane_position.s
+                << std::endl;
       switch (side) {
         case WhichSide::kAhead: {
           // Ignore traffic behind the ego car when the two share the same lane.
@@ -166,6 +174,8 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
                 (lane_direction.with_s)
                     ? result.pos.s
                     : (lane_direction.lane->length() - result.pos.s);
+            std::cerr << "   distance_increment  " << distance_increment
+                      << std::endl;
           }
         }
         case WhichSide::kBehind: {
@@ -208,6 +218,7 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
 
     // Increment distance_scanned.
     distance_scanned += lane_direction.lane->length();
+    std::cerr << "  distance_scanned  " << distance_scanned << std::endl;
   }
   return default_result;
 }
@@ -267,8 +278,14 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestAcrossBranches(
 
       double effective_headway{};
       while (distance_scanned < distance_to_scan) {
-        auto lane_direction_pre = lane_direction;
         if (lane_direction.lane == nullptr) break;
+        auto lane_direction_pre = lane_direction;
+        std::cerr << "      nullptr lane?  " << (lane_direction.lane == nullptr)
+                  << std::endl;
+        std::cerr << "      lane  " << lane_direction.lane->id().id
+                  << std::endl;
+        std::cerr << "      IsEqual(lane_direction.lane, branch.lane)  "
+                  << IsEqual(lane_direction.lane, branch.lane) << std::endl;
         // If this vehicle is in the branch lane, then use it to compute the
         // effective headway distance to the ego vehicle.  Otherwise continue
         // down the default lanes looking for the branch lane up to
@@ -286,6 +303,10 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestAcrossBranches(
                     << (distance_scanned + lane_direction_pre.lane->length())
                     << std::endl;
         }
+        std::cerr << "      *headway_distance  " << *headway_distance
+                  << std::endl;
+        std::cerr << "      effective_headway  " << effective_headway
+                  << std::endl;
         if (0. < effective_headway && effective_headway < *headway_distance) {
           *headway_distance = effective_headway;
           result =
@@ -294,11 +315,19 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestAcrossBranches(
           break;
         }
         get_default_ongoing_lane(&lane_direction);
+        if (lane_direction.lane == nullptr) break;
+        std::cerr << "     distance_scanned  " << distance_scanned << std::endl;
+        std::cerr << "     lane_direction.lane  "
+                  << lane_direction.lane->id().id << std::endl;
         // Increment distance_scanned.
         distance_scanned += lane_direction.lane->length();
+        std::cerr << "     distance_scanned (after)  " << distance_scanned << std::endl;
       }
+      std::cerr << "    FindSingleClosestAcrossBranches  " << std::endl;
     }
   }
+  // std::cerr << "    ** result  " << result.lane->id().id << std::endl;
+  std::cerr << "    ** headway_distance  " << *headway_distance << std::endl;
   return result;
 }
 

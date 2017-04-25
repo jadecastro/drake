@@ -39,24 +39,25 @@ api::LanePosition LineLane::DoToLanePosition(
   const V2 r_unit_vector{-s_unit_vector(1), s_unit_vector(0)};
 
   const V2 p{geo_position.x, geo_position.y};
+  const V2 lane_origin_to_p = p - xy0;
 
   // Compute the distance from `p` to the start of the lane.
-  const double s = math::saturate(-(xy0 - p).dot(s_unit_vector), 0., length);
-  const double r = -(xy0 - p).dot(r_unit_vector);
-  const double h =
-      geo_position.z - elevation().a();  // The (uniform) road elevation.
+  const double s =
+      math::saturate(lane_origin_to_p.dot(s_unit_vector), 0., length);
+  const double r_unsaturated = lane_origin_to_p.dot(r_unit_vector);
+  const double r = math::saturate(r_unsaturated, driveable_bounds(s).r_min,
+                                  driveable_bounds(s).r_max);
+  const double h = geo_position.z - elevation().a() * length;
 
-  // The distance is the length of the vector sum between the lane centerline
-  // and the vector connecting `p` and the start of the lane.
-  const V2 xy_vector = (xy0 - p) + s * s_unit_vector;
-  const V3 xyz_vector{xy_vector(0), xy_vector(1), h};
-  if (distance != nullptr) *distance = (xyz_vector).norm();
+  const api::LanePosition lane_position{s, r, h};
 
+  const api::GeoPosition nearest = ToGeoPosition(lane_position);
   if (nearest_position != nullptr) {
-    const V2 p_nearest = xy_of_p(s / length);
-    (*nearest_position).x = p_nearest(0);
-    (*nearest_position).y = p_nearest(1);
-    (*nearest_position).z = elevation().a();
+    *nearest_position = nearest;
+  }
+  if (distance != nullptr) {
+    const V2 p_to_nearest{p(0) - nearest.x, p(1) - nearest.y};
+    *distance = p_to_nearest.norm();
   }
 
   return api::LanePosition(s, r, h);
