@@ -160,14 +160,13 @@ class PoseSelector {
       double* headway_distance = nullptr);
 
   // Returns the vector of branches along the sequence of default road segments
-  // in a `road`, up to a given `scan_distance`, where the ego vehicle is
-  // currently located within the provided `lane`, with PoseVector `ego_pose`
-  // and FrameVelocity `ego_velocity`. A vector of LaneEndDistance is returned,
-  // whose elements are pairs where the first entry is the distance along the
-  // s-coordinate from the ego vehicle to the branch and second entry is the
-  // LaneEnd describing the branch.
+  // in a `road`, up to a given `scan_distance` in the ego vehicle's current
+  // lane, given its PoseVector `ego_pose` and FrameVelocity `ego_velocity`. A
+  // vector of LaneEndDistance is returned, whose elements are pairs where the
+  // first entry is the distance along the s-coordinate from the ego vehicle to
+  // the branch and second entry is the LaneEnd describing the branch.
   static const std::vector<LaneEndDistance> FindBranches(
-      const maliput::api::Lane* const lane,
+      const maliput::api::RoadGeometry& road,
       const systems::rendering::PoseVector<double>& ego_pose,
       const systems::rendering::FrameVelocity<double>& ego_velocity,
       double scan_distance);
@@ -184,11 +183,11 @@ class PoseSelector {
   static bool IsAdjacent(const maliput::api::LaneEnd& lane_end0,
                          const maliput::api::LaneEnd& lane_end1);
 
-  // Returns true if `lane0` is adjacent with `lane1`, and false otherwise.  Two
-  // lane ends are said to be adjacent if they share the same coordinates for
-  // any two ends.
-  static bool IsAnyAdjacent(const maliput::api::Lane* const lane0,
-                            const maliput::api::Lane* const lane1);
+  // Returns true if `lane0` has the same endpoints as `lane1`, and false
+  // otherwise.  Two lane ends are said to be adjacent if they share the same
+  // coordinates for any two ends.
+  static bool IsEqual(const maliput::api::Lane* const lane0,
+                      const maliput::api::Lane* const lane1);
 
   // Mutates `lane_direction` according to the next default lane based on the
   // current lane and travel direction contained within `lane_direction`.
@@ -209,10 +208,6 @@ class PoseSelector {
   // negative infinity and with zero velocities.
   static const RoadOdometry<double> set_default_odometry(
       const maliput::api::Lane* const Lane, const WhichSide side);
-
-  // Returns true if the two GeoPositions are equivalent; false otherwise.
-  static bool is_equal(const maliput::api::GeoPosition& geo_position0,
-                       const maliput::api::GeoPosition& geo_position1);
 };
 
 

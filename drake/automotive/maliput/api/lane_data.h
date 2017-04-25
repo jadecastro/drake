@@ -74,6 +74,10 @@ struct GeoPosition {
   double y{};
   double z{};
 
+  bool operator==(const GeoPosition& rhs) const {
+    return (x == rhs.x) && (y == rhs.y) && (z == rhs.z);
+  }
+
   friend std::ostream& operator<<(std::ostream& out, const GeoPosition&
       geo_position) {
     return out << "(x = " << geo_position.x << ", y = " << geo_position.y
