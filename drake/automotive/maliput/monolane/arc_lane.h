@@ -45,6 +45,10 @@ class ArcLane : public Lane {
   // Computes the LanePosition from a given GeoPosition.  This function is valid
   // under the assumption that the road is flat (superelevation is everywhere
   // zero and the elevation has zero gradient).
+  //
+  // Note that, when the absolute theta displacement `d_theta_` exceeds 2π, a
+  // unique solution for `s` no longer exists.  In this case, the return value
+  // of `s` is that which results in the smallest `abs(theta_of_p(s))`.
   api::LanePosition DoToLanePosition(
       const api::GeoPosition& geo_pos,
       api::GeoPosition* nearest_point,

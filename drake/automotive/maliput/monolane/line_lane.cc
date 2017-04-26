@@ -60,7 +60,7 @@ api::LanePosition LineLane::DoToLanePosition(
     *distance = p_to_nearest.norm();
   }
 
-  return api::LanePosition(s, r, h);
+  return lane_position;
 }
 
 

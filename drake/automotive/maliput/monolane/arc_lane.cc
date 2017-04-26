@@ -20,12 +20,14 @@ static double wrap(double theta) {
 
 // Implements the saturate function for angles.  The input θ to be saturated is
 // assumed to lie in the range [-π, π], saturating within the provided range
-// [θ_min, θ_max].
+// [θ_min, θ_max].  θ_min, θ_max can take on any value, provided that θ_min <=
+// θ_max.  If θ_max > 2π + θ_min, then no saturation occurs.
 double saturate_wrapped(double theta, double theta_min, double theta_max) {
   DRAKE_DEMAND(-M_PI <= theta);
   DRAKE_DEMAND(theta <= M_PI);
   DRAKE_DEMAND(theta_min <= theta_max);
-  DRAKE_DEMAND(theta_max <= theta_min + 2 * M_PI);
+
+  if (theta_max >= theta_min + 2. * M_PI) return theta;
 
   const double theta_0 = wrap(theta_min);
   const double theta_1 = wrap(theta_max);
@@ -182,19 +184,17 @@ api::LanePosition ArcLane::DoToLanePosition(
   // Define a vector from `p` to the center of the arc.
   const V2 v = p - center;
 
-  DRAKE_DEMAND(std::abs(d_theta_) <= 2. * M_PI);
-  // Otherwise we cannot obtain a unique solution anymore.
-
   const double theta_min = std::min(theta0_, d_theta_ + theta0_);
   const double theta_max = std::max(theta0_, d_theta_ + theta0_);
 
   const double theta_nearest =
       saturate_wrapped(std::atan2(v(1), v(0)), theta_min, theta_max);
-  const double d_theta = theta_nearest - wrap(theta_min);
-  const double d_theta_unwrapped =
-      (d_theta < 0.) ? d_theta + 2. * M_PI : d_theta;
 
-  const double s = r_ * d_theta_unwrapped;
+  const double d_theta_nearest = theta_nearest - wrap(theta_min);
+  const double d_theta_nearest_unwrapped =
+      (d_theta_nearest < 0.) ? d_theta_nearest + 2. * M_PI : d_theta_nearest;
+
+  const double s = r_ * d_theta_nearest_unwrapped;
   const double r_unsaturated = (d_theta_ >= 0.) ? r_ - v.norm() : v.norm() - r_;
   const double r = math::saturate(r_unsaturated, driveable_bounds(s).r_min,
                                   driveable_bounds(s).r_max);
@@ -210,7 +210,6 @@ api::LanePosition ArcLane::DoToLanePosition(
     *nearest_position = nearest;
   }
   if (distance != nullptr) {
-    std::cerr << " ArcLane::DoToLanePosition 0 " << std::endl;
     const V2 p_to_nearest{p(0) - nearest.x, p(1) - nearest.y};
     *distance = p_to_nearest.norm();
   }

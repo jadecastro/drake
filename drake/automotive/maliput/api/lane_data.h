@@ -74,6 +74,7 @@ struct GeoPosition {
   double y{};
   double z{};
 
+  // TODO(jadecastro): Add unit test.
   bool operator==(const GeoPosition& rhs) const {
     return (x == rhs.x) && (y == rhs.y) && (z == rhs.z);
   }

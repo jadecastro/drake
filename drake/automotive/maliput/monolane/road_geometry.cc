@@ -47,7 +47,7 @@ api::RoadPosition RoadGeometry::DoToRoadPosition(
   }
   double min_distance{std::numeric_limits<double>::infinity()};
   std::tuple<int, int, int> indices{0, 0, 0};
-  std::cerr << " DoToRoadPosition  " << std::endl;
+  //std::cerr << " DoToRoadPosition  " << std::endl;
   for (int i = 0; i < num_junctions(); ++i) {
     const api::Junction* junction = this->junction(i);
     for (int j = 0; j < junction->num_segments(); ++j) {
@@ -73,7 +73,7 @@ api::RoadPosition RoadGeometry::DoToRoadPosition(
   const api::Lane* lane =
       junction(std::get<0>(indices))->segment(std::get<1>(indices))
       ->lane(std::get<2>(indices));
-  std::cerr << "  lane  " << lane->id().id << std::endl;
+  //std::cerr << "  lane  " << lane->id().id << std::endl;
   return {lane, lane->ToLanePosition(geo_position, nearest_position, distance)};
 }
 

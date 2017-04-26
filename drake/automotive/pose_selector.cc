@@ -86,14 +86,13 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestAheadAndInBranches(
   const RoadOdometry<double> result_in_branch = FindSingleClosestAcrossBranches(
       road, traffic_poses, ego_sigma_v, branches, &effective_headway);
 
+  std::cerr << "               effective_headway  "
+            << effective_headway << std::endl;
   if (distance != nullptr) {
     *distance = std::min(headway_distance, effective_headway);
   }
-  if (headway_distance <= effective_headway) {
-    return result_in_path;
-  } else {
-    return result_in_branch;
-  }
+  if (headway_distance <= effective_headway) return result_in_path;
+  return result_in_branch;
 }
 
 const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
@@ -101,7 +100,7 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
     const FrameVelocity<double>& ego_velocity,
     const PoseBundle<double>& traffic_poses, double scan_distance,
     const WhichSide side, double* distance) {
-  std::cerr << " FindSingleClosestPose " << std::endl;
+  //std::cerr << " FindSingleClosestPose " << std::endl;
   DRAKE_DEMAND(lane != nullptr);
   if (distance != nullptr) {
     *distance = (side == WhichSide::kAhead)
@@ -114,6 +113,7 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
                                      ego_pose.get_translation().z()};
   const LanePosition ego_lane_position =
       lane->ToLanePosition(ego_geo_position, nullptr, nullptr);
+  // std::cerr << " ego s position " << ego_lane_position.s << std::endl;
 
   // Get the ego car's velocity and lane direction in the trial lane.
   const IsoLaneVelocity ego_lane_velocity =
@@ -133,7 +133,6 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
                            ? ego_lane_position.s - lane->length()
                            : -ego_lane_position.s;
   }
-  std::cerr << "  distance_scanned  " << distance_scanned << std::endl;
   while (distance_scanned < scan_distance) {
     RoadOdometry<double> result = default_result;
     double distance_increment{};
@@ -143,14 +142,18 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
                                              traffic_iso.translation().y(),
                                              traffic_iso.translation().z());
 
-      if (!IsWithinLane(traffic_geo_position, lane_direction.lane)) continue;
+      //std::cerr << " traffic s position " << traffic_lane_position.s
+      //          << std::endl;
       if (ego_geo_position == traffic_geo_position) continue;
+      std::cerr << " NOT EGO! " << std::endl;
+      if (!IsWithinLane(traffic_geo_position, lane_direction.lane)) continue;
+      std::cerr << "WITHIN LANE! " << lane_direction.lane->id().id << std::endl;
 
       const LanePosition traffic_lane_position =
           lane_direction.lane->ToLanePosition(traffic_geo_position, nullptr,
                                               nullptr);
-      std::cerr << "  traffic_lane_position  " << traffic_lane_position.s
-                << std::endl;
+      //std::cerr << " traffic s position " << traffic_lane_position.s
+      //          << std::endl;
       switch (side) {
         case WhichSide::kAhead: {
           // Ignore traffic behind the ego car when the two share the same lane.
@@ -164,9 +167,9 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
           }
           // Keep positions that are closer than any other found so far.
           if ((lane_direction.with_s &&
-               traffic_lane_position.s < result.pos.s) ||
+               traffic_lane_position.s > result.pos.s) ||
               (!lane_direction.with_s &&
-               traffic_lane_position.s > result.pos.s)) {
+               traffic_lane_position.s < result.pos.s)) {
             result = RoadOdometry<double>(
                 {lane_direction.lane, traffic_lane_position},
                 traffic_poses.get_velocity(i));
@@ -174,8 +177,8 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
                 (lane_direction.with_s)
                     ? result.pos.s
                     : (lane_direction.lane->length() - result.pos.s);
-            std::cerr << "   distance_increment  " << distance_increment
-                      << std::endl;
+            //    std::cerr << "   distance_increment  " << distance_increment
+            //          << std::endl;
           }
         }
         case WhichSide::kBehind: {
@@ -190,9 +193,9 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
             }
           }
           // Keep positions that are closer than any other found so far.
-          if ((traffic_lane_position.s > result.pos.s) ||
+          if ((traffic_lane_position.s < result.pos.s) ||
               (!lane_direction.with_s &&
-               traffic_lane_position.s < result.pos.s)) {
+               traffic_lane_position.s > result.pos.s)) {
             result = RoadOdometry<double>(
                 {lane_direction.lane, traffic_lane_position},
                 traffic_poses.get_velocity(i));
@@ -213,12 +216,12 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
         return result;
       }
     }
-    get_default_ongoing_lane(&lane_direction);
-    if (lane_direction.lane == nullptr) return result;  // Infinity.
-
     // Increment distance_scanned.
     distance_scanned += lane_direction.lane->length();
-    std::cerr << "  distance_scanned  " << distance_scanned << std::endl;
+
+    // Obtain the next lane_direction in the scanned sequence.
+    get_default_ongoing_lane(&lane_direction);
+    if (lane_direction.lane == nullptr) return result;  // Infinity.
   }
   return default_result;
 }
@@ -259,12 +262,6 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestAcrossBranches(
     // speed- and branch-dependent influence distance horizon.
     for (auto branch_distance : branches) {
       std::tie(ego_distance_to_this_branch, branch) = branch_distance;
-      std::cerr << "                    ego distance_to_this_branch  "
-                << ego_distance_to_this_branch << std::endl;
-      std::cerr << "                    this car's lane  " << lane->id().id
-                << std::endl;
-      //std::cerr << "                    this branch's lane  "
-      //          << branch.lane->id().id << std::endl;
 
       // The distance ahead needed to scan for intersection is assumed equal to
       // the distance scanned in the ego vehicle's lane times the ratio of
@@ -280,12 +277,6 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestAcrossBranches(
       while (distance_scanned < distance_to_scan) {
         if (lane_direction.lane == nullptr) break;
         auto lane_direction_pre = lane_direction;
-        std::cerr << "      nullptr lane?  " << (lane_direction.lane == nullptr)
-                  << std::endl;
-        std::cerr << "      lane  " << lane_direction.lane->id().id
-                  << std::endl;
-        std::cerr << "      IsEqual(lane_direction.lane, branch.lane)  "
-                  << IsEqual(lane_direction.lane, branch.lane) << std::endl;
         // If this vehicle is in the branch lane, then use it to compute the
         // effective headway distance to the ego vehicle.  Otherwise continue
         // down the default lanes looking for the branch lane up to
@@ -297,37 +288,24 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestAcrossBranches(
           // the ego vehicle, compared relative to their positions with respect
           // to their shared branch point.
           effective_headway =
-              ego_distance_to_this_branch -
-              distance_to_lane_end;  //  + lane_lengths_to_this_branch;
-          std::cerr << "                     traffic distance to branch "
-                    << (distance_scanned + lane_direction_pre.lane->length())
-                    << std::endl;
+              ego_distance_to_this_branch - distance_to_lane_end;
         }
-        std::cerr << "      *headway_distance  " << *headway_distance
-                  << std::endl;
-        std::cerr << "      effective_headway  " << effective_headway
-                  << std::endl;
         if (0. < effective_headway && effective_headway < *headway_distance) {
           *headway_distance = effective_headway;
           result =
               RoadOdometry<double>({lane_direction_pre.lane, lane_position},
                                    traffic_poses.get_velocity(i));
+          std::cerr << "               in-branch result  "
+                    << result.lane->id().id << std::endl;
           break;
         }
         get_default_ongoing_lane(&lane_direction);
         if (lane_direction.lane == nullptr) break;
-        std::cerr << "     distance_scanned  " << distance_scanned << std::endl;
-        std::cerr << "     lane_direction.lane  "
-                  << lane_direction.lane->id().id << std::endl;
         // Increment distance_scanned.
         distance_scanned += lane_direction.lane->length();
-        std::cerr << "     distance_scanned (after)  " << distance_scanned << std::endl;
       }
-      std::cerr << "    FindSingleClosestAcrossBranches  " << std::endl;
     }
   }
-  // std::cerr << "    ** result  " << result.lane->id().id << std::endl;
-  std::cerr << "    ** headway_distance  " << *headway_distance << std::endl;
   return result;
 }
 
@@ -362,10 +340,6 @@ const std::vector<PoseSelector::LaneEndDistance> PoseSelector::FindBranches(
     // Increment distance_scanned and collect all non-trivial branches as we go.
     distance_scanned += lane_direction.lane->length();
     const LaneEndSet* ends = GetIncomingLaneEnds(lane_direction);
-    //std::cerr << " lane " << lane_direction.lane->id().id << std::endl;
-    //std::cerr << " distance_scanned " << distance_scanned << std::endl;
-    //std::cerr << " ends->size() " << ends->size() << std::endl;
-   //std::cerr << " lane_end == nullptr " << (lane_end == nullptr) << std::endl;
     if (lane_end != nullptr && ends->size() > 1) {
       for (int i = 0; i < ends->size(); ++i) {
         // Store, from the complete list, the LaneEnds that do not belong to the
@@ -385,27 +359,21 @@ const IsoLaneVelocity PoseSelector::GetIsoLaneVelocity(
     const RoadPosition& road_position, const FrameVelocity<double>& velocity) {
   const double large_s_value{1e9};
   const LanePosition sat_position{
-      math::saturate(-large_s_value, large_s_value, road_position.pos.s),
+    math::saturate(road_position.pos.s, -large_s_value, large_s_value),
       road_position.pos.r, road_position.pos.h};
   const maliput::api::Rotation rot =
       road_position.lane->GetOrientation(sat_position);
   const Vector3<double>& vel = velocity.get_velocity().translational();
   return {vel(0) * std::cos(rot.yaw) + vel(1) * std::sin(rot.yaw),
-          -vel(0) * std::sin(rot.yaw) + vel(1) * std::cos(rot.yaw), 0.};
+        -vel(0) * std::sin(rot.yaw) + vel(1) * std::cos(rot.yaw),
+        0.};
 }
 
 bool PoseSelector::IsWithinLane(const GeoPosition& geo_position,
                                 const Lane* const lane) {
-  const LanePosition lane_position =
-      lane->ToLanePosition(geo_position, nullptr, nullptr);
-  if (lane_position.s < 0. || lane->length() < lane_position.s) {
-    return false;
-  }
-  if (lane_position.r <= lane->lane_bounds(lane_position.s).r_min ||
-      lane->lane_bounds(lane_position.s).r_max <= lane_position.r) {
-    return false;
-  }
-  return true;
+  double distance;
+  lane->ToLanePosition(geo_position, nullptr, &distance);
+  return distance == 0.;
 }
 
 bool PoseSelector::IsAdjacent(const LaneEnd& lane_end0,
@@ -429,13 +397,6 @@ bool PoseSelector::IsEqual(const Lane* const lane0, const Lane* const lane1) {
   GeoPosition endpoint1a = lane1->ToGeoPosition({0., 0., 0.});
   GeoPosition endpoint0b = lane0->ToGeoPosition({lane0->length(), 0., 0.});
   GeoPosition endpoint1b = lane1->ToGeoPosition({lane1->length(), 0., 0.});
-  //std::cerr << "   lane0  " << lane0->id().id << std::endl;
-  //std::cerr << "   lane1  " << lane1->id().id << std::endl;
-  //std::cerr << " endpoint a matches endpoint a " << (endpoint0a == endpoint1a)
-  //          << std::endl;
-  //std::cerr << " endpoint b matches endpoint b " << (endpoint0b == endpoint1b)
-  //          << std::endl;
-  //std::cerr << " " << std::endl;
   return (endpoint0a == endpoint1a) && (endpoint0b == endpoint1b);
 }
 

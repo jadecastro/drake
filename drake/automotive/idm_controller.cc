@@ -114,7 +114,7 @@ void IdmController<T>::ImplDoCalcOutput(
                              ego_pose.get_isometry().translation().z()},
                             nullptr, nullptr, nullptr);
   // std::cout << "ego position: " << ego_position.lane->id().id << ", s = " << ego_position.pos.s << ", r = " << ego_position.pos.r << ", h = " << ego_position.pos.h << std::endl;
-
+  /*
   std::cout << "IdmController::ImplDoCalcOutput [" << this->get_name() << "]: "
       << "Obtaining lead car odometry:\n"
       << "  - ego_pose = " << ego_pose << "\n"
@@ -122,6 +122,7 @@ void IdmController<T>::ImplDoCalcOutput(
       << "  - traffic_poses =\n" << traffic_poses.ToString("    ") << "\n"
       << "  - scan_distance = " << scan_distance << "\n"
       << "  - headway_distance = " << headway_distance << std::endl;
+  */
   // Find the single closest car ahead.
   const RoadOdometry<T>& lead_car_odom =
       PoseSelector::FindSingleClosestAheadAndInBranches(
@@ -130,29 +131,33 @@ void IdmController<T>::ImplDoCalcOutput(
   // const RoadOdometry<T>& lead_car_odom = PoseSelector::FindSingleClosestPose(
   //     ego_position.lane, ego_pose, ego_velocity, traffic_poses, scan_distance,
   //     WhichSide::kAhead, &headway_distance);
-
+  /*
   std::cout << "IdmController::ImplDoCalcOutput [" << this->get_name() << "]: "
       << "Lead car odometry:\n"
       << "  - lane id: " << lead_car_odom.lane->id() << "\n"
       << "  - pos: " << lead_car_odom.pos << "\n"
       << "  - frame velocity: " << lead_car_odom.vel
       << std::endl;
-
-  const T& s_dot_ego = PoseSelector::GetIsoLaneVelocity(ego_position,
-                                                        ego_velocity).sigma_v;
+  */
+  const T& s_dot_ego = PoseSelector::GetIsoLaneVelocity(
+      ego_position, ego_velocity).sigma_v;
   const T& s_dot_lead = PoseSelector::GetIsoLaneVelocity(
       {lead_car_odom.lane, lead_car_odom.pos}, lead_car_odom.vel).sigma_v;
+  const bool ego_with_s = s_dot_ego > 0.;
 
   // Saturate the net_distance at distance_lower_bound away from the ego car to
   // avoid near-singular solutions inherent to the IDM equation.
   const T net_distance = saturate(
       headway_distance - idm_params.bloat_diameter(),
       idm_params.distance_lower_limit(), std::numeric_limits<T>::infinity());
-  const T closing_velocity = s_dot_ego - s_dot_lead;
+  const T closing_velocity = cond(ego_with_s, s_dot_ego - s_dot_lead,
+                                  s_dot_lead - s_dot_ego);
 
   // Compute the acceleration command from the IDM equation.
-  (*command)[0] = IdmPlanner<T>::Evaluate(idm_params, s_dot_ego, net_distance,
-                                          closing_velocity);
+  using std::abs;
+  (*command)[0] = IdmPlanner<T>::Evaluate(idm_params, abs(s_dot_ego),
+                                          net_distance, closing_velocity);
+  /*
   std::cout << "IdmController::ImplDoCalcOutput [" << this->get_name() << "]: "
       << "I/O of call to IdmPlanner<T>::Evaluate():\n"
       << "  - s_dot_ego = " << s_dot_ego << "\n"
@@ -163,7 +168,11 @@ void IdmController<T>::ImplDoCalcOutput(
       << "  - closing_velocity = " << closing_velocity << "\n"
       << "  - Acceleration command = " << (*command)[0]
       << std::endl;
-
+  */
+  std::cerr << " Net distance " << net_distance << std::endl;
+  //std::cerr << " Closing velocity " << closing_velocity << std::endl;
+  //std::cerr << " Ego speed " << s_dot_ego << std::endl;
+  //std::cerr << " Acceleration command " << (*command)[0] << std::endl;
   using std::isnan;
   DRAKE_THROW_UNLESS(!isnan((*command)[0]));
 }

@@ -133,16 +133,17 @@ class PoseSelector {
       double* distance = nullptr);
 
   /// Extracts the vehicle's `s`-direction velocity based on its RoadOdometry @p
-  /// road_odom.  Assumes the road has zero elevation and superelevation.
-  ///
+  /// road_odom in the Lane coordinate frame.  Assumes the road has zero
+  /// elevation and superelevation.
+  //
   // TODO(jadecastro): Generalize to three-dimensional rotations.
   static const maliput::api::IsoLaneVelocity GetIsoLaneVelocity(
       const maliput::api::RoadPosition& road_position,
       const systems::rendering::FrameVelocity<double>& velocity);
 
-  // Returns `true` if within a lane, and `false` otherwise.  @p geo_position is
-  // the geo-space coordinates of the vehicle, and @p lane is the lane within
-  // which `geo_position` will be checked for membership.
+  // Returns `true` if within the given lane, and `false` otherwise.  @p
+  // geo_position is the geo-space coordinates of the vehicle, and @p lane is
+  // the lane within which `geo_position` will be checked for membership.
   static bool IsWithinLane(const maliput::api::GeoPosition& geo_position,
                            const maliput::api::Lane* lane);
 
