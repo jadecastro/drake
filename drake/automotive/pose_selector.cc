@@ -56,7 +56,6 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestAheadAndInBranches(
                                  ego_pose.get_translation().z()};
   const Lane* const lane =
       road.ToRoadPosition(geo_position, nullptr, nullptr, nullptr).lane;
-  std::cerr << "                    ego lane  " << lane->id().id << std::endl;
 
   // Find any leading traffic cars along the same default path as the ego
   // vehicle.
@@ -64,10 +63,6 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestAheadAndInBranches(
   const RoadOdometry<double> result_in_path = FindSingleClosestPose(
       lane, ego_pose, ego_velocity, traffic_poses, scan_distance,
       WhichSide::kAhead, &headway_distance);
-  std::cerr << "               in-path result  "
-            << result_in_path.lane->id().id << std::endl;
-  std::cerr << "               headway_distance  "
-            << headway_distance << std::endl;
 
   const std::vector<LaneEndDistance> branches =
       FindBranches(road, ego_pose, ego_velocity, scan_distance);
@@ -86,8 +81,6 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestAheadAndInBranches(
   const RoadOdometry<double> result_in_branch = FindSingleClosestAcrossBranches(
       road, traffic_poses, ego_sigma_v, branches, &effective_headway);
 
-  std::cerr << "               effective_headway  "
-            << effective_headway << std::endl;
   if (distance != nullptr) {
     *distance = std::min(headway_distance, effective_headway);
   }
@@ -100,7 +93,6 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
     const FrameVelocity<double>& ego_velocity,
     const PoseBundle<double>& traffic_poses, double scan_distance,
     const WhichSide side, double* distance) {
-  //std::cerr << " FindSingleClosestPose " << std::endl;
   DRAKE_DEMAND(lane != nullptr);
   if (distance != nullptr) {
     *distance = (side == WhichSide::kAhead)
@@ -113,7 +105,6 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
                                      ego_pose.get_translation().z()};
   const LanePosition ego_lane_position =
       lane->ToLanePosition(ego_geo_position, nullptr, nullptr);
-  // std::cerr << " ego s position " << ego_lane_position.s << std::endl;
 
   // Get the ego car's velocity and lane direction in the trial lane.
   const IsoLaneVelocity ego_lane_velocity =
@@ -142,18 +133,12 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
                                              traffic_iso.translation().y(),
                                              traffic_iso.translation().z());
 
-      //std::cerr << " traffic s position " << traffic_lane_position.s
-      //          << std::endl;
       if (ego_geo_position == traffic_geo_position) continue;
-      std::cerr << " NOT EGO! " << std::endl;
       if (!IsWithinLane(traffic_geo_position, lane_direction.lane)) continue;
-      std::cerr << "WITHIN LANE! " << lane_direction.lane->id().id << std::endl;
 
       const LanePosition traffic_lane_position =
           lane_direction.lane->ToLanePosition(traffic_geo_position, nullptr,
                                               nullptr);
-      //std::cerr << " traffic s position " << traffic_lane_position.s
-      //          << std::endl;
       switch (side) {
         case WhichSide::kAhead: {
           // Ignore traffic behind the ego car when the two share the same lane.
@@ -177,8 +162,6 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
                 (lane_direction.with_s)
                     ? result.pos.s
                     : (lane_direction.lane->length() - result.pos.s);
-            //    std::cerr << "   distance_increment  " << distance_increment
-            //          << std::endl;
           }
         }
         case WhichSide::kBehind: {
@@ -295,8 +278,6 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestAcrossBranches(
           result =
               RoadOdometry<double>({lane_direction_pre.lane, lane_position},
                                    traffic_poses.get_velocity(i));
-          std::cerr << "               in-branch result  "
-                    << result.lane->id().id << std::endl;
           break;
         }
         get_default_ongoing_lane(&lane_direction);

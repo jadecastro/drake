@@ -301,7 +301,7 @@ void AddVehicles(RoadNetworkType road_network_type,
       params_1.set_h(0);
       MaliputRailcarState<double> state_1;
       state_1.set_s(lane_direction_1.lane->length() - initial_position_1);
-      state_1.set_speed(0.3 * FLAGS_onramp_base_speed);
+      state_1.set_speed(FLAGS_onramp_base_speed);
       simulator->AddPriusMaliputRailcar(
           "IdmControlledMaliputRailcar1",
           lane_direction_1, params_1, state_1);

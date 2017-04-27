@@ -122,11 +122,9 @@ void MaliputRailcar<T>::DoCalcOutput(const Context<T>& context,
       dynamic_cast<MaliputRailcarState<T>*>(
           output->GetMutableVectorData(state_output_port_index_));
   DRAKE_ASSERT(state_vector != nullptr);
-  /*
-    std::cout << "MaliputRailcar::DoCalcOutput: [" << this->get_name()
+  std::cout << "MaliputRailcar::DoCalcOutput: [" << this->get_name()
       << "] state_vector->s() = " << state_vector->s()
       << ", state_vector->speed() = " << state_vector->speed() << std::endl;
-  */
   ImplCalcOutput(*state, state_vector);
 
   LaneDirection& lane_direction_output =
@@ -230,10 +228,9 @@ void MaliputRailcar<T>::ImplCalcVelocity(const MaliputRailcarParams<T>& params,
   // TODO(liang.fok) Add support for non-zero rotational velocity. See #5751.
   const Vector3<T> w(T(0), T(0), T(0));
   frame_velocity->set_velocity(multibody::SpatialVelocity<T>(w, v_WC_W));
-  /*
+
   std::cout << "MaliputRailcar::ImplCalcVelocity: [" << this->get_name()
       << "] frame_velocity = " << *frame_velocity << std::endl;
-  */
 }
 
 template <typename T>

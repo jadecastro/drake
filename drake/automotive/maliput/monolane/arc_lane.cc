@@ -189,11 +189,11 @@ api::LanePosition ArcLane::DoToLanePosition(
 
   const double theta_nearest =
       saturate_wrapped(std::atan2(v(1), v(0)), theta_min, theta_max);
+  const double d_theta_nearest = (d_theta_ > 0.)
+      ? theta_nearest - wrap(theta_min) : wrap(theta_max) - theta_nearest;
 
-  const double d_theta_nearest = theta_nearest - wrap(theta_min);
   const double d_theta_nearest_unwrapped =
       (d_theta_nearest < 0.) ? d_theta_nearest + 2. * M_PI : d_theta_nearest;
-
   const double s = r_ * d_theta_nearest_unwrapped;
   const double r_unsaturated = (d_theta_ >= 0.) ? r_ - v.norm() : v.norm() - r_;
   const double r = math::saturate(r_unsaturated, driveable_bounds(s).r_min,

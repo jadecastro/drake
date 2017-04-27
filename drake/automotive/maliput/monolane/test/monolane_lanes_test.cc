@@ -257,7 +257,7 @@ GTEST_TEST(MonolaneLanesTest, FlatArcLane) {
   // Case 1: Tests ArcLane::ToLanePosition() with a closest point that lies
   // within the lane bounds.
   const api::GeoPosition point_within_lane{
-    center(0) - 50., center(1) + 50., 0.};  // theta = 0.5 * M_PI.
+    center(0) - 50., center(1) + 50., 0.};  // θ = 0.5π.
   api::GeoPosition nearest_position;
   double distance{};
   const double expected_s = 0.5 * M_PI / d_theta * l2->length();
@@ -279,7 +279,7 @@ GTEST_TEST(MonolaneLanesTest, FlatArcLane) {
   // Case 2: Tests ArcLane::ToLanePosition() with a closest point that lies
   // outside of the lane bounds, verifying that the result saturates.
   const api::GeoPosition point_outside_lane{
-    center(0) + 200., center(1) - 20., 0.};  // theta ~= 1.9 * M_PI.
+    center(0) + 200., center(1) - 20., 0.};  // θ ~= 1.9π.
   const double expected_r_outside = -half_width;
   EXPECT_LANE_NEAR(l2->ToLanePosition(point_outside_lane, &nearest_position,
                                       &distance),
@@ -339,6 +339,33 @@ GTEST_TEST(MonolaneLanesTest, FlatArcLane) {
               (radius - half_width) - std::sqrt(std::pow(50., 2.) +
                                                 std::pow(50., 2.)),
               kVeryExact);
+
+  // Case 5: Tests ArcLane::ToLanePosition() with a lane that starts in the
+  // third quadrant and ends in the second quadrant; i.e. d_theta is negative
+  // and crosses the ±π wrap-around value using a point that is within the lane
+  // in the third quadrant.
+  const double theta0_wrap = 1.2 * M_PI;
+  const double d_theta_wrap = -0.4 * M_PI;
+  Segment* s4 = rg.NewJunction({"j4"})->NewSegment({"s4"});
+  Lane* l2_wrap = s4->NewArcLane(
+      {"l2_wrap"},
+      center, radius, theta0_wrap, d_theta_wrap,
+      {-5., 5.}, {-half_width, half_width},
+      // Zero elevation, zero superelevation == flat.
+      zp, zp);
+  const api::GeoPosition point_in_third_quadrant{
+    center(0) - 90., center(1) - 25., 0.};  // θ ~= -0.9π.
+  const double expected_s_wrap =
+      (std::atan2(25, -90) - 0.8 * M_PI) / d_theta * l2->length();  // ~0.28L
+  const double expected_r_wrap =
+      std::sqrt(std::pow(90, 2.) + std::pow(25, 2.)) - radius;
+  EXPECT_LANE_NEAR(l2_wrap->ToLanePosition(point_in_third_quadrant,
+                                           &nearest_position,
+                                           &distance),
+                   (expected_s_wrap, expected_r_wrap, 0.), kVeryExact);
+  EXPECT_GEO_NEAR(nearest_position, (-90 + center(0), -25 + center(1), 0.),
+                  kVeryExact);
+  EXPECT_NEAR(distance, 0. /* within lane */, kVeryExact);
 
   // Tests the integrity of ArcLaneWithConstantSuperelevation::ToLanePosition()
   // with various null argument combinations.
