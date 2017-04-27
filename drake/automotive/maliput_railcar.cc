@@ -15,6 +15,7 @@
 #include "drake/common/cond.h"
 #include "drake/common/drake_assert.h"
 #include "drake/math/roll_pitch_yaw_using_quaternion.h"
+#include "drake/math/saturate.h"
 #include "drake/multibody/multibody_tree/math/spatial_velocity.h"
 #include "drake/systems/framework/basic_vector.h"
 #include "drake/systems/framework/value.h"
@@ -29,6 +30,7 @@ using maliput::api::LaneEnd;
 using maliput::api::LanePosition;
 using maliput::api::Rotation;
 using math::RollPitchYawToQuaternion;
+using math::saturate;
 using systems::BasicVector;
 using systems::Context;
 using systems::ContinuousState;
@@ -355,7 +357,7 @@ void MaliputRailcar<T>::DoCalcNextUpdateTime(const systems::Context<T>& context,
   const MaliputRailcarState<T>* const state =
       dynamic_cast<const MaliputRailcarState<T>*>(&context_state);
   DRAKE_ASSERT(state != nullptr);
-  if (state->speed() == 0) {
+  if (state->speed() <= 0) {
     actions->time = T(std::numeric_limits<double>::infinity());
   } else {
     const MaliputRailcarParams<T>& params =
@@ -380,7 +382,8 @@ void MaliputRailcar<T>::DoCalcNextUpdateTime(const systems::Context<T>& context,
 
     const T distance = cond(with_s, T(lane->length()) - s, -s);
 
-    actions->time = context.get_time() + distance / s_dot;
+    actions->time = saturate(context.get_time() + distance / s_dot, T(0.),
+                             T(std::numeric_limits<double>::infinity()));
   }
 
   // Gracefully handle the situation when the next update time is equal to the

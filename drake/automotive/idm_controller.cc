@@ -148,11 +148,12 @@ void IdmController<T>::ImplDoCalcOutput(
   const T net_distance = saturate(
       headway_distance - idm_params.bloat_diameter(),
       idm_params.distance_lower_limit(), std::numeric_limits<T>::infinity());
-  const T closing_velocity = s_dot_ego - s_dot_lead;
+  const T closing_velocity = (s_dot_ego > 0.)
+      ? s_dot_ego - s_dot_lead : s_dot_lead - s_dot_ego;
 
   // Compute the acceleration command from the IDM equation.
-  (*command)[0] = IdmPlanner<T>::Evaluate(idm_params, s_dot_ego, net_distance,
-                                          closing_velocity);
+  (*command)[0] = IdmPlanner<T>::Evaluate(idm_params, std::abs(s_dot_ego),
+                                          net_distance, closing_velocity);
   std::cout << "IdmController::ImplDoCalcOutput [" << this->get_name() << "]: "
       << "I/O of call to IdmPlanner<T>::Evaluate():\n"
       << "  - s_dot_ego = " << s_dot_ego << "\n"

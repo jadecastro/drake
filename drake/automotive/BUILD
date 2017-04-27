@@ -174,6 +174,7 @@ drake_cc_library(
         ":lane_direction",
         "//drake/automotive/maliput/api",
         "//drake/math:geometric_transform",
+        "//drake/math:saturate",
         "//drake/systems/rendering:frame_velocity",
         "//drake/systems/rendering:pose_vector",
     ],
