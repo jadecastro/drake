@@ -181,6 +181,7 @@ drake_cc_library(
         ":lane_direction",
         "//drake/automotive/maliput/api",
         "//drake/math:geometric_transform",
+        "//drake/math:saturate",
         "//drake/systems/rendering:frame_velocity",
         "//drake/systems/rendering:pose_vector",
     ],
@@ -220,7 +221,9 @@ drake_cc_library(
     hdrs = ["pose_selector.h"],
     visibility = [],
     deps = [
+        "//drake/automotive:lane_direction",
         "//drake/automotive/maliput/api",
+        "//drake/math:saturate",
         "//drake/systems/rendering:pose_bundle",
         "//drake/systems/rendering:pose_vector",
     ],
@@ -250,7 +253,6 @@ drake_cc_library(
     deps = [
         ":generated_vectors",
         ":lane_direction",
-        ":pose_selector",
         "//drake/automotive/maliput/api",
         "//drake/common:cond",
         "//drake/common:symbolic",
@@ -266,7 +268,6 @@ drake_cc_library(
     deps = [
         ":generated_vectors",
         ":lane_direction",
-        ":pose_selector",
         ":pure_pursuit",
         "//drake/systems/rendering:pose_vector",
     ],
@@ -566,6 +567,7 @@ drake_cc_googletest(
 drake_cc_googletest(
     name = "pose_selector_test",
     deps = [
+        "//drake/automotive:monolane_onramp_merge",
         "//drake/automotive:pose_selector",
         "//drake/automotive/maliput/dragway",
     ],
