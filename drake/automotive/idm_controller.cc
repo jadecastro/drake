@@ -16,7 +16,6 @@ using maliput::api::RoadGeometry;
 using maliput::api::RoadPosition;
 using maliput::api::Rotation;
 using math::saturate;
-using pose_selector::RoadOdometry;
 using systems::rendering::FrameVelocity;
 using systems::rendering::PoseBundle;
 using systems::rendering::PoseVector;
@@ -100,24 +99,30 @@ void IdmController<T>::ImplDoCalcOutput(
     const IdmPlannerParameters<T>& idm_params,
     systems::BasicVector<T>* command) const {
   DRAKE_DEMAND(idm_params.IsValid());
+  const double scan_distance{100.};
+  double headway_distance{};
+
+  const RoadPosition ego_position =
+      road_.ToRoadPosition({ego_pose.get_isometry().translation().x(),
+                             ego_pose.get_isometry().translation().y(),
+                             ego_pose.get_isometry().translation().z()},
+                            nullptr, nullptr, nullptr);
 
   // Find the single closest car ahead.
-  const RoadOdometry<T>& lead_car_odom =
-      pose_selector::FindClosestLeading(road_, ego_pose, traffic_poses);
-  const RoadPosition ego_position =
-      pose_selector::CalcRoadPosition(road_, ego_pose.get_isometry());
+  const RoadOdometry<T>& lead_car_odom = PoseSelector::FindSingleClosestPose(
+      ego_position.lane, ego_pose, ego_velocity, traffic_poses, scan_distance,
+      WhichSide::kAhead, &headway_distance);
 
-  const T& s_ego = ego_position.pos.s;
-  const T& s_dot_ego = pose_selector::GetSVelocity(
-      RoadOdometry<double>(ego_position, ego_velocity));
-  const T& s_lead = lead_car_odom.pos.s;
-  const T& s_dot_lead = pose_selector::GetSVelocity(lead_car_odom);
+  const T& s_dot_ego = PoseSelector::GetIsoLaneVelocity(ego_position,
+                                                        ego_velocity).sigma_v;
+  const T& s_dot_lead = PoseSelector::GetIsoLaneVelocity(
+      {lead_car_odom.lane, lead_car_odom.pos}, lead_car_odom.vel).sigma_v;
 
   // Saturate the net_distance at distance_lower_bound away from the ego car to
   // avoid near-singular solutions inherent to the IDM equation.
-  const T net_distance = saturate(s_lead - s_ego - idm_params.bloat_diameter(),
-                                  idm_params.distance_lower_limit(),
-                                  std::numeric_limits<T>::infinity());
+  const T net_distance = saturate(
+      headway_distance - idm_params.bloat_diameter(),
+      idm_params.distance_lower_limit(), std::numeric_limits<T>::infinity());
   const T closing_velocity = s_dot_ego - s_dot_lead;
 
   // Compute the acceleration command from the IDM equation.

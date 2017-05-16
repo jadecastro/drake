@@ -2,9 +2,9 @@
 
 #include "drake/automotive/gen/pure_pursuit_params.h"
 #include "drake/automotive/gen/simple_car_params.h"
+#include "drake/automotive/lane_direction.h"
 #include "drake/automotive/maliput/api/lane_data.h"
 #include "drake/automotive/maliput/api/road_geometry.h"
-#include "drake/automotive/pose_selector.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/systems/rendering/pose_vector.h"
 
@@ -45,15 +45,17 @@ class PurePursuit {
   /// @param pose is the PoseVector for the ego vehicle.
   // TODO(jadecastro): Infer the direction of travel rather than require it.
   static T Evaluate(const PurePursuitParams<T>& pp_params,
-                          const SimpleCarParams<T>& car_params,
-                          bool with_s, const maliput::api::RoadGeometry& road,
-                          const systems::rendering::PoseVector<T>& pose);
+                    const SimpleCarParams<T>& car_params,
+                    const LaneDirection& lane_direction,
+                    const maliput::api::RoadGeometry& road,
+                    const systems::rendering::PoseVector<T>& pose);
 
   /// Computes the goal point at a distance `s_lookahead` from the closest
   /// position on the curve in the intended direction of travel, and `with_s`
   /// and `pose` are the direction of travel and PoseVector for the ego vehicle.
   static const maliput::api::GeoPosition ComputeGoalPoint(
-      const T& s_lookahead, bool with_s, const maliput::api::RoadGeometry& road,
+      const T& s_lookahead, const LaneDirection& lane_direction,
+      const maliput::api::RoadGeometry& road,
       const systems::rendering::PoseVector<T>& pose);
 };
 

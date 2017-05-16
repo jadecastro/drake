@@ -2,7 +2,6 @@
 
 #include <cmath>
 
-#include "drake/automotive/pose_selector.h"
 #include "drake/automotive/pure_pursuit.h"
 #include "drake/common/drake_assert.h"
 
@@ -120,7 +119,7 @@ void PurePursuitController<T>::ImplDoCalcOutput(
   // Compute the steering angle using the pure-pursuit method.  N.B. Assumes
   // zero elevation and superelevation.
   const T steering_angle = PurePursuit<T>::Evaluate(
-      pp_params, car_params, lane_direction.with_s, road_, ego_pose);
+      pp_params, car_params, lane_direction, road_, ego_pose);
 
   // Pass the commanded throttle and acceleration through to the output,
   // applying the required steering angle.
