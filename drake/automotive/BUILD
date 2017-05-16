@@ -646,6 +646,20 @@ drake_cc_googletest(
     ],
 )
 
+drake_cc_googletest(
+    name = "longitudinal_trajectory_optimization_test",
+    tags = ["snopt"],
+    deps = [
+        "//drake/automotive:curve2",
+        "//drake/automotive:trajectory_car",
+        "//drake/automotive/maliput/api",
+        "//drake/automotive/maliput/dragway",
+        "//drake/common:call_matlab",
+        "//drake/common:eigen_matrix_compare",
+        "//drake/systems/trajectory_optimization:direct_collocation",
+    ],
+)
+
 cpplint()
 
 python_lint()
