@@ -142,11 +142,41 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
       switch (side) {
         case WhichSide::kAhead: {
           // Ignore traffic behind the ego car when the two share the same lane.
+          // For all other lanes, we will be traversing forward from the current
+          // one, with respect to the car's direction.
           if (distance_scanned <= 0.) {
             if ((lane_direction.with_s &&
                  traffic_lane_position.s() < ego_lane_position.s()) ||
                 (!lane_direction.with_s &&
                  traffic_lane_position.s() > ego_lane_position.s())) {
+              continue;
+            }
+          }
+          // Keep positions that are closer than any other found so far.
+          std::cerr << " result.pos.s() " << result.pos.s() << std::endl;
+          std::cerr << " traffic_lane_position.s() " << traffic_lane_position.s() << std::endl;
+          if ((lane_direction.with_s &&
+               traffic_lane_position.s() < result.pos.s()) ||
+              (!lane_direction.with_s &&
+               traffic_lane_position.s() > result.pos.s())) {
+            result = RoadOdometry<double>(
+                {lane_direction.lane, traffic_lane_position},
+                traffic_poses.get_velocity(i));
+            distance_increment =
+                (lane_direction.with_s)
+                    ? result.pos.s()
+                    : (lane_direction.lane->length() - result.pos.s());
+          }
+        }
+        case WhichSide::kBehind: {
+          // Ignore traffic ahead of the ego car when the two share the same
+          // lane.  For all other lanes, we will be traversing backward from the
+          // current one, with respect to the car's direction.
+          if (distance_scanned <= 0.) {
+            if ((lane_direction.with_s &&
+                 traffic_lane_position.s() > ego_lane_position.s()) ||
+                (!lane_direction.with_s &&
+                 traffic_lane_position.s() < ego_lane_position.s())) {
               continue;
             }
           }
@@ -160,36 +190,13 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
                 traffic_poses.get_velocity(i));
             distance_increment =
                 (lane_direction.with_s)
-                    ? result.pos.s()
-                    : (lane_direction.lane->length() - result.pos.s());
-          }
-        }
-        case WhichSide::kBehind: {
-          // Ignore traffic ahead of the ego car when the two share the same
-          // lane.
-          if (distance_scanned <= 0.) {
-            if ((lane_direction.with_s &&
-                 traffic_lane_position.s() > ego_lane_position.s()) ||
-                (!lane_direction.with_s &&
-                 traffic_lane_position.s() < ego_lane_position.s())) {
-              continue;
-            }
-          }
-          // Keep positions that are closer than any other found so far.
-          if ((traffic_lane_position.s() < result.pos.s()) ||
-              (!lane_direction.with_s &&
-               traffic_lane_position.s() > result.pos.s())) {
-            result = RoadOdometry<double>(
-                {lane_direction.lane, traffic_lane_position},
-                traffic_poses.get_velocity(i));
-            distance_increment =
-                (lane_direction.with_s)
                     ? (lane_direction.lane->length() - result.pos.s())
                     : result.pos.s();
           }
         }
       }
     }
+    std::cerr << " result.pos.s() " << result.pos.s() << std::endl;
     if (std::abs(result.pos.s()) < std::numeric_limits<double>::infinity()) {
       // Figure out whether or not the result is within scan_distance.
       if (distance_scanned + distance_increment < scan_distance) {
