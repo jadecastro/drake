@@ -133,13 +133,12 @@ int AutomotiveSimulator<T>::AddPriusSimpleCar(
         builder_->template AddSystem<systems::lcm::LcmSubscriberSystem>(
             channel_name, driving_command_translator, lcm_.get());
     builder_->Connect(*command_subscriber, *simple_car);
-  }
-/*  else {
+  } else {
     DrivingCommand<double> driving_command;
     auto driving_command_source = builder_->template AddSystem<systems::ConstantVectorSource>(driving_command);
     builder_->Connect(*driving_command_source, *simple_car);
   }
-*/
+
   builder_->Connect(simple_car->state_output(),
                     coord_transform->get_input_port(0));
   if (lcm_) {

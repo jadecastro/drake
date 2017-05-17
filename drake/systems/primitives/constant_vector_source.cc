@@ -33,6 +33,14 @@ void ConstantVectorSource<T>::DoCalcVectorOutput(
   *output = source_value_;
 }
 
+/*
+template <typename T>
+ConstantVectorSource<AutoDiffXd>* ConstantVectorSource<T>::DoToAutoDiffXd()
+    const {
+  return new ConstantVectorSource<AutoDiffXd>(source_value_);
+}
+*/
+
 // Explicitly instantiates on the most common scalar types.
 template class ConstantVectorSource<double>;
 template class ConstantVectorSource<AutoDiffXd>;
