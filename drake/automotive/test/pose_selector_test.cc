@@ -195,6 +195,18 @@ GTEST_TEST(PoseSelectorTest, DragwayTest) {
           scan_ahead_distance, WhichSide::kAhead, &distance);
   EXPECT_EQ(kLeadingSPosition, traffic_odometry.pos.s());
   EXPECT_EQ(kLeadingSPosition - kEgoSPosition, distance);
+  std::cerr << " ego_position.lane->id().id " << ego_position.lane->id().id
+            << std::endl;
+  std::cerr << " ego_pose.get_translation().x() "
+            << ego_pose.get_translation().x() << std::endl;
+  std::cerr << " traffic_poses.get_pose(0).translation().x() "
+            << traffic_poses.get_pose(0).translation().x() << std::endl;
+  std::cerr << " traffic_poses.get_pose(1).translation().x() "
+            << traffic_poses.get_pose(1).translation().x() << std::endl;
+  std::cerr << " traffic_poses.get_pose(2).translation().x() "
+            << traffic_poses.get_pose(2).translation().x() << std::endl;
+  std::cerr << " traffic_poses.get_pose(3).translation().x() "
+            << traffic_poses.get_pose(3).translation().x() << std::endl;
 
   // Peer into the adjacent lane to the left.
   std::tie(leading_odometry, trailing_odometry) = PoseSelector::FindClosestPair(
