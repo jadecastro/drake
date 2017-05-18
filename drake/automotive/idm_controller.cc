@@ -6,6 +6,7 @@
 
 #include "drake/common/cond.h"
 #include "drake/common/drake_assert.h"
+#include "drake/common/eigen_autodiff_types.h"
 #include "drake/common/symbolic_formula.h"
 #include "drake/math/saturate.h"
 
@@ -125,8 +126,14 @@ void IdmController<T>::ImplDoCalcOutput(
                                           closing_velocity);
 }
 
+template <typename T>
+IdmController<AutoDiffXd>* IdmController<T>::DoToAutoDiffXd() const {
+  return new IdmController<AutoDiffXd>(road_);
+}
+
 // These instantiations must match the API documentation in idm_controller.h.
 template class IdmController<double>;
+template class IdmController<AutoDiffXd>;
 
 }  // namespace automotive
 }  // namespace drake

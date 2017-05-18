@@ -128,6 +128,19 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "create_trajectory_params",
+    srcs = ["create_trajectory_params.cc"],
+    hdrs = ["create_trajectory_params.h"],
+    deps = [
+        ":curve2",
+        ":trajectory_car",
+        "//drake/automotive/maliput/api",
+        "//drake/automotive/maliput/dragway",
+        "//drake/common:symbolic",
+    ],
+)
+
+drake_cc_library(
     name = "curve2",
     srcs = ["curve2.cc"],
     hdrs = ["curve2.h"],
@@ -221,6 +234,7 @@ drake_cc_library(
     visibility = [],
     deps = [
         "//drake/automotive/maliput/api",
+        "//drake/common:autodiff",
         "//drake/systems/rendering:pose_bundle",
         "//drake/systems/rendering:pose_vector",
     ],
@@ -376,14 +390,13 @@ drake_cc_binary(
     name = "automotive_demo",
     srcs = [
         "automotive_demo.cc",
-        "create_trajectory_params.cc",
-        "create_trajectory_params.h",
     ],
     data = [
         ":models",
     ],
     deps = [
         ":automotive_simulator",
+        ":create_trajectory_params",
         ":monolane_onramp_merge",
         "//drake/automotive/maliput/dragway",
         "//drake/common:text_logging_gflags",
@@ -640,7 +653,10 @@ drake_cc_googletest(
     name = "trajectory_optimization_test",
     deps = [
         ":automotive_simulator",
+        ":create_trajectory_params",
         ":simple_car",
+        "//drake/automotive/maliput/api",
+        "//drake/automotive/maliput/dragway",
         "//drake/common:call_matlab",
         "//drake/common:eigen_matrix_compare",
         "//drake/systems/trajectory_optimization:direct_collocation",

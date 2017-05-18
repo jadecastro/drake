@@ -132,15 +132,13 @@ int AutomotiveSimulator<T>::AddPriusSimpleCar(
         builder_->template AddSystem<systems::lcm::LcmSubscriberSystem>(
             channel_name, driving_command_translator, lcm_.get());
     builder_->Connect(*command_subscriber, *simple_car);
-  }
-  /* else {
+  } else {
     DrivingCommand<double> driving_command;
     auto driving_command_source =
         builder_->template AddSystem<systems::ConstantVectorSource>(
             driving_command);
     builder_->Connect(*driving_command_source, *simple_car);
   }
-  */
 
   builder_->Connect(simple_car->state_output(),
                     coord_transform->get_input_port(0));
@@ -221,11 +219,18 @@ int AutomotiveSimulator<T>::AddMobilControlledSimpleCar(
 }
 
 template <typename T>
+<<<<<<< HEAD
 int AutomotiveSimulator<T>::AddPriusTrajectoryCar(
     const std::string& name,
     const Curve2<double>& curve,
     double speed,
     double start_position) {
+=======
+int AutomotiveSimulator<T>::AddPriusTrajectoryCar(const std::string& name,
+                                                  const Curve2<double>& curve,
+                                                  double speed,
+                                                  double start_time) {
+>>>>>>> Rebase AutoDiff-enabled TrajectoryCar
   DRAKE_DEMAND(!has_started());
   DRAKE_DEMAND(aggregator_ != nullptr);
   CheckNameUniqueness(name);
@@ -245,63 +250,12 @@ int AutomotiveSimulator<T>::AddPriusTrajectoryCar(
   auto coord_transform =
       builder_->template AddSystem<SimpleCarToEulerFloatingJoint<T>>();
   coord_transform->set_name(name + "_transform");
-  builder_->Connect(trajectory_car->raw_pose_output(),
-                    coord_transform->get_input_port(0));
 
   ConnectCarOutputsAndPriusVis(id, trajectory_car->pose_output(),
                                trajectory_car->velocity_output());
 
-  if (lcm_) {
-    AddPublisher(*trajectory_car, id);
-    AddPublisher(*coord_transform, id);
-  }
-  return id;
-}
-
-// TODO(jadecastro): Add a unit test for this function.
-template <typename T>
-int AutomotiveSimulator<T>::AddIdmControlledPriusTrajectoryCar(
-    const std::string& name,
-    const Curve2<double>& curve,
-    double speed,
-    double start_position) {
-  DRAKE_DEMAND(!has_started());
-  DRAKE_DEMAND(aggregator_ != nullptr);
-  CheckNameUniqueness(name);
-  const int id = allocate_vehicle_number();
-
-  auto trajectory_car =
-      builder_->template AddSystem<TrajectoryCar<T>>(curve);
-  trajectory_car->set_name(name);
-  vehicles_[id] = trajectory_car;
-
-  auto controller = builder_->template AddSystem<IdmController<T>>(*road_);
-  controller->set_name(name + "_IdmController");
-
-  TrajectoryCarState<double> initial_state{};
-  initial_state.set_position(start_position);
-  initial_state.set_speed(speed);
-  trajectory_car_initial_states_[trajectory_car].set_value(
-      initial_state.get_value());
-
-  auto coord_transform =
-      builder_->template AddSystem<SimpleCarToEulerFloatingJoint<T>>();
-  coord_transform->set_name(name + "_transform");
   builder_->Connect(trajectory_car->raw_pose_output(),
                     coord_transform->get_input_port(0));
-
-  builder_->Connect(trajectory_car->pose_output(),
-                    controller->ego_pose_input());
-  builder_->Connect(trajectory_car->velocity_output(),
-                    controller->ego_velocity_input());
-  builder_->Connect(aggregator_->get_output_port(0),
-                    controller->traffic_input());
-  builder_->Connect(controller->acceleration_output(),
-                    trajectory_car->command_input());
-
-  ConnectCarOutputsAndPriusVis(id, trajectory_car->pose_output(),
-                               trajectory_car->velocity_output());
-
   if (lcm_) {
     AddPublisher(*trajectory_car, id);
     AddPublisher(*coord_transform, id);
@@ -380,16 +334,20 @@ void AutomotiveSimulator<T>::SetMaliputRailcarAccelerationCommand(
   DRAKE_DEMAND(has_started());
   const auto iterator = vehicles_.find(id);
   if (iterator == vehicles_.end()) {
-    throw std::runtime_error("AutomotiveSimulator::"
+    throw std::runtime_error(
+        "AutomotiveSimulator::"
         "SetMaliputRailcarAccelerationCommand(): Failed to find vehicle with "
-        "id " + std::to_string(id) + ".");
+        "id " +
+        std::to_string(id) + ".");
   }
-  MaliputRailcar<T>* railcar = dynamic_cast<MaliputRailcar<T>*>(
-      iterator->second);
+  MaliputRailcar<T>* railcar =
+      dynamic_cast<MaliputRailcar<T>*>(iterator->second);
   if (railcar == nullptr) {
-    throw std::runtime_error("AutomotiveSimulator::"
+    throw std::runtime_error(
+        "AutomotiveSimulator::"
         "SetMaliputRailcarAccelerationCommand(): The vehicle with "
-        "id " + std::to_string(id) + " was not a MaliputRailcar.");
+        "id " +
+        std::to_string(id) + " was not a MaliputRailcar.");
   }
   DRAKE_ASSERT(diagram_ != nullptr);
   DRAKE_ASSERT(simulator_ != nullptr);
@@ -429,8 +387,10 @@ const maliput::api::Lane* AutomotiveSimulator<T>::FindLane(
       }
     }
   }
-  throw std::runtime_error("AutomotiveSimulator::FindLane(): Failed to find "
-      "lane named \"" + name + "\".");
+  throw std::runtime_error(
+      "AutomotiveSimulator::FindLane(): Failed to find "
+      "lane named \"" +
+      name + "\".");
 }
 
 template <typename T>
@@ -534,8 +494,8 @@ void AutomotiveSimulator<T>::TransmitLoadMessage() {
   const lcmt_viewer_load_robot load_terrain_message =
       multibody::CreateLoadRobotMessage<T>(*tree_);
   lcmt_viewer_load_robot load_message;
-  load_message.num_links = load_car_message.num_links +
-                           load_terrain_message.num_links;
+  load_message.num_links =
+      load_car_message.num_links + load_terrain_message.num_links;
   for (int i = 0; i < load_car_message.num_links; ++i) {
     load_message.link.push_back(load_car_message.link.at(i));
   }
@@ -683,8 +643,10 @@ template <typename T>
 void AutomotiveSimulator<T>::CheckNameUniqueness(const std::string& name) {
   for (const auto& vehicle : vehicles_) {
     if (vehicle.second->get_name() == name) {
-      throw std::runtime_error("A vehicle named \"" + name + "\" already "
-          "exists. It has id " + std::to_string(vehicle.first) + ".");
+      throw std::runtime_error("A vehicle named \"" + name +
+                               "\" already "
+                               "exists. It has id " +
+                               std::to_string(vehicle.first) + ".");
     }
   }
 }

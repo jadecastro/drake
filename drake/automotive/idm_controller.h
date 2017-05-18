@@ -80,6 +80,9 @@ class IdmController : public systems::LeafSystem<T> {
   void DoCalcOutput(const systems::Context<T>& context,
                     systems::SystemOutput<T>* output) const override;
 
+
+  IdmController<AutoDiffXd>* DoToAutoDiffXd() const override;
+
   const maliput::api::RoadGeometry& road_;
 
   // Indices for the input / output ports.

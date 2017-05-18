@@ -17,9 +17,10 @@ using systems::rendering::FrameVelocity;
 using systems::rendering::PoseBundle;
 using systems::rendering::PoseVector;
 
-const std::pair<RoadOdometry<double>, RoadOdometry<double>> FindClosestPair(
-    const RoadGeometry& road, const PoseVector<double>& ego_pose,
-    const PoseBundle<double>& traffic_poses, const Lane* traffic_lane) {
+template <typename T>
+const std::pair<RoadOdometry<T>, RoadOdometry<T>> FindClosestPair(
+    const RoadGeometry& road, const PoseVector<T>& ego_pose,
+    const PoseBundle<T>& traffic_poses, const Lane* traffic_lane) {
   const RoadPosition& ego_position =
       CalcRoadPosition(road, ego_pose.get_isometry());
   DRAKE_DEMAND(ego_position.lane != nullptr);
@@ -30,18 +31,18 @@ const std::pair<RoadOdometry<double>, RoadOdometry<double>> FindClosestPair(
   // Default the leading and trailing vehicles with positions extending to,
   // respectively, positive and negative infinity and with zero velocities.
   RoadPosition pos_leading = RoadPosition(
-      lane, LanePosition(std::numeric_limits<double>::infinity(), 0., 0.));
-  RoadOdometry<double> result_leading =
-      RoadOdometry<double>(pos_leading, FrameVelocity<double>());
+      lane, LanePosition(std::numeric_limits<T>::infinity(), 0., 0.));
+  RoadOdometry<T> result_leading =
+      RoadOdometry<T>(pos_leading, FrameVelocity<T>());
   RoadPosition pos_trailing = RoadPosition(
-      lane, LanePosition(-std::numeric_limits<double>::infinity(), 0., 0.));
-  RoadOdometry<double> result_trailing =
-      RoadOdometry<double>(pos_trailing, FrameVelocity<double>());
+      lane, LanePosition(-std::numeric_limits<T>::infinity(), 0., 0.));
+  RoadOdometry<T> result_trailing =
+      RoadOdometry<T>(pos_trailing, FrameVelocity<T>());
 
   for (int i = 0; i < traffic_poses.get_num_poses(); ++i) {
     const RoadPosition traffic_position =
         CalcRoadPosition(road, traffic_poses.get_pose(i));
-    const double& s_traffic = traffic_position.pos.s();
+    const T& s_traffic = traffic_position.pos.s();
 
     if (traffic_position.lane->id().id != lane->id().id) continue;
 
@@ -53,11 +54,11 @@ const std::pair<RoadOdometry<double>, RoadOdometry<double>> FindClosestPair(
           s_traffic < result_leading.pos.s()) {
         // N.B. The ego car and traffic may reside in different lanes.
         if (s_traffic > ego_position.pos.s()) {
-          result_leading = RoadOdometry<double>(traffic_position,
-                                                traffic_poses.get_velocity(i));
+          result_leading = RoadOdometry<T>(traffic_position,
+                                           traffic_poses.get_velocity(i));
         } else {
-          result_trailing = RoadOdometry<double>(traffic_position,
-                                                 traffic_poses.get_velocity(i));
+          result_trailing = RoadOdometry<T>(traffic_position,
+                                            traffic_poses.get_velocity(i));
         }
       }
     }
@@ -65,14 +66,16 @@ const std::pair<RoadOdometry<double>, RoadOdometry<double>> FindClosestPair(
   return std::make_pair(result_leading, result_trailing);
 }
 
-const RoadOdometry<double> FindClosestLeading(
-    const RoadGeometry& road, const PoseVector<double>& ego_pose,
-    const PoseBundle<double>& traffic_poses) {
+template <typename T>
+const RoadOdometry<T> FindClosestLeading(
+    const RoadGeometry& road, const PoseVector<T>& ego_pose,
+    const PoseBundle<T>& traffic_poses) {
   return FindClosestPair(road, ego_pose, traffic_poses).first;
 }
 
+template <typename T>
 const RoadPosition CalcRoadPosition(const RoadGeometry& road,
-                                    const Isometry3<double>& pose) {
+                                    const Isometry3<T>& pose) {
   return road.ToRoadPosition(
       maliput::api::GeoPosition(pose.translation().x(), pose.translation().y(),
                                 pose.translation().z()),
@@ -87,6 +90,23 @@ double GetSVelocity(const RoadOdometry<double>& road_odom) {
 
   return vx * std::cos(rot.yaw()) + vy * std::sin(rot.yaw());
 }
+
+// These instantiations must match the API documentation in
+// pose_selector.h.
+template const RoadPosition CalcRoadPosition<double>(
+    const RoadGeometry& road, const Isometry3<double>& pose);
+template const RoadPosition CalcRoadPosition<AutoDiffXd>(
+    const RoadGeometry& road, const Isometry3<AutoDiffXd>& pose);
+
+template const std::pair<RoadOdometry<double>, RoadOdometry<double>>
+    FindClosestPair<double>(const RoadGeometry& road,
+                            const PoseVector<double>& ego_pose,
+                            const PoseBundle<double>& traffic_poses,
+                            const Lane* traffic_lane);
+
+template const RoadOdometry<double> FindClosestLeading<double>(
+    const RoadGeometry& road, const PoseVector<double>& ego_pose,
+    const PoseBundle<double>& traffic_poses);
 
 }  // namespace pose_selector
 }  // namespace automotive

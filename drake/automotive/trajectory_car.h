@@ -14,6 +14,7 @@
 #include "drake/automotive/gen/trajectory_car_state.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/systems/framework/leaf_system.h"
+#include "drake/systems/framework/sparsity_matrix.h"
 #include "drake/systems/framework/vector_base.h"
 #include "drake/systems/rendering/frame_velocity.h"
 #include "drake/systems/rendering/pose_vector.h"
@@ -92,6 +93,11 @@ class TrajectoryCar : public systems::LeafSystem<T> {
   struct PositionHeading {
     Point2 position = Point2(Point2::Zero());
     T heading{0.};
+  };
+
+  bool DoHasDirectFeedthrough(const systems::SparsityMatrix* sparsity,
+                              int input_port, int output_port) const override {
+    return false;
   };
 
   void DoCalcOutput(const systems::Context<T>& context,

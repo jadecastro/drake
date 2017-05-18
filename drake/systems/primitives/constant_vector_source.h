@@ -51,7 +51,7 @@ class ConstantVectorSource : public SingleOutputVectorSource<T> {
       Eigen::VectorBlock<VectorX<T>>* output) const override;
 
  private:
-  //  ConstantVectorSource<AutoDiffXd>* DoToAutoDiffXd() const override;
+  // ConstantVectorSource<AutoDiffXd>* DoToAutoDiffXd() const override;
 
   // TODO(amcastro-tri): move source_value_ to the system's parameters.
   const VectorX<T> source_value_;

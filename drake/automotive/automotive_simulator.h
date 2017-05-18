@@ -125,6 +125,26 @@ class AutomotiveSimulator {
                             const Curve2<double>& curve, double speed,
                             double start_time);
 
+  /// Adds a TrajectoryCar to this simulation visualized as a Toyota Prius that
+  /// is controlled via an IdmController. This includes its EulerFloatingJoint
+  /// output.
+  ///
+  /// @pre Start() has NOT been called.
+  ///
+  /// @param name The car's name, which must be unique among all cars. Otherwise
+  /// a std::runtime_error will be thrown.
+  ///
+  /// @param curve See documentation of TrajectoryCar::TrajectoryCar.
+  ///
+  /// @param speed See documentation of TrajectoryCar::TrajectoryCar.
+  ///
+  /// @param start_time See documentation of TrajectoryCar::TrajectoryCar.
+  ///
+  /// @return The ID of the car that was just added to the simulation.
+  int AddIdmControlledPriusTrajectoryCar(
+      const std::string& name, const Curve2<double>& curve, double speed,
+      double start_time);
+
   /// Adds a MaliputRailcar to this simulation visualized as a Toyota Prius.
   ///
   /// @pre Start() has NOT been called.

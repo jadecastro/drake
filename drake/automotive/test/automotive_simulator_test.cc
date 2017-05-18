@@ -27,7 +27,7 @@ namespace {
 // Simple touches on the getters.
 GTEST_TEST(AutomotiveSimulatorTest, BasicTest) {
   auto simulator = std::make_unique<AutomotiveSimulator<double>>();
-  EXPECT_NE(nullptr, simulator->get_lcm());
+  EXPECT_FALSE(simulator->has_lcm());
   EXPECT_NE(nullptr, simulator->get_builder());
 }
 
@@ -170,10 +170,11 @@ GTEST_TEST(AutomotiveSimulatorTest, TestMobilControlledSimpleCar) {
   ASSERT_NE(lcm, nullptr);
 
   const maliput::api::RoadGeometry* road{};
-  EXPECT_NO_THROW(road = simulator->SetRoadGeometry(
-      std::make_unique<const maliput::dragway::RoadGeometry>(
-          maliput::api::RoadGeometryId({"TestDragway"}), 2 /* num lanes */,
-          100 /* length */, 4 /* lane width */, 1 /* shoulder width */)));
+  EXPECT_NO_THROW(
+      road = simulator->SetRoadGeometry(
+          std::make_unique<const maliput::dragway::RoadGeometry>(
+              maliput::api::RoadGeometryId({"TestDragway"}), 2 /* num lanes */,
+              100 /* length */, 4 /* lane width */, 1 /* shoulder width */)));
 
   // Create one MOBIL car and two stopped cars arranged as follows:
   //
@@ -186,9 +187,8 @@ GTEST_TEST(AutomotiveSimulatorTest, TestMobilControlledSimpleCar) {
   simple_car_state.set_x(2);
   simple_car_state.set_y(-2);
   simple_car_state.set_velocity(10);
-  const int id_mobil =
-      simulator->AddMobilControlledSimpleCar("mobil", true /* with_s */,
-                                             simple_car_state);
+  const int id_mobil = simulator->AddMobilControlledSimpleCar(
+      "mobil", true /* with_s */, simple_car_state);
   EXPECT_EQ(id_mobil, 0);
 
   MaliputRailcarState<double> decoy_state;
@@ -579,19 +579,18 @@ GTEST_TEST(AutomotiveSimulatorTest, TestRailcarVelocityOutput) {
       std::make_unique<lcm::DrakeMockLcm>());
 
   const MaliputRailcarParams<double> params;
-  const maliput::api::RoadGeometry* road =
-      simulator->SetRoadGeometry(
-          std::make_unique<const maliput::dragway::RoadGeometry>(
-              maliput::api::RoadGeometryId({"TestDragway"}), 1 /* num lanes */,
-              100 /* length */, 4 /* lane width */, 1 /* shoulder width */));
+  const maliput::api::RoadGeometry* road = simulator->SetRoadGeometry(
+      std::make_unique<const maliput::dragway::RoadGeometry>(
+          maliput::api::RoadGeometryId({"TestDragway"}), 1 /* num lanes */,
+          100 /* length */, 4 /* lane width */, 1 /* shoulder width */));
   MaliputRailcarState<double> alice_initial_state;
   alice_initial_state.set_s(5);
   alice_initial_state.set_speed(1);
-  const int alice_id = simulator->AddPriusMaliputRailcar("Alice",
-      LaneDirection(road->junction(0)->segment(0)->lane(0)), params,
+  const int alice_id = simulator->AddPriusMaliputRailcar(
+      "Alice", LaneDirection(road->junction(0)->segment(0)->lane(0)), params,
       alice_initial_state);
-  const int bob_id = simulator->AddIdmControlledPriusMaliputRailcar("Bob",
-      LaneDirection(road->junction(0)->segment(0)->lane(0)), params,
+  const int bob_id = simulator->AddIdmControlledPriusMaliputRailcar(
+      "Bob", LaneDirection(road->junction(0)->segment(0)->lane(0)), params,
       MaliputRailcarState<double>() /* initial state */);
 
   EXPECT_NO_THROW(simulator->Start());
@@ -616,7 +615,8 @@ GTEST_TEST(AutomotiveSimulatorTest, TestRailcarVelocityOutput) {
 
 // Tests Build/Start logic
 GTEST_TEST(AutomotiveSimulatorTest, TestBuild) {
-  auto simulator = std::make_unique<AutomotiveSimulator<double>>();
+  auto simulator = std::make_unique<AutomotiveSimulator<double>>(
+      std::make_unique<lcm::DrakeMockLcm>());
 
   simulator->AddPriusSimpleCar("Model1", "Channel1");
   simulator->AddPriusSimpleCar("Model2", "Channel2");
@@ -632,7 +632,8 @@ GTEST_TEST(AutomotiveSimulatorTest, TestBuild) {
 
 // Tests Build/Start logic (calling Start only)
 GTEST_TEST(AutomotiveSimulatorTest, TestBuild2) {
-  auto simulator = std::make_unique<AutomotiveSimulator<double>>();
+  auto simulator = std::make_unique<AutomotiveSimulator<double>>(
+      std::make_unique<lcm::DrakeMockLcm>());
 
   simulator->AddPriusSimpleCar("Model1", "Channel1");
   simulator->AddPriusSimpleCar("Model2", "Channel2");

@@ -37,7 +37,9 @@ void ConstantVectorSource<T>::DoCalcVectorOutput(
 template <typename T>
 ConstantVectorSource<AutoDiffXd>* ConstantVectorSource<T>::DoToAutoDiffXd()
     const {
-  return new ConstantVectorSource<AutoDiffXd>(source_value_);
+  //const Eigen::Ref<const VectorX<T>> value(source_value_);
+  return new ConstantVectorSource<AutoDiffXd>(
+      source_value_.template cast<const VectorX<T>>());
 }
 */
 

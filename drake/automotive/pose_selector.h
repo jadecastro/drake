@@ -7,7 +7,9 @@
 
 #include "drake/automotive/maliput/api/lane.h"
 #include "drake/automotive/maliput/api/road_geometry.h"
+#include "drake/common/autodiff_overloads.h"
 #include "drake/common/drake_copyable.h"
+#include "drake/common/eigen_autodiff_types.h"
 #include "drake/systems/rendering/pose_bundle.h"
 #include "drake/systems/rendering/pose_vector.h"
 
@@ -57,10 +59,11 @@ struct RoadOdometry {
 ///
 /// TODO(jadecastro): Support vehicles traveling in the negative-`s`-direction
 /// in a given Lane.
-const std::pair<RoadOdometry<double>, RoadOdometry<double>> FindClosestPair(
+template <typename T>
+const std::pair<RoadOdometry<T>, RoadOdometry<T>> FindClosestPair(
     const maliput::api::RoadGeometry& road,
-    const systems::rendering::PoseVector<double>& ego_pose,
-    const systems::rendering::PoseBundle<double>& traffic_poses,
+    const systems::rendering::PoseVector<T>& ego_pose,
+    const systems::rendering::PoseBundle<T>& traffic_poses,
     const maliput::api::Lane* traffic_lane = nullptr);
 
 /// Same as FindClosestPair() except that: (1) it only considers the ego car's
@@ -68,16 +71,18 @@ const std::pair<RoadOdometry<double>, RoadOdometry<double>> FindClosestPair(
 ///
 ///  Note that when no car is detected in front of the ego car, the returned
 ///  RoadOdometry will contain an `s`-value of
-///  `std::numeric_limits<double>::infinity()`.
-const RoadOdometry<double> FindClosestLeading(
+///  `std::numeric_limits<double>::infinity()`.c
+template <typename T>
+const RoadOdometry<T> FindClosestLeading(
     const maliput::api::RoadGeometry& road,
-    const systems::rendering::PoseVector<double>& ego_pose,
-    const systems::rendering::PoseBundle<double>& traffic_poses);
+    const systems::rendering::PoseVector<T>& ego_pose,
+    const systems::rendering::PoseBundle<T>& traffic_poses);
 
 /// Computes the RoadPosition for a car whose @p pose is located on a given @p
 /// road.
+template <typename T>
 const maliput::api::RoadPosition CalcRoadPosition(
-    const maliput::api::RoadGeometry& road, const Isometry3<double>& pose);
+    const maliput::api::RoadGeometry& road, const Isometry3<T>& pose);
 
 // Extracts the vehicle's `s`-direction velocity based on its RoadOdometry @p
 // road_odom.  Assumes the road has zero elevation and superelevation.
