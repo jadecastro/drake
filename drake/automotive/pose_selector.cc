@@ -46,48 +46,6 @@ PoseSelector::FindClosestPair(const Lane* const lane,
   return std::make_pair(result_leading, result_trailing);
 }
 
-const RoadOdometry<double> PoseSelector::FindSingleClosestAheadAndInBranches(
-    const RoadGeometry& road, const PoseVector<double>& ego_pose,
-    const FrameVelocity<double>& ego_velocity,
-    const PoseBundle<double>& traffic_poses, double scan_distance,
-    double* distance) {
-  const GeoPosition geo_position{ego_pose.get_translation().x(),
-                                 ego_pose.get_translation().y(),
-                                 ego_pose.get_translation().z()};
-  const Lane* const lane =
-      road.ToRoadPosition(geo_position, nullptr, nullptr, nullptr).lane;
-
-  // Find any leading traffic cars along the same default path as the ego
-  // vehicle.
-  double headway_distance{};
-  const RoadOdometry<double> result_in_path = FindSingleClosestPose(
-      lane, ego_pose, ego_velocity, traffic_poses, scan_distance,
-      WhichSide::kAhead, &headway_distance);
-
-  const std::vector<LaneEndDistance> branches =
-      FindBranches(road, ego_pose, ego_velocity, scan_distance);
-
-  if (distance != nullptr) *distance = headway_distance;
-  if (branches.size() == 0) return result_in_path;
-
-  const RoadPosition ego_position =
-      road.ToRoadPosition(geo_position, nullptr, nullptr, nullptr);
-  const double ego_sigma_v =
-      GetIsoLaneVelocity(ego_position, ego_velocity).sigma_v;
-
-  // Find any leading traffic cars in lanes leading into the ego vehicle's
-  // default path.
-  double effective_headway{};
-  const RoadOdometry<double> result_in_branch = FindSingleClosestAcrossBranches(
-      road, traffic_poses, ego_sigma_v, branches, &effective_headway);
-
-  if (distance != nullptr) {
-    *distance = std::min(headway_distance, effective_headway);
-  }
-  if (headway_distance <= effective_headway) return result_in_path;
-  return result_in_branch;
-}
-
 const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
     const Lane* const lane, const PoseVector<double>& ego_pose,
     const FrameVelocity<double>& ego_velocity,
@@ -225,133 +183,6 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
   return default_result;
 }
 
-const RoadOdometry<double> PoseSelector::FindSingleClosestAcrossBranches(
-    const RoadGeometry& road, const PoseBundle<double>& traffic_poses,
-    double ego_sigma_v, const std::vector<LaneEndDistance>& branches,
-    double* headway_distance) {
-  DRAKE_DEMAND(headway_distance != nullptr);
-
-  *headway_distance = std::numeric_limits<double>::infinity();
-  RoadOdometry<double> result =
-      set_default_odometry(nullptr, WhichSide::kAhead);
-
-  for (int i = 0; i < traffic_poses.get_num_poses(); ++i) {
-    const Isometry3<double> isometry = traffic_poses.get_pose(i);
-    const GeoPosition geo_position(isometry.translation().x(),
-                                   isometry.translation().y(),
-                                   isometry.translation().z());
-    const RoadPosition road_position =
-        road.ToRoadPosition(geo_position, nullptr, nullptr, nullptr);
-
-    const Lane* const lane = road_position.lane;
-    const LanePosition lane_position = road_position.pos;
-
-    // Get this traffic vehicle's velocity and travel direction in the lane it
-    // is occupying.
-    const IsoLaneVelocity lane_velocity = GetIsoLaneVelocity(
-        {lane, lane_position}, traffic_poses.get_velocity(i));
-    LaneDirection lane_direction(lane,
-                                 lane_velocity.sigma_v >= 0. /* with_s */);
-    double ego_distance_to_this_branch{};
-    LaneEnd branch;
-    double distance_scanned = (lane_direction.with_s)
-                                  ? -lane_position.s()
-                                  : lane_position.s() - lane->length();
-    // Determine if any of the traffic cars eventually lead to a branch within a
-    // speed- and branch-dependent influence distance horizon.
-    for (auto branch_distance : branches) {
-      std::tie(ego_distance_to_this_branch, branch) = branch_distance;
-
-      // The distance ahead needed to scan for intersection is assumed equal to
-      // the distance scanned in the ego vehicle's lane times the ratio of
-      // s-velocity of the traffic car to that of the ego car.  Cars much slower
-      // than the ego car are thus phased out closer to the branch-point, while
-      // those that are faster remain in scope further away from the
-      // branch-point.
-      const double distance_to_scan =
-          std::abs(lane_velocity.sigma_v / ego_sigma_v) *
-          ego_distance_to_this_branch;
-
-      double effective_headway{};
-      while (distance_scanned < distance_to_scan) {
-        if (lane_direction.lane == nullptr) break;
-        auto lane_direction_pre = lane_direction;
-        // If this vehicle is in the branch lane, then use it to compute the
-        // effective headway distance to the ego vehicle.  Otherwise continue
-        // down the default lanes looking for the branch lane up to
-        // distance_to_scan.
-        if (IsEqual(lane_direction.lane, branch.lane)) {
-          const double distance_to_lane_end =
-              distance_scanned + lane_direction_pre.lane->length();
-          // "Effective headway" is the distance between the traffic vehicle and
-          // the ego vehicle, compared relative to their positions with respect
-          // to their shared branch point.
-          effective_headway =
-              ego_distance_to_this_branch - distance_to_lane_end;
-        }
-        if (0. < effective_headway && effective_headway < *headway_distance) {
-          *headway_distance = effective_headway;
-          result =
-              RoadOdometry<double>({lane_direction_pre.lane, lane_position},
-                                   traffic_poses.get_velocity(i));
-          break;
-        }
-        get_default_ongoing_lane(&lane_direction);
-        if (lane_direction.lane == nullptr) break;
-        // Increment distance_scanned.
-        distance_scanned += lane_direction.lane->length();
-      }
-    }
-  }
-  return result;
-}
-
-const std::vector<PoseSelector::LaneEndDistance> PoseSelector::FindBranches(
-    const RoadGeometry& road, const PoseVector<double>& ego_pose,
-    const FrameVelocity<double>& ego_velocity, double scan_distance) {
-  const GeoPosition ego_geo_position{ego_pose.get_translation().x(),
-                                     ego_pose.get_translation().y(),
-                                     ego_pose.get_translation().z()};
-  // Transform the ego car's pose into the lane's frame.
-  const RoadPosition ego_road_position =
-      road.ToRoadPosition(ego_geo_position, nullptr, nullptr, nullptr);
-  DRAKE_DEMAND(ego_road_position.lane != nullptr);
-
-  // Get the ego car's velocity and lane direction in the trial lane.
-  const IsoLaneVelocity ego_lane_velocity = GetIsoLaneVelocity(
-      {ego_road_position.lane, ego_road_position.pos}, ego_velocity);
-  LaneDirection lane_direction(ego_road_position.lane,
-                               ego_lane_velocity.sigma_v >= 0. /* with_s */);
-  // Obtain any branches starting from the ego vehicle's lane, moving along its
-  // direction of travel by an amount equal to scan_distance.
-  std::vector<LaneEndDistance> branches;
-  double distance_scanned =
-      (lane_direction.with_s)
-          ? -ego_road_position.pos.s()
-          : ego_road_position.pos.s() - lane_direction.lane->length();
-  std::unique_ptr<LaneEnd> lane_end =
-      (lane_direction.with_s)
-          ? lane_direction.lane->GetDefaultBranch(LaneEnd::kFinish)
-          : lane_direction.lane->GetDefaultBranch(LaneEnd::kStart);
-  while (distance_scanned < scan_distance) {
-    // Increment distance_scanned and collect all non-trivial branches as we go.
-    distance_scanned += lane_direction.lane->length();
-    const LaneEndSet* ends = GetIncomingLaneEnds(lane_direction);
-    if (lane_end != nullptr && ends->size() > 1) {
-      for (int i = 0; i < ends->size(); ++i) {
-        // Store, from the complete list, the LaneEnds that do not belong to the
-        // main trunk (lane sequence containing the ego vehicle).
-        if (!IsAdjacent(*lane_end, ends->get(i))) {
-          branches.emplace_back(std::make_pair(distance_scanned, ends->get(i)));
-        }
-      }
-    }
-    lane_end = get_default_ongoing_lane(&lane_direction);
-    if (lane_direction.lane == nullptr) break;
-  }
-  return branches;
-}
-
 const IsoLaneVelocity PoseSelector::GetIsoLaneVelocity(
     const RoadPosition& road_position, const FrameVelocity<double>& velocity) {
   const double large_s_value{1e9};
@@ -373,30 +204,6 @@ bool PoseSelector::IsWithinLane(const GeoPosition& geo_position,
   return distance == 0.;
 }
 
-bool PoseSelector::IsAdjacent(const LaneEnd& lane_end0,
-                              const LaneEnd& lane_end1) {
-  const LanePosition end0 =
-      (lane_end0.end == LaneEnd::Which::kStart)
-          ? LanePosition(0., 0., 0.)
-          : LanePosition(lane_end0.lane->length(), 0., 0.);
-  const GeoPosition datum0 = lane_end0.lane->ToGeoPosition(end0);
-  const LanePosition end1 =
-      (lane_end1.end == LaneEnd::Which::kFinish)
-          ? LanePosition(0., 0., 0.)
-          : LanePosition(lane_end1.lane->length(), 0., 0.);
-  const GeoPosition datum1 = lane_end1.lane->ToGeoPosition(end1);
-  return (datum0.x() == datum1.x()) && (datum0.y() == datum1.y()) &&
-         (datum0.z() == datum1.z());
-}
-
-bool PoseSelector::IsEqual(const Lane* const lane0, const Lane* const lane1) {
-  GeoPosition endpoint0a = lane0->ToGeoPosition({0., 0., 0.});
-  GeoPosition endpoint1a = lane1->ToGeoPosition({0., 0., 0.});
-  GeoPosition endpoint0b = lane0->ToGeoPosition({lane0->length(), 0., 0.});
-  GeoPosition endpoint1b = lane1->ToGeoPosition({lane1->length(), 0., 0.});
-  return (endpoint0a == endpoint1a) && (endpoint0b == endpoint1b);
-}
-
 std::unique_ptr<LaneEnd> PoseSelector::get_default_ongoing_lane(
     LaneDirection* lane_direction) {
   const Lane* lane{lane_direction->lane};
@@ -412,14 +219,6 @@ std::unique_ptr<LaneEnd> PoseSelector::get_default_ongoing_lane(
   lane_direction->lane = branch->lane;
   lane_direction->with_s = (branch->end == LaneEnd::kStart) ? true : false;
   return branch;
-}
-
-const LaneEndSet* PoseSelector::GetIncomingLaneEnds(
-    const LaneDirection& lane_direction) {
-  const Lane* lane{lane_direction.lane};
-  const bool with_s{lane_direction.with_s};
-  return (with_s) ? lane->GetConfluentBranches(LaneEnd::kFinish)
-                  : lane->GetConfluentBranches(LaneEnd::kStart);
 }
 
 const RoadOdometry<double> PoseSelector::set_default_odometry(
