@@ -105,6 +105,7 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
                                      ego_pose.get_translation().z()};
   const LanePosition ego_lane_position =
       lane->ToLanePosition(ego_geo_position, nullptr, nullptr);
+  std::cerr << " lane " << lane->id().id << std::endl;
 
   // Get the ego car's velocity and lane direction in the trial lane.
   const IsoLaneVelocity ego_lane_velocity =
@@ -134,6 +135,10 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
                                              traffic_iso.translation().z());
 
       if (ego_geo_position == traffic_geo_position) continue;
+      std::cerr << "   traffic_geo_position.y() "
+                << traffic_geo_position.y() << std::endl;
+      std::cerr << "   lane_direction.lane " << lane_direction.lane->id().id
+                << std::endl;
       if (!IsWithinLane(traffic_geo_position, lane_direction.lane)) continue;
 
       const LanePosition traffic_lane_position =
@@ -141,6 +146,7 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
                                               nullptr);
       switch (side) {
         case WhichSide::kAhead: {
+          std::cerr << " (query) AHEAD " << std::endl;
           // Ignore traffic behind the ego car when the two share the same lane.
           // For all other lanes, we will be traversing forward from the current
           // one, with respect to the car's direction.
@@ -153,7 +159,6 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
             }
           }
           // Keep positions that are closer than any other found so far.
-          std::cerr << " result.pos.s() " << result.pos.s() << std::endl;
           std::cerr << " traffic_lane_position.s() " << traffic_lane_position.s() << std::endl;
           if ((lane_direction.with_s &&
                traffic_lane_position.s() < result.pos.s()) ||
@@ -162,6 +167,7 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
             result = RoadOdometry<double>(
                 {lane_direction.lane, traffic_lane_position},
                 traffic_poses.get_velocity(i));
+            std::cerr << " result.pos.s() " << result.pos.s() << std::endl;
             distance_increment =
                 (lane_direction.with_s)
                     ? result.pos.s()
@@ -169,6 +175,7 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
           }
         }
         case WhichSide::kBehind: {
+          std::cerr << " (query) BEHIND " << std::endl;
           // Ignore traffic ahead of the ego car when the two share the same
           // lane.  For all other lanes, we will be traversing backward from the
           // current one, with respect to the car's direction.
@@ -181,6 +188,7 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
             }
           }
           // Keep positions that are closer than any other found so far.
+          std::cerr << " traffic_lane_position.s() " << traffic_lane_position.s() << std::endl;
           if ((lane_direction.with_s &&
                traffic_lane_position.s() > result.pos.s()) ||
               (!lane_direction.with_s &&
@@ -188,6 +196,7 @@ const RoadOdometry<double> PoseSelector::FindSingleClosestPose(
             result = RoadOdometry<double>(
                 {lane_direction.lane, traffic_lane_position},
                 traffic_poses.get_velocity(i));
+            std::cerr << " result.pos.s() " << result.pos.s() << std::endl;
             distance_increment =
                 (lane_direction.with_s)
                     ? (lane_direction.lane->length() - result.pos.s())
@@ -360,6 +369,7 @@ bool PoseSelector::IsWithinLane(const GeoPosition& geo_position,
                                 const Lane* const lane) {
   double distance;
   lane->ToLanePosition(geo_position, nullptr, &distance);
+  std::cerr << " IsWithinLane::distance  " << distance << std::endl;
   return distance == 0.;
 }
 
