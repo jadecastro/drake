@@ -19,7 +19,7 @@ using systems::rendering::PoseVector;
 using systems::rendering::PoseBundle;
 
 constexpr double kLaneLength{100.};
-constexpr double kLaneWidth{4.};
+constexpr double kLaneWidth{2.};
 
 constexpr double kEgoSPosition{10.};
 constexpr double kEgoRPosition{-0.5 * kLaneWidth};
@@ -404,7 +404,7 @@ GTEST_TEST(PoseSelectorTest, TestGetIsoVelocity) {
   // infinity.
   position.pos.set_s(std::numeric_limits<double>::infinity());
   iso_velocity = PoseSelector::GetIsoLaneVelocity(position, velocity);
-  EXPECT_NEAR(100. * std::sqrt(2.) / 2., iso_velocity.sigma_v, 1e-12);
+  EXPECT_NEAR(10. * std::sqrt(2.) / 2., iso_velocity.sigma_v, 1e-12);
 }
 
 }  // namespace
