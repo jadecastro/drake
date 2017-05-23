@@ -103,6 +103,11 @@ class TrajectoryCar : public systems::LeafSystem<T> {
     T heading{0.};
   };
 
+  bool DoHasDirectFeedthrough(const systems::SparsityMatrix* sparsity,
+                              int input_port, int output_port) const override {
+    return false;
+  };
+
   void DoCalcOutput(const systems::Context<T>& context,
                     systems::SystemOutput<T>* output) const override {
     // Obtain the state vector.

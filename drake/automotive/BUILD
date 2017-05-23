@@ -128,6 +128,19 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "create_trajectory_params",
+    srcs = ["create_trajectory_params.cc"],
+    hdrs = ["create_trajectory_params.h"],
+    deps = [
+        ":curve2",
+        ":trajectory_car",
+        "//drake/automotive/maliput/api",
+        "//drake/automotive/maliput/dragway",
+        "//drake/common:symbolic",
+    ],
+)
+
+drake_cc_library(
     name = "curve2",
     srcs = ["curve2.cc"],
     hdrs = ["curve2.h"],
@@ -146,6 +159,7 @@ drake_cc_library(
         ":idm_planner",
         ":pose_selector",
         "//drake/automotive/maliput/api",
+        "//drake/common:autodiff",
         "//drake/math:saturate",
         "//drake/systems/rendering:pose_bundle",
         "//drake/systems/rendering:pose_vector",
@@ -223,6 +237,7 @@ drake_cc_library(
     deps = [
         "//drake/automotive:lane_direction",
         "//drake/automotive/maliput/api",
+        "//drake/common:autodiff",
         "//drake/math:saturate",
         "//drake/systems/rendering:pose_bundle",
         "//drake/systems/rendering:pose_vector",
@@ -367,7 +382,7 @@ drake_cc_library(
         "//drake/systems/analysis",
         "//drake/systems/lcm",
         "//drake/systems/lcm:lcmt_drake_signal_translator",
-        "//drake/systems/primitives:multiplexer",
+        "//drake/systems/primitives",
         "//drake/systems/rendering:pose_aggregator",
         "//drake/systems/rendering:pose_bundle_to_draw_message",
     ],
@@ -377,14 +392,13 @@ drake_cc_binary(
     name = "automotive_demo",
     srcs = [
         "automotive_demo.cc",
-        "create_trajectory_params.cc",
-        "create_trajectory_params.h",
     ],
     data = [
         ":models",
     ],
     deps = [
         ":automotive_simulator",
+        ":create_trajectory_params",
         ":monolane_onramp_merge",
         "//drake/automotive/maliput/dragway",
         "//drake/common:text_logging_gflags",

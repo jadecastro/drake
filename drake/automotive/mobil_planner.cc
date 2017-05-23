@@ -184,8 +184,9 @@ const std::pair<T, T> MobilPlanner<T>::ComputeIncentives(
   RoadOdometry<T> leading_odometry{};
   RoadOdometry<T> trailing_odometry{};
   std::tie(leading_odometry, trailing_odometry) =
-      PoseSelector::FindClosestPair(ego_position.lane, ego_pose, ego_velocity,
-                                    traffic_poses, scan_distance, &distances);
+      PoseSelector<T>::FindClosestPair(
+          ego_position.lane, ego_pose, ego_velocity, traffic_poses,
+          scan_distance, &distances);
   T leading_distance{};
   T trailing_distance{};
   std::tie(leading_distance, trailing_distance) = distances;
@@ -206,8 +207,9 @@ const std::pair<T, T> MobilPlanner<T>::ComputeIncentives(
   // Compute the incentive for the left lane.
   if (lanes.first != nullptr) {
     const OdometryPair& odometries =
-        PoseSelector::FindClosestPair(lanes.first, ego_pose, ego_velocity,
-                                      traffic_poses, scan_distance, &distances);
+        PoseSelector<T>::FindClosestPair(lanes.first, ego_pose, ego_velocity,
+                                         traffic_poses, scan_distance,
+                                         &distances);
     ComputeIncentiveOutOfLane(
         idm_params, mobil_params, odometries, ego_odometry, ego_acceleration,
         trailing_delta_accel_this, distances, &incentives.first);
@@ -215,8 +217,9 @@ const std::pair<T, T> MobilPlanner<T>::ComputeIncentives(
   // Compute the incentive for the right lane.
   if (lanes.second != nullptr) {
     const OdometryPair& odometries =
-        PoseSelector::FindClosestPair(lanes.second, ego_pose, ego_velocity,
-                                      traffic_poses, scan_distance, &distances);
+        PoseSelector<T>::FindClosestPair(lanes.second, ego_pose, ego_velocity,
+                                         traffic_poses, scan_distance,
+                                         &distances);
     ComputeIncentiveOutOfLane(
         idm_params, mobil_params, odometries, ego_odometry, ego_acceleration,
         trailing_delta_accel_this, distances, &incentives.second);
@@ -267,9 +270,9 @@ const T MobilPlanner<T>::EvaluateIdm(const IdmPlannerParameters<T>& idm_params,
                                      const RoadOdometry<T>& ego_odometry,
                                      const RoadOdometry<T>& lead_car_odometry,
                                      const T& headway_distance) const {
-  const T& s_dot_ego = PoseSelector::GetIsoLaneVelocity(
+  const T& s_dot_ego = PoseSelector<T>::GetIsoLaneVelocity(
       {ego_odometry.lane, ego_odometry.pos}, ego_odometry.vel).sigma_v;
-  const T& s_dot_lead = PoseSelector::GetIsoLaneVelocity(
+  const T& s_dot_lead = PoseSelector<T>::GetIsoLaneVelocity(
       {lead_car_odometry.lane, lead_car_odometry.pos},
       lead_car_odometry.vel).sigma_v;
 
