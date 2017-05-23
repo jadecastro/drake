@@ -27,7 +27,7 @@ namespace {
 // Simple touches on the getters.
 GTEST_TEST(AutomotiveSimulatorTest, BasicTest) {
   auto simulator = std::make_unique<AutomotiveSimulator<double>>();
-  EXPECT_NE(nullptr, simulator->get_lcm());
+  EXPECT_FALSE(simulator->has_lcm());
   EXPECT_NE(nullptr, simulator->get_builder());
 }
 
@@ -616,7 +616,8 @@ GTEST_TEST(AutomotiveSimulatorTest, TestRailcarVelocityOutput) {
 
 // Tests Build/Start logic
 GTEST_TEST(AutomotiveSimulatorTest, TestBuild) {
-  auto simulator = std::make_unique<AutomotiveSimulator<double>>();
+  auto simulator = std::make_unique<AutomotiveSimulator<double>>(
+      std::make_unique<lcm::DrakeMockLcm>());
 
   simulator->AddPriusSimpleCar("Model1", "Channel1");
   simulator->AddPriusSimpleCar("Model2", "Channel2");
@@ -632,7 +633,8 @@ GTEST_TEST(AutomotiveSimulatorTest, TestBuild) {
 
 // Tests Build/Start logic (calling Start only)
 GTEST_TEST(AutomotiveSimulatorTest, TestBuild2) {
-  auto simulator = std::make_unique<AutomotiveSimulator<double>>();
+  auto simulator = std::make_unique<AutomotiveSimulator<double>>(
+      std::make_unique<lcm::DrakeMockLcm>());
 
   simulator->AddPriusSimpleCar("Model1", "Channel1");
   simulator->AddPriusSimpleCar("Model2", "Channel2");
