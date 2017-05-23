@@ -641,7 +641,11 @@ drake_cc_googletest(
 drake_cc_googletest(
     name = "trajectory_optimization_test",
     deps = [
+        ":automotive_simulator",
+        ":create_trajectory_params",
         ":simple_car",
+        "//drake/automotive/maliput/api",
+        "//drake/automotive/maliput/dragway",
         "//drake/common:call_matlab",
         "//drake/common:eigen_matrix_compare",
         "//drake/systems/trajectory_optimization:direct_collocation",

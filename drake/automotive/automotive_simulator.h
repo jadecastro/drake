@@ -49,9 +49,10 @@ class AutomotiveSimulator {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(AutomotiveSimulator)
 
-  /// A constructor that configures this object to use DrakeLcm, which
-  /// encapsulates a _real_ LCM instance.
+  /// The default constructor does NOT perform any visualization.
   AutomotiveSimulator();
+
+  /// A constructor that configures this object to use lcm for visualization.
   explicit AutomotiveSimulator(std::unique_ptr<lcm::DrakeLcmInterface> lcm);
   ~AutomotiveSimulator();
 
@@ -70,14 +71,16 @@ class AutomotiveSimulator {
   /// @param name The car's name, which must be unique among all cars. Otherwise
   /// a std::runtime_error will be thrown.
   ///
-  /// @param channel_name  The SimpleCar will subscribe to an LCM channel of
-  /// this name to receive commands.  It must be non-empty.
+  /// @param channel_name  If the channel_name is non-empty, then the SimpleCar
+  /// will subscribe to an LCM channel of this name to receive commands.  If
+  /// it is empty, then the input port fixed to a DrivingCommand using the
+  /// default constructor.
   ///
   /// @param initial_state The SimpleCar's initial state.
   ///
   /// @return The ID of the car that was just added to the simulation.
   int AddPriusSimpleCar(
-      const std::string& name, const std::string& channel_name,
+      const std::string& name, const std::string& channel_name = std::string(),
       const SimpleCarState<T>& initial_state = SimpleCarState<T>());
 
   /// Adds a SimpleCar to this simulation controlled by a MOBIL planner coupled
@@ -121,6 +124,26 @@ class AutomotiveSimulator {
   int AddPriusTrajectoryCar(const std::string& name,
                             const Curve2<double>& curve, double speed,
                             double start_time);
+
+  /// Adds a TrajectoryCar to this simulation visualized as a Toyota Prius that
+  /// is controlled via an IdmController. This includes its EulerFloatingJoint
+  /// output.
+  ///
+  /// @pre Start() has NOT been called.
+  ///
+  /// @param name The car's name, which must be unique among all cars. Otherwise
+  /// a std::runtime_error will be thrown.
+  ///
+  /// @param curve See documentation of TrajectoryCar::TrajectoryCar.
+  ///
+  /// @param speed See documentation of TrajectoryCar::TrajectoryCar.
+  ///
+  /// @param start_time See documentation of TrajectoryCar::TrajectoryCar.
+  ///
+  /// @return The ID of the car that was just added to the simulation.
+  int AddIdmControlledPriusTrajectoryCar(
+      const std::string& name, const Curve2<double>& curve, double speed,
+      double start_time);
 
   /// Adds a MaliputRailcar to this simulation visualized as a Toyota Prius.
   ///
@@ -246,6 +269,9 @@ class AutomotiveSimulator {
   // TODO(jwnimmer-tri) Perhaps our class should be AutomotiveSimulatorBuilder?
   // Port a few more demo programs, then decide what looks best.
   void Start(double target_realtime_rate = 0.0);
+
+  /// Returns whether the automotive simulator has lcm enabled.
+  bool has_lcm() const { return lcm_.get() != nullptr; }
 
   /// Returns whether the automotive simulator has started.
   bool has_started() const { return simulator_ != nullptr; }
