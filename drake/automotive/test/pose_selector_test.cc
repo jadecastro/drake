@@ -158,18 +158,6 @@ GTEST_TEST(PoseSelectorTest, DragwayTest) {
           scan_ahead_distance, WhichSide::kAhead, &distance);
   EXPECT_EQ(kLeadingSPosition, traffic_odometry.pos.s());
   EXPECT_EQ(kLeadingSPosition - kEgoSPosition, distance);
-  std::cerr << " ego_position.lane->id().id " << ego_position.lane->id().id
-            << std::endl;
-  std::cerr << " ego_pose.get_translation().x() "
-            << ego_pose.get_translation().x() << std::endl;
-  std::cerr << " traffic_poses.get_pose(0).translation().x() "
-            << traffic_poses.get_pose(0).translation().x() << std::endl;
-  std::cerr << " traffic_poses.get_pose(1).translation().x() "
-            << traffic_poses.get_pose(1).translation().x() << std::endl;
-  std::cerr << " traffic_poses.get_pose(2).translation().x() "
-            << traffic_poses.get_pose(2).translation().x() << std::endl;
-  std::cerr << " traffic_poses.get_pose(3).translation().x() "
-            << traffic_poses.get_pose(3).translation().x() << std::endl;
 
   // Peer into the adjacent lane to the left.
   std::tie(leading_odometry, trailing_odometry) = PoseSelector::FindClosestPair(
@@ -226,6 +214,14 @@ GTEST_TEST(PoseSelectorTest, DragwayTest) {
   EXPECT_EQ(-std::numeric_limits<double>::infinity(), distances.second);
 }
 
+GTEST_TEST(PoseSelectorTest, TestOngoingDefaultLanes) {
+  // Start the ego car at 10 on a multi-segment monolane, and then increment a
+  // traffic car ahead and into the next lane.  The result should be monotonic!
+
+
+  
+}
+
 // Verifies the result when the s-positions of the ego traffic vehicles have the
 // same s-position (side-by-side in adjacent lanes).
 GTEST_TEST(PoseSelectorTest, IdenticalSValues) {
@@ -246,17 +242,39 @@ GTEST_TEST(PoseSelectorTest, IdenticalSValues) {
                                  ego_pose.get_translation().z()};
   const RoadPosition& ego_road_position =
       road.ToRoadPosition(geo_position, nullptr, nullptr, nullptr);
-  RoadOdometry<double> leading_odometry{};
-  RoadOdometry<double> trailing_odometry{};
+  RoadOdometry<double> leading_odometry;
+  RoadOdometry<double> trailing_odometry;
+  std::pair<double, double> leading_trailing_distances{};
   // Peer into the adjacent lane to the left.
   std::tie(leading_odometry, trailing_odometry) = PoseSelector::FindClosestPair(
       ego_road_position.lane->to_left(), ego_pose, ego_velocity, traffic_poses,
-      1000 /* scan_ahead_distance */);
+      1000. /* scan_ahead_distance */, &leading_trailing_distances);
 
   // Verifies that the if the cars are side-by-side, then the traffic car is
-  // classified as a trailing car.
-  EXPECT_EQ(std::numeric_limits<double>::infinity(), leading_odometry.pos.s());
+  // classified as a trailing car (and not the leading car).
+  //
+  // N.B. The dragway has a magic teleportation device at the end of each lane
+  // that returns cars to the opposite end of the lane.  The effect is that, for
+  // scan_ahead_distances greater than kLaneLength, cars located "behind" the
+  // ego will be also visible ahead of it.
+  EXPECT_EQ(kEgoSPosition, leading_odometry.pos.s());
+  EXPECT_EQ(kLaneLength,
+            leading_trailing_distances.first /* leading distance */);
   EXPECT_EQ(kEgoSPosition, trailing_odometry.pos.s());
+  EXPECT_EQ(0., leading_trailing_distances.second /* trailing distance */);
+
+  // Repeat the same computation, but with a myopic scan-ahead distance that is
+  // much smaller than kLaneLength.
+  std::tie(leading_odometry, trailing_odometry) = PoseSelector::FindClosestPair(
+      ego_road_position.lane->to_left(), ego_pose, ego_velocity, traffic_poses,
+      50. /* scan_ahead_distance */, &leading_trailing_distances);
+
+  // Verifies that no traffic car is seen ahead.
+  EXPECT_EQ(std::numeric_limits<double>::infinity(), leading_odometry.pos.s());
+  EXPECT_EQ(std::numeric_limits<double>::infinity(),
+            leading_trailing_distances.first /* leading distance */);
+  EXPECT_EQ(kEgoSPosition, trailing_odometry.pos.s());
+  EXPECT_EQ(0., leading_trailing_distances.second /* trailing distance */);
 }
 
 GTEST_TEST(PoseSelectorTest, TestGetIsoVelocity) {

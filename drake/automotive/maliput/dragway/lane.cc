@@ -98,8 +98,8 @@ api::LanePosition Lane::DoToLanePosition(
 
   const double min_x = 0;
   const double max_x = length_;
-  const double min_y = lane_bounds_.r_min + y_offset_;
-  const double max_y = lane_bounds_.r_max + y_offset_;
+  const double min_y = driveable_bounds_.r_min + y_offset_;
+  const double max_y = driveable_bounds_.r_max + y_offset_;
 
   const api::GeoPosition closest_point{
     math::saturate(geo_pos.x(), min_x, max_x),
