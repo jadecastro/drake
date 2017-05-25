@@ -7,6 +7,7 @@
 #include <sstream>
 
 #include "drake/common/drake_assert.h"
+#include "drake/common/extract_double.h"
 #include "drake/math/quaternion.h"
 #include "drake/math/saturate.h"
 
@@ -26,20 +27,20 @@ using systems::rendering::PoseBundle;
 using systems::rendering::PoseVector;
 
 template <typename T>
-const std::pair<const RoadOdometry<double>, const RoadOdometry<double>>
+const std::pair<const RoadOdometry<T>, const RoadOdometry<T>>
 PoseSelector<T>::FindClosestPair(const Lane* const lane,
-                                 const PoseVector<double>& ego_pose,
-                                 const FrameVelocity<double>& ego_velocity,
-                                 const PoseBundle<double>& traffic_poses,
+                                 const PoseVector<T>& ego_pose,
+                                 const FrameVelocity<T>& ego_velocity,
+                                 const PoseBundle<T>& traffic_poses,
                                  double scan_distance,
-                                 std::pair<double, double>* distances) {
-  double distance_ahead{};
-  double distance_behind{};
-  const RoadOdometry<double> result_leading =
-      FindSingleClosestPose<double>(lane, ego_pose, ego_velocity, traffic_poses,
+                                 std::pair<T, T>* distances) {
+  T distance_ahead{};
+  T distance_behind{};
+  const RoadOdometry<T> result_leading =
+      FindSingleClosestPose(lane, ego_pose, ego_velocity, traffic_poses,
                             scan_distance, WhichSide::kAhead, &distance_ahead);
-  const RoadOdometry<double> result_trailing =
-      FindSingleClosestPose<double>(lane, ego_pose, ego_velocity, traffic_poses,
+  const RoadOdometry<T> result_trailing =
+      FindSingleClosestPose(lane, ego_pose, ego_velocity, traffic_poses,
                             scan_distance, WhichSide::kBehind,
                             &distance_behind);
   if (distances != nullptr) {
@@ -49,66 +50,51 @@ PoseSelector<T>::FindClosestPair(const Lane* const lane,
 }
 
 template <typename T>
-const std::pair<const RoadOdometry<AutoDiffXd>, const RoadOdometry<AutoDiffXd>>
-PoseSelector<T>::FindClosestPair(const Lane* const lane,
-                                 const PoseVector<AutoDiffXd>& ego_pose,
-                                 const FrameVelocity<AutoDiffXd>& ego_velocity,
-                                 const PoseBundle<AutoDiffXd>& traffic_poses,
-                                 double scan_distance,
-                                 std::pair<AutoDiffXd, AutoDiffXd>* distances) {
-  DRAKE_ABORT();
-}
-
-template <typename T>
-template <typename T1>
-//typename std::enable_if<std::is_same<T1, double>::value,
-//                        const RoadOdometry<double>>::type
-const RoadOdometry<T1>
-PoseSelector<T>::FindSingleClosestPose(
-        const Lane* const lane, const PoseVector<T1>& ego_pose,
-        const FrameVelocity<
-        std::enable_if_t<std::is_same<T1, double>::value, T1>>&
-        ego_velocity,
-        const PoseBundle<T1>& traffic_poses, double scan_distance,
-        const WhichSide side, T1* distance) {
+const RoadOdometry<T> PoseSelector<T>::FindSingleClosestPose(
+        const Lane* const lane, const PoseVector<T>& ego_pose,
+        const FrameVelocity<T>& ego_velocity,
+        const PoseBundle<T>& traffic_poses, double scan_distance,
+        const WhichSide side, T* distance) {
   DRAKE_DEMAND(lane != nullptr);
   if (distance != nullptr) {
     *distance = (side == WhichSide::kAhead)
-                    ? std::numeric_limits<double>::infinity()
-                    : -std::numeric_limits<double>::infinity();
+                    ? std::numeric_limits<T>::infinity()
+                    : -std::numeric_limits<T>::infinity();
   }
-  const RoadOdometry<double> default_result = set_default_odometry(lane, side);
-  const GeoPosition ego_geo_position{ego_pose.get_translation().x(),
-                                     ego_pose.get_translation().y(),
-                                     ego_pose.get_translation().z()};
+  const RoadOdometry<T> default_result = set_default_odometry(lane, side);
+  const GeoPosition ego_geo_position{
+    ExtractDoubleOrThrow(ego_pose.get_translation().x()),
+        ExtractDoubleOrThrow(ego_pose.get_translation().y()),
+        ExtractDoubleOrThrow(ego_pose.get_translation().z())};
   const LanePosition ego_lane_position =
       lane->ToLanePosition(ego_geo_position, nullptr, nullptr);
 
   // Get the ego car's velocity and lane direction in the trial lane.
-  const RoadOdometry<double> road_odom({lane, ego_lane_position}, ego_velocity);
-  const double ego_sigma_v = PoseSelector<double>::GetSigmaVelocity(road_odom);
+  const RoadOdometry<T> road_odom({lane, ego_lane_position}, ego_velocity);
+  const T ego_sigma_v = GetSigmaVelocity(road_odom);
   LaneDirection lane_direction(lane, ego_sigma_v >= 0. /* with_s */);
 
   // Compute the s-direction of the ego car and its direction of travel.
   // N.B. `distance_scanned` is a net distance, so will always increase.
-  double distance_scanned{};
+  T distance_scanned{0.};
   if (side == WhichSide::kAhead) {
     distance_scanned = (lane_direction.with_s)
-                           ? -ego_lane_position.s()
-                           : ego_lane_position.s() - lane->length();
+        ? T(-ego_lane_position.s())
+        : T(ego_lane_position.s() - lane->length());
   } else {
     distance_scanned = (lane_direction.with_s)
-                           ? ego_lane_position.s() - lane->length()
-                           : -ego_lane_position.s();
+        ? T(ego_lane_position.s() - lane->length())
+        : T(-ego_lane_position.s());
   }
-  RoadOdometry<double> result = default_result;
-  while (distance_scanned < scan_distance) {
-    double distance_increment{};
+  RoadOdometry<T> result = default_result;
+  while (distance_scanned < T(scan_distance)) {
+    T distance_increment{};
     for (int i = 0; i < traffic_poses.get_num_poses(); ++i) {
-      const Isometry3<double> traffic_iso = traffic_poses.get_pose(i);
-      const GeoPosition traffic_geo_position(traffic_iso.translation().x(),
-                                             traffic_iso.translation().y(),
-                                             traffic_iso.translation().z());
+      Isometry3<T> traffic_iso = traffic_poses.get_pose(i);
+      const GeoPosition traffic_geo_position(
+          ExtractDoubleOrThrow(traffic_iso.translation().x()),
+          ExtractDoubleOrThrow(traffic_iso.translation().y()),
+          ExtractDoubleOrThrow(traffic_iso.translation().z()));
 
       if (ego_geo_position == traffic_geo_position) continue;
       if (!IsWithinLane(traffic_geo_position, lane_direction.lane)) continue;
@@ -121,7 +107,7 @@ PoseSelector<T>::FindSingleClosestPose(
           // Ignore traffic behind the ego car when the two share the same lane.
           // For all other lanes, we will be traversing forward from the current
           // one, with respect to the car's direction.
-          if (distance_scanned <= 0.) {
+          if (distance_scanned <= T(0.)) {
             if ((lane_direction.with_s &&
                  traffic_lane_position.s() <= ego_lane_position.s()) ||
                 (!lane_direction.with_s &&
@@ -134,7 +120,7 @@ PoseSelector<T>::FindSingleClosestPose(
                traffic_lane_position.s() <= result.pos.s()) ||
               (!lane_direction.with_s &&
                traffic_lane_position.s() >= result.pos.s())) {
-            result = RoadOdometry<double>(
+            result = RoadOdometry<T>(
               {lane_direction.lane, traffic_lane_position},
               traffic_poses.get_velocity(i));
             distance_increment =
@@ -147,7 +133,7 @@ PoseSelector<T>::FindSingleClosestPose(
           // Ignore traffic ahead of the ego car when the two share the same
           // lane.  For all other lanes, we will be traversing backward from the
           // current one, with respect to the car's direction.
-          if (distance_scanned <= 0.) {
+          if (distance_scanned <= T(0.)) {
             if ((lane_direction.with_s &&
                  traffic_lane_position.s() > ego_lane_position.s()) ||
                 (!lane_direction.with_s &&
@@ -160,7 +146,7 @@ PoseSelector<T>::FindSingleClosestPose(
                traffic_lane_position.s() > result.pos.s()) ||
               (!lane_direction.with_s &&
                traffic_lane_position.s() < result.pos.s())) {
-            result = RoadOdometry<double>(
+            result = RoadOdometry<T>(
                 {lane_direction.lane, traffic_lane_position},
                 traffic_poses.get_velocity(i));
             distance_increment =
@@ -173,7 +159,7 @@ PoseSelector<T>::FindSingleClosestPose(
     }
     if (std::abs(result.pos.s()) < std::numeric_limits<double>::infinity()) {
       // Figure out whether or not the result is within scan_distance.
-      if (distance_scanned + distance_increment < scan_distance) {
+      if (distance_scanned + distance_increment < T(scan_distance)) {
         if (distance != nullptr) {
           *distance = distance_scanned + distance_increment;
         }
@@ -181,28 +167,13 @@ PoseSelector<T>::FindSingleClosestPose(
       }
     }
     // Increment distance_scanned.
-    distance_scanned += lane_direction.lane->length();
+    distance_scanned += T(lane_direction.lane->length());
 
     // Obtain the next lane_direction in the scanned sequence.
     get_default_ongoing_lane(&lane_direction);
     if (lane_direction.lane == nullptr) return result;  // Infinity.
   }
   return default_result;
-}
-
-template <typename T>
-template <typename T1>
-//typename std::enable_if<!std::is_same<T1, double>::value,
-//                        const RoadOdometry<double>>::type
-const RoadOdometry<T1>
-PoseSelector<T>::FindSingleClosestPose(
-    const Lane* const lane, const PoseVector<T1>& ego_pose,
-    const FrameVelocity<
-    std::enable_if_t<!std::is_same<T1, double>::value, T1>>&
-    ego_velocity,
-    const PoseBundle<T1>& traffic_poses, double scan_distance,
-    const WhichSide side, T1* distance) {
-  DRAKE_ABORT();
 }
 
 template <typename T>

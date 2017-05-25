@@ -73,19 +73,20 @@ class IdmController : public systems::LeafSystem<T> {
   int acceleration_index() const { return acceleration_index_; }
 
   void ImplDoCalcOutput(
-      const systems::rendering::PoseVector<double>& ego_pose,
-      const systems::rendering::FrameVelocity<double>& ego_velocity,
-      const systems::rendering::PoseBundle<double>& traffic_poses,
-      const IdmPlannerParameters<double>& idm_params,
-      systems::BasicVector<double>* command) const;
+      const systems::rendering::PoseVector<T>& ego_pose,
+      const systems::rendering::FrameVelocity<T>& ego_velocity,
+      const systems::rendering::PoseBundle<T>& traffic_poses,
+      const IdmPlannerParameters<T>& idm_params,
+      systems::BasicVector<T>* command) const;
 
+  /*
   void ImplDoCalcOutput(
       const systems::rendering::PoseVector<AutoDiffXd>& ego_pose,
       const systems::rendering::FrameVelocity<AutoDiffXd>& ego_velocity,
       const systems::rendering::PoseBundle<AutoDiffXd>& traffic_poses,
       const IdmPlannerParameters<AutoDiffXd>& idm_params,
       systems::BasicVector<AutoDiffXd>* command) const;
-
+  */
  private:
   // Converts @p pose into RoadPosition.
   const maliput::api::RoadPosition GetRoadPosition(
