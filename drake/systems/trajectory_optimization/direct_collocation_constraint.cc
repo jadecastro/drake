@@ -14,7 +14,10 @@ Eigen::MatrixXd ExtractDerivativesMatrix(const AutoDiffVecXd& vec_in) {
   }
 
   Eigen::MatrixXd ret(vec_in.size(), vec_in(0).derivatives().size());
+  std::cout << " vec_in.size() " << vec_in.size() << std::endl;
   for (int i = 0; i < ret.rows(); i++) {
+    std::cout << " vec_in(i).derivatives().size() "
+              << vec_in(i).derivatives().size() << std::endl;
     ret.row(i) = vec_in(i).derivatives();
   }
   return ret;
@@ -56,10 +59,20 @@ void DirectCollocationConstraint::DoEval(
   // recalculating for every knot point as we advance.
   AutoDiffVecXd xdot0;
   dynamics(x0, u0, &xdot0);
+  std::cout << " x0(0).value() " << x0(0).value() << std::endl;
+  std::cout << " x0(1).value() " << x0(1).value() << std::endl;
+  std::cout << " x0(0).derivatives() " << x0(0).derivatives() << std::endl;
+  std::cout << " x0(1).derivatives() " << x0(1).derivatives() << std::endl;
+  std::cout << " u0 " << u0 << std::endl;
   Eigen::MatrixXd dxdot0 = ExtractDerivativesMatrix(xdot0);
 
   AutoDiffVecXd xdot1;
   dynamics(x1, u1, &xdot1);
+  std::cout << " x1(0).value() " << x1(0).value() << std::endl;
+  std::cout << " x1(1).value() " << x1(1).value() << std::endl;
+  std::cout << " x1(0).derivatives() " << x1(0).derivatives() << std::endl;
+  std::cout << " x1(1).derivatives() " << x1(1).derivatives() << std::endl;
+  std::cout << " u1 " << u1 << std::endl;
   Eigen::MatrixXd dxdot1 = ExtractDerivativesMatrix(xdot1);
 
   // Cubic interpolation to get xcol and xdotcol.

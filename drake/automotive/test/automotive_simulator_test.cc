@@ -358,6 +358,70 @@ GTEST_TEST(AutomotiveSimulatorTest, TestPriusTrajectoryCar) {
   }
 }
 
+GTEST_TEST(AutomotiveSimulatorTest, TestIdmControlledTrajectoryCar) {
+  const std::string kJointStateChannelName = "0_FLOATING_JOINT_STATE";
+
+  const std::string joint_state_name =
+      systems::lcm::LcmPublisherSystem::make_name(kJointStateChannelName);
+
+  // Set up a basic simulation with a MOBIL- and IDM-controlled SimpleCar.
+  auto simulator = std::make_unique<AutomotiveSimulator<double>>(
+      std::make_unique<lcm::DrakeMockLcm>());
+  lcm::DrakeMockLcm* lcm =
+      dynamic_cast<lcm::DrakeMockLcm*>(simulator->get_lcm());
+  ASSERT_NE(lcm, nullptr);
+
+  const maliput::api::RoadGeometry* road{};
+  EXPECT_NO_THROW(road = simulator->SetRoadGeometry(
+      std::make_unique<const maliput::dragway::RoadGeometry>(
+          maliput::api::RoadGeometryId({"TestDragway"}), 2 /* num lanes */,
+          100 /* length */, 4 /* lane width */, 1 /* shoulder width */)));
+
+  // Create one MOBIL car and two stopped cars arranged as follows:
+  //
+  // ---------------------------------------------------------------
+  // ^  +r, +y                                          | Decoy 2 |
+  // |    -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+  // +---->  +s, +x  | MOBIL Car |   | Decoy 1 |
+  // ---------------------------------------------------------------
+  SimpleCarState<double> simple_car_state;
+  simple_car_state.set_x(2);
+  simple_car_state.set_y(-2);
+  simple_car_state.set_velocity(10);
+  const int id_mobil =
+      simulator->AddMobilControlledSimpleCar("mobil", true /* with_s */,
+                                             simple_car_state);
+  EXPECT_EQ(id_mobil, 0);
+
+  MaliputRailcarState<double> decoy_state;
+  decoy_state.set_s(6);
+  decoy_state.set_speed(0);
+  const int id_decoy1 = simulator->AddPriusMaliputRailcar(
+      "decoy1", LaneDirection(road->junction(0)->segment(0)->lane(0)),
+      MaliputRailcarParams<double>(), decoy_state);
+  EXPECT_EQ(id_decoy1, 1);
+
+  decoy_state.set_s(20);
+  const int id_decoy2 = simulator->AddPriusMaliputRailcar(
+      "decoy2", LaneDirection(road->junction(0)->segment(0)->lane(1)),
+      MaliputRailcarParams<double>(), decoy_state);
+  EXPECT_EQ(id_decoy2, 2);
+
+  // Finish all initialization, so that we can test the post-init state.
+  simulator->Start();
+
+  // Advances the simulation to allow the MaliputRailcar to begin accelerating.
+  simulator->StepBy(0.5);
+
+  const lcmt_viewer_draw draw_message =
+      lcm->DecodeLastPublishedMessageAs<lcmt_viewer_draw>("DRAKE_VIEWER_DRAW");
+  EXPECT_EQ(draw_message.num_links, 3 * PriusVis<double>(0, "").num_poses());
+
+  // Expect the SimpleCar to start steering to the left; y value increases.
+  const double mobil_y = draw_message.position.at(0).at(1);
+  EXPECT_GE(mobil_y, -2.);
+}
+
 // Returns the x-position of the vehicle based on an lcmt_viewer_draw message.
 // It also checks that the y-position of the vehicle is equal to the provided y
 // value.

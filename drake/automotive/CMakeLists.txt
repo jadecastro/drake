@@ -100,6 +100,7 @@ if(lcm_FOUND)
     box_car_vis.cc
     car_vis.cc
     car_vis_applicator.cc
+    create_trajectory_params.cc
     gen/bicycle_car_parameters_translator.cc
     gen/bicycle_car_state_translator.cc
     gen/driving_command_translator.cc
@@ -122,6 +123,7 @@ if(lcm_FOUND)
     box_car_vis.h
     car_vis.h
     car_vis_applicator.h
+    create_trajectory_params.h
     prius_vis.h
     # N.B. The gen/*.h headers are installed by gen/CMakeLists.txt.
     )
@@ -133,8 +135,7 @@ if(lcm_FOUND)
       drake-rigid-body-plant)
 
   add_executable(automotive_demo
-      automotive_demo.cc
-      create_trajectory_params.cc)
+      automotive_demo.cc)
   target_link_libraries(automotive_demo
       drakeAutomotiveLcm
       drakeMaliputDragway)

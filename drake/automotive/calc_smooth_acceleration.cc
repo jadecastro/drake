@@ -24,7 +24,7 @@ T calc_smooth_acceleration(const T& desired_acceleration, const T& max_velocity,
   // If our current velocity is out of bounds, insist on damping that brings us
   // back toward the limit, but allow for the desired_acceleration to win if it
   // is stronger than the damping and has the desired sign.
-  const T underspeed = 0 - current_velocity;
+  const T underspeed = T(0) - current_velocity;
   const T overspeed = current_velocity - max_velocity;
   const T damped_acceleration = cond(
       // If velocity is too low, use positive damping or desired_acceleration.

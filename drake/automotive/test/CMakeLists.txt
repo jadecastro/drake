@@ -51,6 +51,12 @@ target_link_libraries(road_path_test
     drakeMaliputDragway)
 
 if(lcm_FOUND)
+  drake_add_cc_test(trajectory_optimization_test)
+  target_link_libraries(trajectory_optimization_test
+      drakeAutomotiveLcm
+      drakeMaliputDragway
+      drakeTrajectoryOptimization)
+
   drake_add_cc_test(automotive_simulator_test)
   target_link_libraries(automotive_simulator_test
       drakeAutomotiveLcm

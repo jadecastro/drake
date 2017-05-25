@@ -16,6 +16,9 @@
 #include "drake/common/eigen_types.h"
 #include "drake/common/polynomial.h"
 
+// 
+#include <iostream>
+
 namespace drake {
 namespace solvers {
 
@@ -66,6 +69,11 @@ class EvaluatorBase {
             // TODO(#2274) Fix NOLINTNEXTLINE(runtime/references).
             AutoDiffVecXd& y) const {
     DRAKE_ASSERT(x.rows() == num_vars_ || num_vars_ == Eigen::Dynamic);
+    std::cout << " x.rows() " << x.rows() << std::endl;
+    std::cout << " x.cols() " << x.cols() << std::endl;
+    std::cout << " y.rows() " << y.rows() << std::endl;
+    std::cout << " y.cols() " << y.cols() << std::endl;
+    std::cout << " num_vars_ " << num_vars_ << std::endl;
     DoEval(x, y);
   }
 

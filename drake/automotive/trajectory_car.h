@@ -103,8 +103,8 @@ class TrajectoryCar : public systems::LeafSystem<T> {
     T heading{0.};
   };
 
-  bool DoHasDirectFeedthrough(const systems::SparsityMatrix* sparsity,
-                              int input_port, int output_port) const override {
+  bool DoHasDirectFeedthrough(const systems::SparsityMatrix*, int, int)
+      const override {
     return false;
   };
 
@@ -203,8 +203,11 @@ class TrajectoryCar : public systems::LeafSystem<T> {
 
     // Convert the state derivatives into a spatial velocity.
     multibody::SpatialVelocity<T> output;
-    output.translational().x() = state.speed() * cos(raw_pose.heading);
-    output.translational().y() = state.speed() * sin(raw_pose.heading);
+
+    // TODO(jadecastro): The T() business below is stop-gap until we have
+    // analytical representation of the partials for this particular example.
+    output.translational().x() = state.speed() * T(cos(raw_pose.heading));
+    output.translational().y() = state.speed() * T(sin(raw_pose.heading));
     output.translational().z() = T(0);
     output.rotational().x() = T(0);
     output.rotational().y() = T(0);
@@ -225,12 +228,14 @@ class TrajectoryCar : public systems::LeafSystem<T> {
     // input acceleration through when away from the limit.  Note that
     // accelerations of zero are passed through unaffected.
     const T desired_acceleration = input.GetAtIndex(0);
+    std::cout << " desired_acceleration " << desired_acceleration << std::endl;
     const T smooth_acceleration =
         calc_smooth_acceleration(desired_acceleration, params.max_speed(),
                                  params.speed_limit_kp(), state.speed());
+    std::cout << " smooth_acceleration " << smooth_acceleration << std::endl;
 
     // Don't allow small negative velocities to affect position.
-    const T nonneg_velocity = max(T(0), state.speed());
+    const T nonneg_velocity = state.speed(); // max(T(0), state.speed());
 
     rates->set_position(nonneg_velocity);
     rates->set_speed(smooth_acceleration);
