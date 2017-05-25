@@ -4,6 +4,8 @@
 #include <utility>
 #include <vector>
 
+#include "drake/automotive/maliput/api/lane_data.h"  // For explicit constructed RoadGeometry
+#include "drake/automotive/maliput/api/road_geometry.h"
 #include "drake/common/autodiff_overloads.h"
 #include "drake/common/cond.h"
 #include "drake/common/drake_assert.h"
@@ -106,12 +108,21 @@ void IdmController<T>::ImplDoCalcOutput(
   const double scan_distance{100.};  // TODO(jadecastro): Make this a parameter.
   T headway_distance{0.};
 
+  std::cerr << " x "
+            << ExtractDoubleOrThrow(ego_pose.get_isometry().translation().x())
+            << std::endl;
+  std::cerr << " y "
+            << ExtractDoubleOrThrow(ego_pose.get_isometry().translation().y())
+            << std::endl;
+  std::cerr << " z "
+            << ExtractDoubleOrThrow(ego_pose.get_isometry().translation().z())
+            << std::endl;
+  const maliput::api::GeoPosition geo_position(
+      ExtractDoubleOrThrow(ego_pose.get_isometry().translation().x()),
+      ExtractDoubleOrThrow(ego_pose.get_isometry().translation().y()),
+      ExtractDoubleOrThrow(ego_pose.get_isometry().translation().z()));
   const RoadPosition ego_position =
-      road_.ToRoadPosition({
-          ExtractDoubleOrThrow(ego_pose.get_isometry().translation().x()),
-              ExtractDoubleOrThrow(ego_pose.get_isometry().translation().y()),
-              ExtractDoubleOrThrow(ego_pose.get_isometry().translation().z())},
-        nullptr, nullptr, nullptr);
+      road_.ToRoadPosition(geo_position, nullptr, nullptr, nullptr);
 
   // Find the single closest car ahead.
   const RoadOdometry<T>& lead_car_odom =
@@ -127,8 +138,7 @@ void IdmController<T>::ImplDoCalcOutput(
   // Saturate the net_distance at distance_lower_bound away from the ego car to
   // avoid near-singular solutions inherent to the IDM equation.
   const T actual_headway = headway_distance - idm_params.bloat_diameter();
-  const T net_distance = max(
-      actual_headway, ExtractDoubleOrThrow(idm_params.distance_lower_limit()));
+  const T net_distance = max(actual_headway, idm_params.distance_lower_limit());
   const T closing_velocity = s_dot_ego - s_dot_lead;
 
   // Compute the acceleration command from the IDM equation.

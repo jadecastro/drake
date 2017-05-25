@@ -145,13 +145,17 @@ GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorDircolTest) {
 */
 
 GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorIdmTest) {
-  std::unique_ptr<const maliput::api::RoadGeometry> road_geometry
-      = std::make_unique<const maliput::dragway::RoadGeometry>(
+  std::unique_ptr<const maliput::api::RoadGeometry> road_geometry =
+      std::make_unique<const maliput::dragway::RoadGeometry>(
           maliput::api::RoadGeometryId({"Dicol Test Dragway"}),
           1 /* num dragway lanes */, 100. /* length */, 2. /* width */,
           0. /* shoulder width */);
-  const maliput::dragway::RoadGeometry* dragway_road_geometry =
-      dynamic_cast<const maliput::dragway::RoadGeometry*>(road_geometry.get());
+
+  auto simulator = std::make_unique<AutomotiveSimulator<double>>();
+
+  auto simulator_road = simulator->SetRoadGeometry(std::move(road_geometry));
+  auto dragway_road_geometry =
+      dynamic_cast<const maliput::dragway::RoadGeometry*>(simulator_road);
 
   const int lane_index = 0;
   const double speed = 15.;
@@ -160,7 +164,6 @@ GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorIdmTest) {
   const auto& params = CreateTrajectoryParamsForDragway(
       *dragway_road_geometry, lane_index, speed, start_position);
 
-  auto simulator = std::make_unique<AutomotiveSimulator<double>>();
   simulator->AddIdmControlledPriusTrajectoryCar("trajectory_car",
                                                 std::get<0>(params),
                                                 speed, start_position);
@@ -179,13 +182,12 @@ GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorIdmTest) {
                                              duration, duration);
 
   // Ensure that time intervals are evenly spaced.
-  // TODO(russt): Add sugar to DirectTrajectoryOptimization for this.
   prog.AddTimeIntervalBounds(duration / (kNumTimeSamples - 1),
                              duration / (kNumTimeSamples - 1));
 
   prog.AddLinearConstraint( prog.initial_state() == x0.get_value() );
 
-  EXPECT_EQ( prog.Solve(), solvers::SolutionResult::kSolutionFound);
+  EXPECT_EQ(prog.Solve(), solvers::SolutionResult::kSolutionFound);
 
 }
 

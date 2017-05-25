@@ -6,7 +6,7 @@
 namespace drake {
 namespace automotive {
 
-template class TrajectoryCar<double>;
+// template class TrajectoryCar<double>;
 template class TrajectoryCar<AutoDiffXd>;
 
 }  // namespace automotive
