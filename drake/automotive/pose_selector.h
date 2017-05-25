@@ -89,24 +89,13 @@ class PoseSelector {
   /// branches set for all branches in the road network.
 
   // TODO: Reference on the return type??
-  static const std::pair<const RoadOdometry<double>, const RoadOdometry<double>>
+  static const std::pair<const RoadOdometry<T>, const RoadOdometry<T>>
   FindClosestPair(const maliput::api::Lane* const lane,
-                  const systems::rendering::PoseVector<double>& ego_pose,
-                  const systems::rendering::FrameVelocity<double>& ego_velocity,
-                  const systems::rendering::PoseBundle<double>& traffic_poses,
+                  const systems::rendering::PoseVector<T>& ego_pose,
+                  const systems::rendering::FrameVelocity<T>& ego_velocity,
+                  const systems::rendering::PoseBundle<T>& traffic_poses,
                   double scan_distance,
-                  std::pair<double, double>* distances = nullptr);
-
-  static const std::pair<const RoadOdometry<AutoDiffXd>,
-                         const RoadOdometry<AutoDiffXd>>
-  FindClosestPair(const maliput::api::Lane* const lane,
-                  const systems::rendering::PoseVector<AutoDiffXd>& ego_pose,
-                  const systems::rendering::FrameVelocity<AutoDiffXd>&
-                  ego_velocity,
-                  const systems::rendering::PoseBundle<AutoDiffXd>&
-                  traffic_poses,
-                  double scan_distance,
-                  std::pair<AutoDiffXd, AutoDiffXd>* distances = nullptr);
+                  std::pair<T, T>* distances = nullptr);
 
   /// Same as PoseSelector::FindClosestPair() except that: (1) it only considers
   /// the ego car's lane and (2) it returns a single the RoadOdometry of either
@@ -117,31 +106,13 @@ class PoseSelector {
   /// `std::numeric_limits<double>::infinity()`.
 
   // TODO: Reference on the return type??
-  template <typename T1 = T>
-  //static typename std::enable_if<std::is_same<T1, double>::value,
-  //                               const RoadOdometry<double>>::type
-  static const RoadOdometry<T1> FindSingleClosestPose(
+  static const RoadOdometry<T> FindSingleClosestPose(
           const maliput::api::Lane* const lane,
-          const systems::rendering::PoseVector<T1>& ego_pose,
-          const systems::rendering::FrameVelocity<
-          std::enable_if_t<std::is_same<T1, double>::value, T1>>&
-          ego_velocity,
-          const systems::rendering::PoseBundle<T1>& traffic_poses,
+          const systems::rendering::PoseVector<T>& ego_pose,
+          const systems::rendering::FrameVelocity<T>& ego_velocity,
+          const systems::rendering::PoseBundle<T>& traffic_poses,
           double scan_distance, const WhichSide side,
-          T1* distance = nullptr);
-
-  template <typename T1 = T>
-  //static typename std::enable_if<!std::is_same<T1, double>::value,
-  //                               const RoadOdometry<double>>::type
-  static const RoadOdometry<T1> FindSingleClosestPose(
-          const maliput::api::Lane* const lane,
-          const systems::rendering::PoseVector<T1>& ego_pose,
-          const systems::rendering::FrameVelocity<
-          std::enable_if_t<!std::is_same<T1, double>::value, T1>>&
-          ego_velocity,
-          const systems::rendering::PoseBundle<T1>& traffic_poses,
-          double scan_distance, const WhichSide side,
-          T1* distance = nullptr);
+          T* distance = nullptr);
 
   /// Extracts the vehicle's `s`-direction velocity based on its RoadOdometry @p
   /// road_odom in the Lane coordinate frame.  Assumes the road has zero
@@ -168,7 +139,7 @@ class PoseSelector {
 
   // Assign the with default positions extending to, respectively, positive and
   // negative infinity and with zero velocities.
-  static const RoadOdometry<double> set_default_odometry(
+  static const RoadOdometry<T> set_default_odometry(
       const maliput::api::Lane* const Lane, const WhichSide side);
 };
 

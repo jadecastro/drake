@@ -8,8 +8,8 @@
 #include "drake/common/cond.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/eigen_autodiff_types.h"
+#include "drake/common/extract_double.h"
 #include "drake/common/symbolic_formula.h"
-#include "drake/math/saturate.h"
 
 namespace drake {
 namespace automotive {
@@ -17,7 +17,6 @@ namespace automotive {
 using maliput::api::RoadGeometry;
 using maliput::api::RoadPosition;
 using maliput::api::Rotation;
-using math::saturate;
 using systems::rendering::FrameVelocity;
 using systems::rendering::PoseBundle;
 using systems::rendering::PoseVector;
@@ -94,50 +93,51 @@ void IdmController<T>::DoCalcOutput(const systems::Context<T>& context,
                    accel_output);
 }
 
-// Specialization for double scalar type.
 template <typename T>
 void IdmController<T>::ImplDoCalcOutput(
-    const PoseVector<double>& ego_pose,
-    const FrameVelocity<double>& ego_velocity,
-    const PoseBundle<double>& traffic_poses,
-    const IdmPlannerParameters<double>& idm_params,
-    systems::BasicVector<double>* command) const {
+    const PoseVector<T>& ego_pose,
+    const FrameVelocity<T>& ego_velocity,
+    const PoseBundle<T>& traffic_poses,
+    const IdmPlannerParameters<T>& idm_params,
+    systems::BasicVector<T>* command) const {
+  using std::max;
+
   DRAKE_DEMAND(idm_params.IsValid());
   const double scan_distance{100.};  // TODO(jadecastro): Make this a parameter.
-  double headway_distance{};
+  T headway_distance{0.};
 
   const RoadPosition ego_position =
-      road_.ToRoadPosition({ego_pose.get_isometry().translation().x(),
-                             ego_pose.get_isometry().translation().y(),
-                             ego_pose.get_isometry().translation().z()},
-                            nullptr, nullptr, nullptr);
+      road_.ToRoadPosition({
+          ExtractDoubleOrThrow(ego_pose.get_isometry().translation().x()),
+              ExtractDoubleOrThrow(ego_pose.get_isometry().translation().y()),
+              ExtractDoubleOrThrow(ego_pose.get_isometry().translation().z())},
+        nullptr, nullptr, nullptr);
 
   // Find the single closest car ahead.
-  const RoadOdometry<double>& lead_car_odom =
-      PoseSelector<double>::FindSingleClosestPose(
+  const RoadOdometry<T>& lead_car_odom =
+      PoseSelector<T>::FindSingleClosestPose(
           ego_position.lane, ego_pose, ego_velocity, traffic_poses,
           scan_distance, WhichSide::kAhead, &headway_distance);
 
-  const double& s_dot_ego =
-      PoseSelector<double>::GetIsoLaneVelocity(
-          ego_position, ego_velocity).sigma_v;
-  const double& s_dot_lead = PoseSelector<double>::GetIsoLaneVelocity(
-      {lead_car_odom.lane, lead_car_odom.pos}, lead_car_odom.vel).sigma_v;
+  const T& s_dot_ego =
+      PoseSelector<T>::GetSigmaVelocity({ego_position, ego_velocity});
+  const T& s_dot_lead = PoseSelector<T>::GetSigmaVelocity(
+      {{lead_car_odom.lane, lead_car_odom.pos}, lead_car_odom.vel});
 
   // Saturate the net_distance at distance_lower_bound away from the ego car to
   // avoid near-singular solutions inherent to the IDM equation.
-  const double net_distance = saturate(
-      headway_distance - idm_params.bloat_diameter(),
-      idm_params.distance_lower_limit(),
-      std::numeric_limits<double>::infinity());
-  const double closing_velocity = s_dot_ego - s_dot_lead;
+  const T actual_headway = headway_distance - idm_params.bloat_diameter();
+  const T net_distance = max(
+      actual_headway, ExtractDoubleOrThrow(idm_params.distance_lower_limit()));
+  const T closing_velocity = s_dot_ego - s_dot_lead;
 
   // Compute the acceleration command from the IDM equation.
-  (*command)[0] = IdmPlanner<double>::Evaluate(idm_params, s_dot_ego,
-                                               net_distance, closing_velocity);
+  (*command)[0] = IdmPlanner<T>::Evaluate(idm_params, s_dot_ego,
+                                          net_distance, closing_velocity);
 }
 
 // Specialization for AutoDiffXd scalar type.
+/*
 template <typename T>
 void IdmController<T>::ImplDoCalcOutput(
     const PoseVector<AutoDiffXd>& ego_pose,
@@ -189,6 +189,7 @@ void IdmController<T>::ImplDoCalcOutput(
                                                    net_distance,
                                                    closing_velocity);
 }
+*/
 
 template <typename T>
 IdmController<AutoDiffXd>* IdmController<T>::DoToAutoDiffXd() const {

@@ -270,11 +270,10 @@ const T MobilPlanner<T>::EvaluateIdm(const IdmPlannerParameters<T>& idm_params,
                                      const RoadOdometry<T>& ego_odometry,
                                      const RoadOdometry<T>& lead_car_odometry,
                                      const T& headway_distance) const {
-  const T& s_dot_ego = PoseSelector<T>::GetIsoLaneVelocity(
-      {ego_odometry.lane, ego_odometry.pos}, ego_odometry.vel).sigma_v;
-  const T& s_dot_lead = PoseSelector<T>::GetIsoLaneVelocity(
-      {lead_car_odometry.lane, lead_car_odometry.pos},
-      lead_car_odometry.vel).sigma_v;
+  const T& s_dot_ego = PoseSelector<T>::GetSigmaVelocity(
+      {{ego_odometry.lane, ego_odometry.pos}, ego_odometry.vel});
+  const T& s_dot_lead = PoseSelector<T>::GetSigmaVelocity(
+      {{lead_car_odometry.lane, lead_car_odometry.pos}, lead_car_odometry.vel});
 
   // Saturate the net_distance at distance_lower_bound away from the ego car to
   // prevent the IDM equation from producing near-singular solutions.
