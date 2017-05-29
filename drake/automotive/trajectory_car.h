@@ -103,8 +103,8 @@ class TrajectoryCar : public systems::LeafSystem<T> {
     T heading{0.};
   };
 
-  bool DoHasDirectFeedthrough(const systems::SparsityMatrix*, int, int)
-      const override {
+  bool DoHasDirectFeedthrough(const systems::SparsityMatrix*, int,
+                              int) const override {
     return false;
   };
 
@@ -228,14 +228,13 @@ class TrajectoryCar : public systems::LeafSystem<T> {
     // input acceleration through when away from the limit.  Note that
     // accelerations of zero are passed through unaffected.
     const T desired_acceleration = input.GetAtIndex(0);
-    std::cout << " desired_acceleration " << desired_acceleration << std::endl;
     const T smooth_acceleration =
         calc_smooth_acceleration(desired_acceleration, params.max_speed(),
                                  params.speed_limit_kp(), state.speed());
-    std::cout << " smooth_acceleration " << smooth_acceleration << std::endl;
 
     // Don't allow small negative velocities to affect position.
-    const T nonneg_velocity = state.speed(); // max(T(0), state.speed());
+    const T zero_speed = 0. * state.speed();
+    const T nonneg_velocity = max(zero_speed, state.speed());
 
     rates->set_position(nonneg_velocity);
     rates->set_speed(smooth_acceleration);

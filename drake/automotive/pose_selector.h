@@ -87,6 +87,9 @@ class PoseSelector {
   ///
   /// The RoadGeometry from which @p lane is drawn is required to have default
   /// branches set for all branches in the road network.
+  ///
+  /// Note: This function is lossy with respect to AutoDiffXd partial
+  /// derivatives.
 
   // TODO: Reference on the return type??
   static const std::pair<const RoadOdometry<T>, const RoadOdometry<T>>
@@ -104,6 +107,9 @@ class PoseSelector {
   /// Note that when no car is detected in front of the ego car, the returned
   /// RoadOdometry will contain an `s`-value of
   /// `std::numeric_limits<double>::infinity()`.
+  ///
+  /// Note: This function is lossy with respect to AutoDiffXd partial
+  /// derivatives.
 
   // TODO: Reference on the return type??
   static const RoadOdometry<T> FindSingleClosestPose(
@@ -117,8 +123,9 @@ class PoseSelector {
   /// Extracts the vehicle's `s`-direction velocity based on its RoadOdometry @p
   /// road_odom in the Lane coordinate frame.  Assumes the road has zero
   /// elevation and superelevation.
-  //
-  // TODO(jadecastro): Generalize to three-dimensional rotations.
+  ///
+  /// Note: This function is lossy with respect to AutoDiffXd partial
+  /// derivatives.
 
   // TODO: Reference on the return type??  Usually do not for T.
   static const T GetSigmaVelocity(const RoadOdometry<T>& road_odometry);
