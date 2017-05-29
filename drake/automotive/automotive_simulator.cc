@@ -221,18 +221,16 @@ int AutomotiveSimulator<T>::AddMobilControlledSimpleCar(
 }
 
 template <typename T>
-int AutomotiveSimulator<T>::AddPriusTrajectoryCar(
-    const std::string& name,
-    const Curve2<double>& curve,
-    double speed,
-    double start_position) {
+int AutomotiveSimulator<T>::AddPriusTrajectoryCar(const std::string& name,
+                                                  const Curve2<double>& curve,
+                                                  double speed,
+                                                  double start_position) {
   DRAKE_DEMAND(!has_started());
   DRAKE_DEMAND(aggregator_ != nullptr);
   CheckNameUniqueness(name);
   const int id = allocate_vehicle_number();
 
-  auto trajectory_car =
-      builder_->template AddSystem<TrajectoryCar<T>>(curve);
+  auto trajectory_car = builder_->template AddSystem<TrajectoryCar<T>>(curve);
   trajectory_car->set_name(name);
   vehicles_[id] = trajectory_car;
 
@@ -261,17 +259,14 @@ int AutomotiveSimulator<T>::AddPriusTrajectoryCar(
 // TODO(jadecastro): Add a unit test for this function.
 template <typename T>
 int AutomotiveSimulator<T>::AddIdmControlledPriusTrajectoryCar(
-    const std::string& name,
-    const Curve2<double>& curve,
-    double speed,
+    const std::string& name, const Curve2<double>& curve, double speed,
     double start_position) {
   DRAKE_DEMAND(!has_started());
   DRAKE_DEMAND(aggregator_ != nullptr);
   CheckNameUniqueness(name);
   const int id = allocate_vehicle_number();
 
-  auto trajectory_car =
-      builder_->template AddSystem<TrajectoryCar<T>>(curve);
+  auto trajectory_car = builder_->template AddSystem<TrajectoryCar<T>>(curve);
   trajectory_car->set_name(name);
   vehicles_[id] = trajectory_car;
 
@@ -380,16 +375,20 @@ void AutomotiveSimulator<T>::SetMaliputRailcarAccelerationCommand(
   DRAKE_DEMAND(has_started());
   const auto iterator = vehicles_.find(id);
   if (iterator == vehicles_.end()) {
-    throw std::runtime_error("AutomotiveSimulator::"
+    throw std::runtime_error(
+        "AutomotiveSimulator::"
         "SetMaliputRailcarAccelerationCommand(): Failed to find vehicle with "
-        "id " + std::to_string(id) + ".");
+        "id " +
+        std::to_string(id) + ".");
   }
-  MaliputRailcar<T>* railcar = dynamic_cast<MaliputRailcar<T>*>(
-      iterator->second);
+  MaliputRailcar<T>* railcar =
+      dynamic_cast<MaliputRailcar<T>*>(iterator->second);
   if (railcar == nullptr) {
-    throw std::runtime_error("AutomotiveSimulator::"
+    throw std::runtime_error(
+        "AutomotiveSimulator::"
         "SetMaliputRailcarAccelerationCommand(): The vehicle with "
-        "id " + std::to_string(id) + " was not a MaliputRailcar.");
+        "id " +
+        std::to_string(id) + " was not a MaliputRailcar.");
   }
   DRAKE_ASSERT(diagram_ != nullptr);
   DRAKE_ASSERT(simulator_ != nullptr);
@@ -429,8 +428,10 @@ const maliput::api::Lane* AutomotiveSimulator<T>::FindLane(
       }
     }
   }
-  throw std::runtime_error("AutomotiveSimulator::FindLane(): Failed to find "
-      "lane named \"" + name + "\".");
+  throw std::runtime_error(
+      "AutomotiveSimulator::FindLane(): Failed to find "
+      "lane named \"" +
+      name + "\".");
 }
 
 template <typename T>
@@ -534,8 +535,8 @@ void AutomotiveSimulator<T>::TransmitLoadMessage() {
   const lcmt_viewer_load_robot load_terrain_message =
       multibody::CreateLoadRobotMessage<T>(*tree_);
   lcmt_viewer_load_robot load_message;
-  load_message.num_links = load_car_message.num_links +
-                           load_terrain_message.num_links;
+  load_message.num_links =
+      load_car_message.num_links + load_terrain_message.num_links;
   for (int i = 0; i < load_car_message.num_links; ++i) {
     load_message.link.push_back(load_car_message.link.at(i));
   }
@@ -613,9 +614,10 @@ void AutomotiveSimulator<T>::InitializeTrajectoryCars() {
     const TrajectoryCarState<T>& initial_state = pair.second;
 
     systems::VectorBase<T>* context_state =
-        diagram_->GetMutableSubsystemContext(simulator_->get_mutable_context(),
-                                             car)
-        ->get_mutable_continuous_state()->get_mutable_vector();
+        diagram_
+            ->GetMutableSubsystemContext(simulator_->get_mutable_context(), car)
+            ->get_mutable_continuous_state()
+            ->get_mutable_vector();
     TrajectoryCarState<T>* const state =
         dynamic_cast<TrajectoryCarState<T>*>(context_state);
     DRAKE_ASSERT(state);
@@ -683,8 +685,10 @@ template <typename T>
 void AutomotiveSimulator<T>::CheckNameUniqueness(const std::string& name) {
   for (const auto& vehicle : vehicles_) {
     if (vehicle.second->get_name() == name) {
-      throw std::runtime_error("A vehicle named \"" + name + "\" already "
-          "exists. It has id " + std::to_string(vehicle.first) + ".");
+      throw std::runtime_error("A vehicle named \"" + name +
+                               "\" already "
+                               "exists. It has id " +
+                               std::to_string(vehicle.first) + ".");
     }
   }
 }

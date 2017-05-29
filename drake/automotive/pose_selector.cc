@@ -75,7 +75,9 @@ const RoadOdometry<T> PoseSelector<T>::FindSingleClosestPose(
   LaneDirection lane_direction(lane, ego_sigma_v >= 0. /* with_s */);
 
   // Compute the s-direction of the ego car and its direction of travel.
-  // N.B. `distance_scanned` is a net distance, so will always increase.
+  // N.B. `distance_scanned` is a net distance, so will always increase.  Note
+  // also that the result will always be positive, as the current lane's length
+  // is always added to the result at each loop iteration.
   T distance_scanned{0.};
   if (side == WhichSide::kAhead) {
     distance_scanned = (lane_direction.with_s)
@@ -87,6 +89,8 @@ const RoadOdometry<T> PoseSelector<T>::FindSingleClosestPose(
         : T(-ego_lane_position.s());
   }
   RoadOdometry<T> result = default_result;
+  // Traverse forward or backward from the current lane the given scan_distance,
+  // looking for traffic cars.
   while (distance_scanned < T(scan_distance)) {
     T distance_increment{};
     for (int i = 0; i < traffic_poses.get_num_poses(); ++i) {
@@ -102,61 +106,62 @@ const RoadOdometry<T> PoseSelector<T>::FindSingleClosestPose(
       const LanePosition traffic_lane_position =
           lane_direction.lane->ToLanePosition(traffic_geo_position, nullptr,
                                               nullptr);
-      switch (side) {
-        case WhichSide::kAhead: {
-          // Ignore traffic behind the ego car when the two share the same lane.
-          // For all other lanes, we will be traversing forward from the current
-          // one, with respect to the car's direction.
-          if (distance_scanned <= T(0.)) {
-            if ((lane_direction.with_s &&
-                 traffic_lane_position.s() <= ego_lane_position.s()) ||
-                (!lane_direction.with_s &&
-                 traffic_lane_position.s() >= ego_lane_position.s())) {
-              continue;
-            }
-          }
-          // Keep positions that are closer than any other found so far.
+      // Ignore traffic that are not in the desired side of the ego car (with
+      // respect to the car's current direction) when the two share the same
+      // lane.
+      if (side == WhichSide::kAhead) {
+        if (distance_scanned <= T(0.)) {
           if ((lane_direction.with_s &&
-               traffic_lane_position.s() <= result.pos.s()) ||
+               traffic_lane_position.s() <= ego_lane_position.s()) ||
               (!lane_direction.with_s &&
-               traffic_lane_position.s() >= result.pos.s())) {
-            result = RoadOdometry<T>(
-              {lane_direction.lane, traffic_lane_position},
-              traffic_poses.get_velocity(i));
-            distance_increment =
-                (lane_direction.with_s)
-                ? result.pos.s()
-                : (lane_direction.lane->length() - result.pos.s());
+               traffic_lane_position.s() >= ego_lane_position.s())) {
+            continue;
           }
         }
-        case WhichSide::kBehind: {
-          // Ignore traffic ahead of the ego car when the two share the same
-          // lane.  For all other lanes, we will be traversing backward from the
-          // current one, with respect to the car's direction.
-          if (distance_scanned <= T(0.)) {
-            if ((lane_direction.with_s &&
-                 traffic_lane_position.s() > ego_lane_position.s()) ||
-                (!lane_direction.with_s &&
-                 traffic_lane_position.s() < ego_lane_position.s())) {
-              continue;
-            }
-          }
-          // Keep positions that are closer than any other found so far.
+      } else if(side == WhichSide::kBehind) {
+        if (distance_scanned <= T(0.)) {
           if ((lane_direction.with_s &&
-               traffic_lane_position.s() > result.pos.s()) ||
+               traffic_lane_position.s() > ego_lane_position.s()) ||
               (!lane_direction.with_s &&
-               traffic_lane_position.s() < result.pos.s())) {
-            result = RoadOdometry<T>(
-                {lane_direction.lane, traffic_lane_position},
-                traffic_poses.get_velocity(i));
-            distance_increment =
-                (lane_direction.with_s)
-                    ? (lane_direction.lane->length() - result.pos.s())
-                    : result.pos.s();
+               traffic_lane_position.s() < ego_lane_position.s())) {
+            continue;
           }
         }
       }
+      // Ignore positions at the desired side of the ego car that are not closer
+      // than any other found so far.
+      if (side == WhichSide::kAhead) {
+        if (!((lane_direction.with_s &&
+               traffic_lane_position.s() <= result.pos.s()) ||
+              (!lane_direction.with_s &&
+               traffic_lane_position.s() >= result.pos.s()))) {
+          continue;
+        }
+      } else if (side == WhichSide::kBehind) {
+        if (!((lane_direction.with_s &&
+               traffic_lane_position.s() > result.pos.s()) ||
+              (!lane_direction.with_s &&
+               traffic_lane_position.s() < result.pos.s()))) {
+          continue;
+        }
+        result = RoadOdometry<T>(
+          {lane_direction.lane, traffic_lane_position},
+          traffic_poses.get_velocity(i));
+      }
+      // Update the result with the new candidate.
+      result = RoadOdometry<T>(
+        {lane_direction.lane, traffic_lane_position},
+        traffic_poses.get_velocity(i));
+      distance_increment =
+          (side == WhichSide::kAhead)
+          ? ((lane_direction.with_s)
+             ? result.pos.s()
+             : (lane_direction.lane->length() - result.pos.s()))
+          : ((lane_direction.with_s)
+             ? (lane_direction.lane->length() - result.pos.s())
+             : result.pos.s());
     }
+
     if (std::abs(result.pos.s()) < std::numeric_limits<double>::infinity()) {
       // Figure out whether or not the result is within scan_distance.
       if (distance_scanned + distance_increment < T(scan_distance)) {
@@ -200,6 +205,7 @@ bool PoseSelector<T>::IsWithinLane(const GeoPosition& geo_position,
           pos.r() <= lane->lane_bounds(pos.s()).r_max);
 }
 
+// TODO(jadecastro): This doesn't yet take into account the vehicle's WhichSide.
 template <typename T>
 std::unique_ptr<LaneEnd> PoseSelector<T>::get_default_ongoing_lane(
     LaneDirection* lane_direction) {
@@ -228,8 +234,7 @@ const RoadOdometry<T> PoseSelector<T>::set_default_odometry(
   return {default_road_position, FrameVelocity<T>()};
 }
 
-// These instantiations must match the API documentation in
-// pose_selector.h.
+// These instantiations must match the API documentation in pose_selector.h.
 template class PoseSelector<double>;
 template class PoseSelector<AutoDiffXd>;
 

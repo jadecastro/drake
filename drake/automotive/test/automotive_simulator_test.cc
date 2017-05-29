@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include "drake/automotive/create_trajectory_params.h"
 #include "drake/automotive/curve2.h"
 #include "drake/automotive/lane_direction.h"
 #include "drake/automotive/maliput/api/lane.h"
@@ -170,10 +171,11 @@ GTEST_TEST(AutomotiveSimulatorTest, TestMobilControlledSimpleCar) {
   ASSERT_NE(lcm, nullptr);
 
   const maliput::api::RoadGeometry* road{};
-  EXPECT_NO_THROW(road = simulator->SetRoadGeometry(
-      std::make_unique<const maliput::dragway::RoadGeometry>(
-          maliput::api::RoadGeometryId({"TestDragway"}), 2 /* num lanes */,
-          100 /* length */, 4 /* lane width */, 1 /* shoulder width */)));
+  EXPECT_NO_THROW(
+      road = simulator->SetRoadGeometry(
+          std::make_unique<const maliput::dragway::RoadGeometry>(
+              maliput::api::RoadGeometryId({"TestDragway"}), 2 /* num lanes */,
+              100 /* length */, 4 /* lane width */, 1 /* shoulder width */)));
 
   // Create one MOBIL car and two stopped cars arranged as follows:
   //
@@ -186,9 +188,8 @@ GTEST_TEST(AutomotiveSimulatorTest, TestMobilControlledSimpleCar) {
   simple_car_state.set_x(2);
   simple_car_state.set_y(-2);
   simple_car_state.set_velocity(10);
-  const int id_mobil =
-      simulator->AddMobilControlledSimpleCar("mobil", true /* with_s */,
-                                             simple_car_state);
+  const int id_mobil = simulator->AddMobilControlledSimpleCar(
+      "mobil", true /* with_s */, simple_car_state);
   EXPECT_EQ(id_mobil, 0);
 
   MaliputRailcarState<double> decoy_state;
@@ -361,7 +362,7 @@ GTEST_TEST(AutomotiveSimulatorTest, TestIdmControlledTrajectoryCar) {
   const std::string joint_state_name =
       systems::lcm::LcmPublisherSystem::make_name(kJointStateChannelName);
 
-  // Set up a basic simulation with a MOBIL- and IDM-controlled SimpleCar.
+  // Set up a basic simulation with an IDM-controlled TrajectoryCar.
   auto simulator = std::make_unique<AutomotiveSimulator<double>>(
       std::make_unique<lcm::DrakeMockLcm>());
   lcm::DrakeMockLcm* lcm =
@@ -369,40 +370,35 @@ GTEST_TEST(AutomotiveSimulatorTest, TestIdmControlledTrajectoryCar) {
   ASSERT_NE(lcm, nullptr);
 
   const maliput::api::RoadGeometry* road{};
-  EXPECT_NO_THROW(road = simulator->SetRoadGeometry(
-      std::make_unique<const maliput::dragway::RoadGeometry>(
-          maliput::api::RoadGeometryId({"TestDragway"}), 2 /* num lanes */,
-          100 /* length */, 4 /* lane width */, 1 /* shoulder width */)));
+  EXPECT_NO_THROW(
+      road = simulator->SetRoadGeometry(
+          std::make_unique<const maliput::dragway::RoadGeometry>(
+              maliput::api::RoadGeometryId({"TestDragway"}), 2 /* num lanes */,
+              100 /* length */, 4 /* lane width */, 1 /* shoulder width */)));
 
-  // Create one MOBIL car and two stopped cars arranged as follows:
-  //
-  // ---------------------------------------------------------------
-  // ^  +r, +y                                          | Decoy 2 |
-  // |    -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
-  // +---->  +s, +x  | MOBIL Car |   | Decoy 1 |
-  // ---------------------------------------------------------------
-  SimpleCarState<double> simple_car_state;
-  simple_car_state.set_x(2);
-  simple_car_state.set_y(-2);
-  simple_car_state.set_velocity(10);
-  const int id_mobil =
-      simulator->AddMobilControlledSimpleCar("mobil", true /* with_s */,
-                                             simple_car_state);
-  EXPECT_EQ(id_mobil, 0);
+  // ------------------------------------------------------------------
+  // +---->  +s, +x     | TrajectoryCar |       |     Decoy     |
+  // ------------------------------------------------------------------
+  double start_position = 2;
+  double start_speed = 10;
+
+  auto dragway_road = dynamic_cast<const maliput::dragway::RoadGeometry*>(road);
+  const auto& params = CreateTrajectoryParamsForDragway(
+      *dragway_road, 0 /* lane index */, start_speed, start_position);
+
+  const int id_idm_trajectory_car =
+      simulator->AddIdmControlledPriusTrajectoryCar(
+          "idm_trajectory_car", std::get<0>(params), start_speed,
+          start_position);
+  EXPECT_EQ(id_idm_trajectory_car, 0);
 
   MaliputRailcarState<double> decoy_state;
   decoy_state.set_s(6);
   decoy_state.set_speed(0);
-  const int id_decoy1 = simulator->AddPriusMaliputRailcar(
-      "decoy1", LaneDirection(road->junction(0)->segment(0)->lane(0)),
+  const int id_decoy = simulator->AddPriusMaliputRailcar(
+      "decoy", LaneDirection(road->junction(0)->segment(0)->lane(0)),
       MaliputRailcarParams<double>(), decoy_state);
-  EXPECT_EQ(id_decoy1, 1);
-
-  decoy_state.set_s(20);
-  const int id_decoy2 = simulator->AddPriusMaliputRailcar(
-      "decoy2", LaneDirection(road->junction(0)->segment(0)->lane(1)),
-      MaliputRailcarParams<double>(), decoy_state);
-  EXPECT_EQ(id_decoy2, 2);
+  EXPECT_EQ(id_decoy, 1);
 
   // Finish all initialization, so that we can test the post-init state.
   simulator->Start();
@@ -412,11 +408,13 @@ GTEST_TEST(AutomotiveSimulatorTest, TestIdmControlledTrajectoryCar) {
 
   const lcmt_viewer_draw draw_message =
       lcm->DecodeLastPublishedMessageAs<lcmt_viewer_draw>("DRAKE_VIEWER_DRAW");
-  EXPECT_EQ(draw_message.num_links, 3 * PriusVis<double>(0, "").num_poses());
+  EXPECT_EQ(draw_message.num_links, 2 * PriusVis<double>(0, "").num_poses());
 
-  // Expect the SimpleCar to start steering to the left; y value increases.
-  const double mobil_y = draw_message.position.at(0).at(1);
-  EXPECT_GE(mobil_y, -2.);
+  // Expect the TrajectoryCar to decelerate.
+  const double trajectory_car_x = draw_message.position.at(0).at(0);
+  const double average_speed = (trajectory_car_x - start_position) / 0.5;
+  EXPECT_LE(0., trajectory_car_x);
+  EXPECT_GE(start_speed, average_speed);
 }
 
 // Returns the x-position of the vehicle based on an lcmt_viewer_draw message.
@@ -643,19 +641,18 @@ GTEST_TEST(AutomotiveSimulatorTest, TestRailcarVelocityOutput) {
       std::make_unique<lcm::DrakeMockLcm>());
 
   const MaliputRailcarParams<double> params;
-  const maliput::api::RoadGeometry* road =
-      simulator->SetRoadGeometry(
-          std::make_unique<const maliput::dragway::RoadGeometry>(
-              maliput::api::RoadGeometryId({"TestDragway"}), 1 /* num lanes */,
-              100 /* length */, 4 /* lane width */, 1 /* shoulder width */));
+  const maliput::api::RoadGeometry* road = simulator->SetRoadGeometry(
+      std::make_unique<const maliput::dragway::RoadGeometry>(
+          maliput::api::RoadGeometryId({"TestDragway"}), 1 /* num lanes */,
+          100 /* length */, 4 /* lane width */, 1 /* shoulder width */));
   MaliputRailcarState<double> alice_initial_state;
   alice_initial_state.set_s(5);
   alice_initial_state.set_speed(1);
-  const int alice_id = simulator->AddPriusMaliputRailcar("Alice",
-      LaneDirection(road->junction(0)->segment(0)->lane(0)), params,
+  const int alice_id = simulator->AddPriusMaliputRailcar(
+      "Alice", LaneDirection(road->junction(0)->segment(0)->lane(0)), params,
       alice_initial_state);
-  const int bob_id = simulator->AddIdmControlledPriusMaliputRailcar("Bob",
-      LaneDirection(road->junction(0)->segment(0)->lane(0)), params,
+  const int bob_id = simulator->AddIdmControlledPriusMaliputRailcar(
+      "Bob", LaneDirection(road->junction(0)->segment(0)->lane(0)), params,
       MaliputRailcarState<double>() /* initial state */);
 
   EXPECT_NO_THROW(simulator->Start());

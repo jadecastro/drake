@@ -175,7 +175,7 @@ GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorIdmTest) {
   x0.set_position(start_position);
   x0.set_speed(speed);  // m/s = ~ 33mph
 
-  const double duration = 5.0;  // seconds
+  const double duration = 5.;  // seconds
   const int kNumTimeSamples = 10;
 
   systems::DircolTrajectoryOptimization prog(&plant, *context, kNumTimeSamples,
@@ -190,7 +190,6 @@ GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorIdmTest) {
   EXPECT_EQ(prog.Solve(), solvers::SolutionResult::kSolutionFound);
 
 }
-
 
 }  // namespace
 }  // namespace automotive

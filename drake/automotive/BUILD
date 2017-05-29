@@ -489,6 +489,7 @@ drake_cc_googletest(
     local = 1,
     deps = [
         "//drake/automotive:automotive_simulator",
+        "//drake/automotive:create_trajectory_params",
         "//drake/automotive/maliput/dragway",
         "//drake/lcm:mock",
     ],
@@ -656,9 +657,9 @@ drake_cc_googletest(
 drake_cc_googletest(
     name = "trajectory_optimization_test",
     deps = [
-        ":automotive_simulator",
-        ":create_trajectory_params",
-        ":simple_car",
+        "//drake/automotive:automotive_simulator",
+        "//drake/automotive:create_trajectory_params",
+        "//drake/automotive:simple_car",
         "//drake/automotive/maliput/api",
         "//drake/automotive/maliput/dragway",
         "//drake/common:call_matlab",
