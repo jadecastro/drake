@@ -259,7 +259,7 @@ int AutomotiveSimulator<T>::AddPriusTrajectoryCar(const std::string& name,
 // TODO(jadecastro): Add a unit test for this function.
 template <typename T>
 int AutomotiveSimulator<T>::AddIdmControlledPriusTrajectoryCar(
-    const std::string& name, const Curve2<double>& curve, double speed,
+    const std::string& name, const Curve2<double>& curve, double start_speed,
     double start_position) {
   DRAKE_DEMAND(!has_started());
   DRAKE_DEMAND(aggregator_ != nullptr);
@@ -275,7 +275,7 @@ int AutomotiveSimulator<T>::AddIdmControlledPriusTrajectoryCar(
 
   TrajectoryCarState<double> initial_state{};
   initial_state.set_position(start_position);
-  initial_state.set_speed(speed);
+  initial_state.set_speed(start_speed);
   trajectory_car_initial_states_[trajectory_car].set_value(
       initial_state.get_value());
 
@@ -583,19 +583,25 @@ void AutomotiveSimulator<T>::Build() {
 }
 
 template <typename T>
-void AutomotiveSimulator<T>::Start(double target_realtime_rate) {
+void AutomotiveSimulator<T>::BuildAndInitialize() {
   DRAKE_DEMAND(!has_started());
   if (diagram_ == nullptr) {
     Build();
   }
-
-  TransmitLoadMessage();
 
   simulator_ = std::make_unique<systems::Simulator<T>>(*diagram_);
 
   InitializeTrajectoryCars();
   InitializeSimpleCars();
   InitializeMaliputRailcars();
+}
+
+template <typename T>
+void AutomotiveSimulator<T>::Start(double target_realtime_rate) {
+  DRAKE_DEMAND(!has_started());
+
+  BuildAndInitialize();
+  TransmitLoadMessage();
 
   if (lcm_) {
     lcm_->StartReceiveThread();
@@ -612,6 +618,7 @@ void AutomotiveSimulator<T>::InitializeTrajectoryCars() {
   for (const auto& pair : trajectory_car_initial_states_) {
     const TrajectoryCar<T>* const car = pair.first;
     const TrajectoryCarState<T>& initial_state = pair.second;
+    // DRAKE_DEMAND the simulator_?
 
     systems::VectorBase<T>* context_state =
         diagram_

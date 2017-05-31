@@ -249,6 +249,12 @@ class AutomotiveSimulator {
   /// @pre Build() has NOT been called.
   void Build();
 
+  /// Builds the Diagram and intializes the Diagram Context to the predefined
+  /// initial states.
+  ///
+  /// @pre Build() has NOT been called.
+  void BuildAndInitialize();
+
   /// Returns the System containing the entire AutomotiveSimulator diagram.
   ///
   /// @pre Build() has been called.

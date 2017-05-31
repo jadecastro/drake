@@ -144,13 +144,12 @@ GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorDircolTest) {
 }
 */
 
+
 GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorIdmTest) {
   std::unique_ptr<const maliput::api::RoadGeometry> road_geometry =
       std::make_unique<const maliput::dragway::RoadGeometry>(
           maliput::api::RoadGeometryId({"Dicol Test Dragway"}),
-          1 /* num dragway lanes */, 100. /* length */, 2. /* width */,
-          0. /* shoulder width */);
-
+          1  , 100. , 2. , 0.);
   auto simulator = std::make_unique<AutomotiveSimulator<double>>();
 
   auto simulator_road = simulator->SetRoadGeometry(std::move(road_geometry));
@@ -158,22 +157,39 @@ GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorIdmTest) {
       dynamic_cast<const maliput::dragway::RoadGeometry*>(simulator_road);
 
   const int lane_index = 0;
-  const double speed = 15.;
-  const double start_position = 0.;
+  const double start_speed_follower = 15.;
+  const double start_position_follower = 5.;
+  const auto& params_follower = CreateTrajectoryParamsForDragway(
+      *dragway_road_geometry, lane_index, start_speed_follower,
+      start_position_follower);
+  simulator->AddIdmControlledPriusTrajectoryCar("following_trajectory_car",
+                                                std::get<0>(params_follower),
+                                                start_speed_follower,
+                                                start_position_follower);
+  const double speed_leader = 10.;
+  const double start_position_leader = 20.;
+  const auto& params_leader = CreateTrajectoryParamsForDragway(
+      *dragway_road_geometry, lane_index, speed_leader,
+      start_position_leader);
+  simulator->AddPriusTrajectoryCar("leading_trajectory_car",
+                                   std::get<0>(params_leader),
+                                   speed_leader,
+                                   start_position_leader);
+  simulator->BuildAndInitialize();
 
-  const auto& params = CreateTrajectoryParamsForDragway(
-      *dragway_road_geometry, lane_index, speed, start_position);
-
-  simulator->AddIdmControlledPriusTrajectoryCar("trajectory_car",
-                                                std::get<0>(params),
-                                                speed, start_position);
-  simulator->Build();
   const auto& plant = simulator->GetDiagram();
-  auto context = plant.CreateDefaultContext();
 
-  TrajectoryCarState<double> x0;
-  x0.set_position(start_position);
-  x0.set_speed(speed);  // m/s = ~ 33mph
+  // Create a context and populate it (manually for now) for the sole purpose of
+  // adding a equality constraint on state.
+  auto context = plant.CreateDefaultContext();
+  const auto state = context->get_continuous_state();
+  auto state_vec = state->CopyToVector();
+  std::cout << " state_vec " << state_vec << std::endl;
+  //return;
+  state_vec(0) = start_position_follower;
+  state_vec(1) = start_speed_follower;
+  state_vec(2) = start_position_leader;
+  state_vec(3) = speed_leader;
 
   const double duration = 5.;  // seconds
   const int kNumTimeSamples = 10;
@@ -185,7 +201,7 @@ GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorIdmTest) {
   prog.AddTimeIntervalBounds(duration / (kNumTimeSamples - 1),
                              duration / (kNumTimeSamples - 1));
 
-  prog.AddLinearConstraint( prog.initial_state() == x0.get_value() );
+  prog.AddLinearConstraint(prog.initial_state() == state_vec);
 
   EXPECT_EQ(prog.Solve(), solvers::SolutionResult::kSolutionFound);
 
