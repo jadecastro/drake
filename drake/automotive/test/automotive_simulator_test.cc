@@ -14,8 +14,6 @@
 #include "drake/lcm/drake_mock_lcm.h"
 #include "drake/lcmt_simple_car_state_t.hpp"
 #include "drake/lcmt_viewer_draw.hpp"
-#include "drake/systems/framework/basic_vector.h"
-#include "drake/systems/framework/diagram_context.h"
 #include "drake/systems/lcm/lcm_publisher_system.h"
 #include "drake/systems/lcm/lcm_subscriber_system.h"
 #include "drake/systems/lcm/lcmt_drake_signal_translator.h"
@@ -209,7 +207,7 @@ GTEST_TEST(AutomotiveSimulatorTest, TestMobilControlledSimpleCar) {
   // Finish all initialization, so that we can test the post-init state.
   simulator->Start();
 
-  // Advances the simulation to allow the MaliputRailcar to begin accelerating.
+  // Advances the simulation.
   simulator->StepBy(0.5);
 
   const lcmt_viewer_draw draw_message =
@@ -403,7 +401,7 @@ GTEST_TEST(AutomotiveSimulatorTest, TestIdmControlledTrajectoryCar) {
   // Finish all initialization, so that we can test the post-init state.
   simulator->Start();
 
-  // Advances the simulation to allow the MaliputRailcar to begin accelerating.
+  // Advances the simulation.
   simulator->StepBy(0.5);
 
   const lcmt_viewer_draw draw_message =

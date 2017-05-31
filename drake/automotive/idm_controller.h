@@ -78,26 +78,36 @@ class IdmController : public systems::LeafSystem<T> {
       const systems::rendering::PoseBundle<T>& traffic_poses,
       const IdmPlannerParameters<T>& idm_params,
       systems::BasicVector<T>* command) const;
+
  private:
   template <typename T1 = T>
   void ComputePartials(
-      const systems::rendering::PoseVector<std::enable_if_t<
-      std::is_same<T1, double>::value, T1>>& ego_pose,
-      const systems::rendering::FrameVelocity<std::enable_if_t<
-      std::is_same<T1, double>::value, T1>>& ego_velocity,
-      const RoadOdometry<std::enable_if_t<
-      std::is_same<T1, double>::value, T1>>& lead_car_odom,
-      double* s_dot_ego, double* s_dot_lead) const;
+      const systems::rendering::PoseVector<
+          std::enable_if_t<std::is_same<T1, double>::value, T1>>& ego_pose,
+      const systems::rendering::FrameVelocity<
+          std::enable_if_t<std::is_same<T1, double>::value, T1>>& ego_velocity,
+      const RoadOdometry<std::enable_if_t<std::is_same<T1, double>::value, T1>>&
+          lead_car_odom,
+      const systems::rendering::PoseBundle<
+          std::enable_if_t<std::is_same<T1, double>::value, T1>>& traffic_poses,
+      const IdmPlannerParameters<std::enable_if_t<
+          std::is_same<T1, double>::value, T1>>& params,
+      double* s_dot_ego, double* s_dot_lead, double* headway_distance) const;
 
   template <typename T1 = T>
   void ComputePartials(
-      const systems::rendering::PoseVector<std::enable_if_t<
-      std::is_same<T1, AutoDiffXd>::value, T1>>& ego_pose,
+      const systems::rendering::PoseVector<
+          std::enable_if_t<std::is_same<T1, AutoDiffXd>::value, T1>>& ego_pose,
       const systems::rendering::FrameVelocity<std::enable_if_t<
-      std::is_same<T1, AutoDiffXd>::value, T1>>& ego_velocity,
-      const RoadOdometry<std::enable_if_t<
-      std::is_same<T1, AutoDiffXd>::value, T1>>& lead_car_odom,
-      AutoDiffXd* s_dot_ego, AutoDiffXd* s_dot_lead) const;
+          std::is_same<T1, AutoDiffXd>::value, T1>>& ego_velocity,
+      const RoadOdometry<std::enable_if_t<std::is_same<T1, AutoDiffXd>::value,
+                                          T1>>& lead_car_odom,
+      const systems::rendering::PoseBundle<std::enable_if_t<
+          std::is_same<T1, AutoDiffXd>::value, T1>>& traffic_poses,
+      const IdmPlannerParameters<std::enable_if_t<
+          std::is_same<T1, AutoDiffXd>::value, T1>>& params,
+      AutoDiffXd* s_dot_ego, AutoDiffXd* s_dot_lead,
+      AutoDiffXd* headway_distance) const;
 
   // Converts @p pose into RoadPosition.
   const maliput::api::RoadPosition GetRoadPosition(
