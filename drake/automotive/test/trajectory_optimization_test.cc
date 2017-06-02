@@ -144,12 +144,11 @@ GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorDircolTest) {
 }
 */
 
-
 GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorIdmTest) {
   std::unique_ptr<const maliput::api::RoadGeometry> road_geometry =
       std::make_unique<const maliput::dragway::RoadGeometry>(
-          maliput::api::RoadGeometryId({"Dicol Test Dragway"}),
-          1  , 100. , 2. , 0.);
+          maliput::api::RoadGeometryId({"Dircol Test Dragway"}),
+          1 , 100. , 2. , 0.);
   auto simulator = std::make_unique<AutomotiveSimulator<double>>();
 
   auto simulator_road = simulator->SetRoadGeometry(std::move(road_geometry));
@@ -157,8 +156,13 @@ GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorIdmTest) {
       dynamic_cast<const maliput::dragway::RoadGeometry*>(simulator_road);
 
   const int lane_index = 0;
-  const double start_speed_follower = 15.;
+
+  // These defaults should be ignored by the solver.
+  const double start_speed_follower = 20.;
   const double start_position_follower = 5.;
+  const double speed_leader = 10.;
+  const double start_position_leader = 20.;
+
   const auto& params_follower = CreateTrajectoryParamsForDragway(
       *dragway_road_geometry, lane_index, start_speed_follower,
       start_position_follower);
@@ -166,8 +170,6 @@ GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorIdmTest) {
                                                 std::get<0>(params_follower),
                                                 start_speed_follower,
                                                 start_position_follower);
-  const double speed_leader = 10.;
-  const double start_position_leader = 20.;
   const auto& params_leader = CreateTrajectoryParamsForDragway(
       *dragway_road_geometry, lane_index, speed_leader,
       start_position_leader);
@@ -178,18 +180,7 @@ GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorIdmTest) {
   simulator->BuildAndInitialize();
 
   const auto& plant = simulator->GetDiagram();
-
-  // Create a context and populate it (manually for now) for the sole purpose of
-  // adding a equality constraint on state.
   auto context = plant.CreateDefaultContext();
-  const auto state = context->get_continuous_state();
-  auto state_vec = state->CopyToVector();
-  std::cout << " state_vec " << state_vec << std::endl;
-  //return;
-  state_vec(0) = start_position_follower;
-  state_vec(1) = start_speed_follower;
-  state_vec(2) = start_position_leader;
-  state_vec(3) = speed_leader;
 
   const double duration = 5.;  // seconds
   const int kNumTimeSamples = 10;
@@ -201,9 +192,37 @@ GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorIdmTest) {
   prog.AddTimeIntervalBounds(duration / (kNumTimeSamples - 1),
                              duration / (kNumTimeSamples - 1));
 
-  prog.AddLinearConstraint(prog.initial_state() == state_vec);
+  prog.AddLinearConstraint(prog.initial_state()(0) >= 15.);  // s traffic0
+  prog.AddLinearConstraint(prog.initial_state()(1) == 10.);  // s_dot traffic0
+  prog.AddLinearConstraint(prog.initial_state()(2) == 0.5);  // s ego
+  prog.AddLinearConstraint(prog.initial_state()(3) >= 20.);  // s_dot ego
+
+  // Set state constaints for all time steps; constraints on state() with
+  // indeterminate time-steps does not seem to work??
+  for (int i{0}; i < kNumTimeSamples; ++i) {
+    prog.AddLinearConstraint(prog.state(i)(0) >= 15.);  // s traffic0
+    prog.AddLinearConstraint(prog.state(i)(1) == 10.);  // s_dot traffic0
+    prog.AddLinearConstraint(prog.state(i)(2) >= 0.5);  // s ego
+    prog.AddLinearConstraint(prog.state(i)(3) >= 5.);  // s_dot ego <-- should
+                                                       // be epsilon.
+  }
+
+  prog.AddLinearConstraint(prog.final_state()(0) <= prog.final_state()(2) + 5.);
 
   EXPECT_EQ(prog.Solve(), solvers::SolutionResult::kSolutionFound);
+
+    // Plot the solution.
+  // Note: see lcm_call_matlab.h for instructions on viewing the plot.
+  Eigen::MatrixXd inputs;
+  Eigen::MatrixXd states;
+  std::vector<double> times_out;
+  prog.GetResultSamples(&inputs, &states, &times_out);
+  common::CallMatlab("plot", states.row(0), states.row(0) - states.row(2));
+  common::CallMatlab("xlabel", "s\_lead (m)");
+  common::CallMatlab("ylabel", "s\_lead - s\_ego (m)");
+
+  // TODO(jadecastro): Save the offending initial condition and replay that
+  // using AutomotiveSimulator.
 
 }
 
