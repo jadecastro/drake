@@ -106,7 +106,7 @@ void IdmController<T>::ImplDoCalcOutput(
   DRAKE_DEMAND(idm_params.IsValid());
   const double scan_distance{100.};  // TODO(jadecastro): Make this a parameter.
   // Initialize to a "model value" that has entries for the derivatives.
-  T headway_distance{0. * ego_pose.get_isometry().translation().x()};
+  T headway_distance_value{0.};
 
   auto translation = ego_pose.get_isometry().translation();
   const maliput::api::GeoPosition geo_position(
@@ -119,7 +119,13 @@ void IdmController<T>::ImplDoCalcOutput(
   // Find the single closest car ahead.
   const RoadOdometry<T> lead_car_odom = PoseSelector<T>::FindSingleClosestPose(
       ego_position.lane, ego_pose, ego_velocity, traffic_poses, scan_distance,
-      WhichSide::kAhead);
+      WhichSide::kAhead, &headway_distance_value);
+
+  T headway_distance =
+      headway_distance_value * ego_pose.get_isometry().translation().x();
+  std::cout << " s ego " << ego_position.pos.s() << std::endl;
+  std::cout << " s lead " << lead_car_odom.pos.s() << std::endl;
+  std::cout << " headway_distance " << headway_distance << std::endl;
 
   T s_dot_ego = PoseSelector<T>::GetSigmaVelocity({ego_position, ego_velocity});
   T s_dot_lead = PoseSelector<T>::GetSigmaVelocity(
@@ -137,9 +143,15 @@ void IdmController<T>::ImplDoCalcOutput(
   const T net_distance = max(idm_params.distance_lower_limit(), actual_headway);
   const T closing_velocity = s_dot_ego - s_dot_lead;
 
+  std::cout << " net_distance " << net_distance << std::endl;
+  std::cout << " closing_velocity " << closing_velocity << std::endl;
+  std::cout << " s_dot_ego " << s_dot_ego << std::endl;
+
   // Compute the acceleration command from the IDM equation.
   (*command)[0] = IdmPlanner<T>::Evaluate(idm_params, s_dot_ego, net_distance,
                                           closing_velocity);
+  std::cerr << " idm acceleration (command) " << (*command)[0] << std::endl;
+
 }
 
 template <typename T>
@@ -253,13 +265,13 @@ const {
   // Spike test: Assign random numbers to the derivatves here and see if there
   // is any change to the resulting TrajectoryCar states.
   (*headway_distance).derivatives()(0) = 0.;
-  (*headway_distance).derivatives()(1) = -1.;
+  (*headway_distance).derivatives()(1) = 1.;
   (*headway_distance).derivatives()(2) = 0.;
-  (*headway_distance).derivatives()(3) = 1.;
+  (*headway_distance).derivatives()(3) = -1.;
   (*headway_distance).derivatives()(4) = 0.;
-  (*headway_distance).derivatives()(5) = -1.;
+  (*headway_distance).derivatives()(5) = 1.;
   (*headway_distance).derivatives()(6) = 0.;
-  (*headway_distance).derivatives()(7) = 1.;
+  (*headway_distance).derivatives()(7) = -1.;
   (*headway_distance).derivatives()(8) = 0.;
   std::cout << " NEW headway_distance derivs "
             << headway_distance->derivatives() << std::endl;

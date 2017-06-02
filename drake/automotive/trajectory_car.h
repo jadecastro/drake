@@ -236,6 +236,11 @@ class TrajectoryCar : public systems::LeafSystem<T> {
     const T zero_speed = 0. * state.speed();
     const T nonneg_velocity = max(zero_speed, state.speed());
 
+    std::cerr << " desired acceleration (input) " << desired_acceleration
+              << std::endl;
+    std::cerr << " nonneg_velocity (xdot(0)) " << nonneg_velocity << std::endl;
+    std::cerr << " smooth_acceleration (xdot(1)) " << smooth_acceleration
+              << std::endl;
     rates->set_position(nonneg_velocity);
     rates->set_speed(smooth_acceleration);
   }

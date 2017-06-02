@@ -69,6 +69,7 @@ const RoadOdometry<T> PoseSelector<T>::FindSingleClosestPose(
 
   // Get the ego car's velocity and lane direction in the trial lane.
   const RoadOdometry<T> road_odom({lane, ego_lane_position}, ego_velocity);
+  std::cerr << "    ego_velocity " << ego_velocity << std::endl;
   const T ego_sigma_v = GetSigmaVelocity(road_odom);
   LaneDirection lane_direction(lane, ego_sigma_v >= 0. /* with_s */);
 
@@ -108,11 +109,20 @@ const RoadOdometry<T> PoseSelector<T>::FindSingleClosestPose(
       // respect to the car's current direction) when the two share the same
       // lane.
       if (side == WhichSide::kAhead) {
+          std::cerr << "    distance_scanned " << distance_scanned << std::endl;
         if (distance_scanned <= T(0.)) {
+          std::cerr << " traffic_lane_position.s() "
+                    << traffic_lane_position.s() << std::endl;
+          std::cerr << " lane_direction.with_s " << lane_direction.with_s
+                    << std::endl;
+          std::cerr << " (traffic_lane_position.s() <= ego_lane_position.s()) "
+                    << (traffic_lane_position.s() <= ego_lane_position.s())
+                    << std::endl;
           if ((lane_direction.with_s &&
                traffic_lane_position.s() <= ego_lane_position.s()) ||
               (!lane_direction.with_s &&
                traffic_lane_position.s() >= ego_lane_position.s())) {
+            std::cerr << "   Traffic car ignored (behind) ... " << std::endl;
             continue;
           }
         }
@@ -129,10 +139,13 @@ const RoadOdometry<T> PoseSelector<T>::FindSingleClosestPose(
       // Ignore positions at the desired side of the ego car that are not closer
       // than any other found so far.
       if (side == WhichSide::kAhead) {
+        std::cerr << " (traffic_lane_position.s() > result.pos.s()) "
+                  << (traffic_lane_position.s() > result.pos.s()) << std::endl;
         if ((lane_direction.with_s &&
              traffic_lane_position.s() > result.pos.s()) ||
             (!lane_direction.with_s &&
              traffic_lane_position.s() < result.pos.s())) {
+          std::cerr << "   Traffic car ignored (not closer) ... " << std::endl;
           continue;
         }
       } else if (side == WhichSide::kBehind) {
@@ -142,9 +155,8 @@ const RoadOdometry<T> PoseSelector<T>::FindSingleClosestPose(
              traffic_lane_position.s() >= result.pos.s())) {
           continue;
         }
-        result = RoadOdometry<T>({lane_direction.lane, traffic_lane_position},
-                                 traffic_poses.get_velocity(i));
       }
+      std::cerr << "   Traffic car NOT ignored ... " << std::endl;
       // Update the result with the new candidate.
       result = RoadOdometry<T>({lane_direction.lane, traffic_lane_position},
                                traffic_poses.get_velocity(i));
