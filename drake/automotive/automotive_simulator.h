@@ -253,7 +253,9 @@ class AutomotiveSimulator {
   /// initial states.
   ///
   /// @pre Build() has NOT been called.
-  void BuildAndInitialize();
+  void BuildAndInitialize(
+      std::unique_ptr<systems::Context<double>> initial_context = nullptr);
+  // TODO: Update the docs!!
 
   /// Returns the System containing the entire AutomotiveSimulator diagram.
   ///
@@ -274,7 +276,10 @@ class AutomotiveSimulator {
   //
   // TODO(jwnimmer-tri) Perhaps our class should be AutomotiveSimulatorBuilder?
   // Port a few more demo programs, then decide what looks best.
-  void Start(double target_realtime_rate = 0.0);
+  void Start(double target_realtime_rate = 0.0,
+             std::unique_ptr<systems::Context<double>>
+             initial_context = nullptr);
+  // TODO: Update the docs!!
 
   /// Returns whether the automotive simulator has lcm enabled.
   bool has_lcm() const { return lcm_.get() != nullptr; }

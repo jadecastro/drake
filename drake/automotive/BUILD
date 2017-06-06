@@ -427,6 +427,22 @@ drake_cc_binary(
     ],
 )
 
+drake_cc_googletest(
+    name = "crash_finder_demo",
+    srcs = ["crash_finder_demo.cc"],
+    deps = [
+        "//drake/automotive:automotive_simulator",
+        "//drake/automotive:create_trajectory_params",
+        "//drake/automotive:simple_car",
+        "//drake/automotive/maliput/api",
+        "//drake/automotive/maliput/dragway",
+        "//drake/common:call_matlab",
+        "//drake/common:eigen_matrix_compare",
+        "//drake/systems/trajectory_optimization:direct_collocation",
+        "@com_github_gflags_gflags//:gflags",
+    ],
+)
+
 py_binary(
     name = "steering_command_driver",
     srcs = ["steering_command_driver.py"],
