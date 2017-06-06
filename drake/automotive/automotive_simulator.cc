@@ -583,7 +583,8 @@ void AutomotiveSimulator<T>::Build() {
 }
 
 template <typename T>
-void AutomotiveSimulator<T>::BuildAndInitialize() {
+void AutomotiveSimulator<T>::BuildAndInitialize(
+    std::unique_ptr<systems::Context<double>> initial_context) {
   DRAKE_DEMAND(!has_started());
   if (diagram_ == nullptr) {
     Build();
@@ -591,16 +592,23 @@ void AutomotiveSimulator<T>::BuildAndInitialize() {
 
   simulator_ = std::make_unique<systems::Simulator<T>>(*diagram_);
 
-  InitializeTrajectoryCars();
-  InitializeSimpleCars();
-  InitializeMaliputRailcars();
+  if (initial_context == nullptr) {
+    InitializeTrajectoryCars();
+    InitializeSimpleCars();
+    InitializeMaliputRailcars();
+  } else {
+    std::cout << " reset_context " << std::endl;
+    simulator_->reset_context(std::move(initial_context));
+  }
 }
 
 template <typename T>
-void AutomotiveSimulator<T>::Start(double target_realtime_rate) {
+void AutomotiveSimulator<T>::Start(
+    double target_realtime_rate,
+    std::unique_ptr<systems::Context<double>> initial_context) {
   DRAKE_DEMAND(!has_started());
 
-  BuildAndInitialize();
+  BuildAndInitialize(std::move(initial_context));
   TransmitLoadMessage();
 
   if (lcm_) {
@@ -623,8 +631,7 @@ void AutomotiveSimulator<T>::InitializeTrajectoryCars() {
     systems::VectorBase<T>* context_state =
         diagram_
             ->GetMutableSubsystemContext(simulator_->get_mutable_context(), car)
-            ->get_mutable_continuous_state()
-            ->get_mutable_vector();
+            ->get_mutable_continuous_state_vector();
     TrajectoryCarState<T>* const state =
         dynamic_cast<TrajectoryCarState<T>*>(context_state);
     DRAKE_ASSERT(state);
@@ -641,8 +648,7 @@ void AutomotiveSimulator<T>::InitializeSimpleCars() {
     systems::VectorBase<T>* context_state =
         diagram_
             ->GetMutableSubsystemContext(simulator_->get_mutable_context(), car)
-            ->get_mutable_continuous_state()
-            ->get_mutable_vector();
+            ->get_mutable_continuous_state_vector();
     SimpleCarState<T>* const state =
         dynamic_cast<SimpleCarState<T>*>(context_state);
     DRAKE_ASSERT(state);
@@ -662,7 +668,7 @@ void AutomotiveSimulator<T>::InitializeMaliputRailcars() {
     DRAKE_DEMAND(context != nullptr);
 
     systems::VectorBase<T>* context_state =
-        context->get_mutable_continuous_state()->get_mutable_vector();
+        context->get_mutable_continuous_state_vector();
     MaliputRailcarState<T>* const state =
         dynamic_cast<MaliputRailcarState<T>*>(context_state);
     DRAKE_ASSERT(state);
