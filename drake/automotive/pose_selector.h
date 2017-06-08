@@ -14,7 +14,7 @@
 #include "drake/automotive/maliput/api/road_geometry.h"
 #include "drake/common/autodiff_overloads.h"
 #include "drake/common/drake_copyable.h"
-#include "drake/common/eigen_autodiff_types.h"  // TODO: Need??
+#include "drake/common/eigen_autodiff_types.h"
 #include "drake/systems/rendering/pose_bundle.h"
 #include "drake/systems/rendering/pose_vector.h"
 
@@ -90,8 +90,6 @@ class PoseSelector {
   ///
   /// Note: This function is lossy with respect to AutoDiffXd partial
   /// derivatives.
-
-  // TODO: Reference on the return type??
   static const std::pair<const RoadOdometry<T>, const RoadOdometry<T>>
   FindClosestPair(const maliput::api::Lane* const lane,
                   const systems::rendering::PoseVector<T>& ego_pose,
@@ -110,8 +108,6 @@ class PoseSelector {
   ///
   /// Note: This function is lossy with respect to AutoDiffXd partial
   /// derivatives.
-
-  // TODO: Reference on the return type??
   static const RoadOdometry<T> FindSingleClosestPose(
           const maliput::api::Lane* const lane,
           const systems::rendering::PoseVector<T>& ego_pose,
@@ -126,8 +122,6 @@ class PoseSelector {
   ///
   /// Note: This function is lossy with respect to AutoDiffXd partial
   /// derivatives.
-
-  // TODO: Reference on the return type??  Usually do not for T.
   static const T GetSigmaVelocity(const RoadOdometry<T>& road_odometry);
 
   // Returns `true` if within the given lane, and `false` otherwise.  @p

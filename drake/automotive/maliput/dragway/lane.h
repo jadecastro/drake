@@ -4,6 +4,7 @@
 
 #include "drake/automotive/maliput/api/branch_point.h"
 #include "drake/automotive/maliput/api/lane.h"
+#include "drake/common/eigen_autodiff_types.h"
 
 namespace drake {
 namespace maliput {
@@ -159,6 +160,11 @@ class Lane final : public api::Lane {
                                      api::GeoPosition* nearest_point,
                                      double* distance) const final;
 
+  api::LanePositionWithAutoDiff<AutoDiffXd> DoToLanePositionWithAutoDiff(
+      const api::GeoPositionWithAutoDiff<AutoDiffXd>& geo_pos,
+      api::GeoPositionWithAutoDiff<AutoDiffXd>* nearest_point,
+      AutoDiffXd* distance) const final;
+
   const Segment* segment_{};  // The segment to which this lane belongs.
   const api::LaneId id_;
   const int index_{};  // The index of this lane within a Segment.
@@ -174,7 +180,6 @@ class Lane final : public api::Lane {
   const api::Lane* lane_to_left_{};
   const api::Lane* lane_to_right_{};
 };
-
 
 }  // namespace dragway
 }  // namespace maliput
