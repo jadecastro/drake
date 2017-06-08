@@ -118,6 +118,34 @@ api::LanePosition Lane::DoToLanePosition(
                            closest_point.z()              /* h */);
 }
 
+api::LanePositionWithAutoDiff<AutoDiffXd> Lane::DoToLanePositionWithAutoDiff(
+    const api::GeoPositionWithAutoDiff<AutoDiffXd>& geo_pos,
+    api::GeoPositionWithAutoDiff<AutoDiffXd>* nearest_point,
+    AutoDiffXd* distance) const {
+
+  const AutoDiffXd min_x{0.};
+  const AutoDiffXd max_x{length_};
+  const AutoDiffXd min_y{driveable_bounds_.r_min + y_offset_};
+  const AutoDiffXd max_y{driveable_bounds_.r_max + y_offset_};
+
+  const api::GeoPositionWithAutoDiff<AutoDiffXd> closest_point{
+    math::saturate(geo_pos.x(), min_x, max_x),
+    math::saturate(geo_pos.y(), min_y, max_y),
+    geo_pos.z()};
+  if (nearest_point != nullptr) {
+    *nearest_point = closest_point;
+  }
+
+  if (distance != nullptr) {
+    *distance = (geo_pos.xyz() - closest_point.xyz()).norm();
+  }
+
+  return api::LanePositionWithAutoDiff<AutoDiffXd>(
+      closest_point.x() /* s */,
+      closest_point.y() - AutoDiffXd(y_offset_) /* r */,
+      closest_point.z() /* h */);
+}
+
 }  // namespace dragway
 }  // namespace maliput
 }  // namespace drake

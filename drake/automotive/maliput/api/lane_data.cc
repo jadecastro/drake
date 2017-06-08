@@ -26,6 +26,13 @@ std::ostream& operator<<(std::ostream& out, const LanePosition& lane_position) {
       << ", h = " << lane_position.h() << ")";
 }
 
+// These instantiations must match the API documentation in lane_data.h.
+template class GeoPositionWithAutoDiff<double>;
+template class GeoPositionWithAutoDiff<AutoDiffXd>;
+
+template class LanePositionWithAutoDiff<double>;
+template class LanePositionWithAutoDiff<AutoDiffXd>;
+
 }  // namespace api
 }  // namespace maliput
 }  // namespace drake

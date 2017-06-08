@@ -218,8 +218,8 @@ GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorIdmTest) {
   std::vector<double> times_out;
   prog.GetResultSamples(&inputs, &states, &times_out);
   common::CallMatlab("plot", states.row(0), states.row(0) - states.row(2));
-  common::CallMatlab("xlabel", "s\_lead (m)");
-  common::CallMatlab("ylabel", "s\_lead - s\_ego (m)");
+  common::CallMatlab("xlabel", "s lead (m)");
+  common::CallMatlab("ylabel", "s lead - s ego (m)");
 
   // TODO(jadecastro): Save the offending initial condition and replay that
   // using AutomotiveSimulator.

@@ -5,7 +5,9 @@
 
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
+#include "drake/common/eigen_autodiff_types.h"
 #include "drake/common/eigen_types.h"
+#include "drake/common/extract_double.h"
 #include "drake/math/quaternion.h"
 #include "drake/math/roll_pitch_yaw.h"
 
@@ -176,6 +178,74 @@ class GeoPosition {
 /// text-logging. It is not intended for serialization.
 std::ostream& operator<<(std::ostream& out, const GeoPosition& geo_position);
 
+/// A position in 3-dimensional geographical Cartesian space, i.e.,
+/// in the world frame, consisting of three components x, y, and z.
+///
+/// Instantiated templates for the following kinds of T's are provided:
+/// - double
+/// - drake::AutoDiffXd
+///
+/// They are already available to link against in the containing library.
+
+// TODO(jadecastro); Unit tests.
+// TODO(jadecastro): Rename to GeoPositionT or similar.
+template <typename T>
+class GeoPositionWithAutoDiff {
+ public:
+  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(GeoPositionWithAutoDiff)
+
+  /// Default constructor, initializing all components to zero.
+  GeoPositionWithAutoDiff() : xyz_(0., 0., 0.) {}
+
+  /// Fully parameterized constructor.
+  GeoPositionWithAutoDiff(const T x, const T y, const T z) : xyz_(x, y, z) {}
+
+  /// Constructs a GeoPositionWithAutoDiff from a 3-vector @p xyz of the form
+  /// `[x, y, z]`.
+  static GeoPositionWithAutoDiff<T> FromXyz(const Vector3<T>& xyz) {
+    return GeoPositionWithAutoDiff<T>(xyz);
+  }
+
+  /// Returns all components as 3-vector `[x, y, z]`.
+  const Vector3<T>& xyz() const { return xyz_; }
+  /// Sets all components from 3-vector `[x, y, z]`.
+  void set_xyz(const Vector3<double>& xyz) { xyz_ = xyz; }
+  /// Returns all components as a GeoPosition.
+  /*
+  const GeoPosition get_double_geo_position() const {
+    return GeoPosition(ExtractDoubleOrThrow(xyz_.x()),
+                       ExtractDoubleOrThrow(xyz_.y()),
+                       ExtractDoubleOrThrow(xyz_.z()));
+  }
+  */
+
+  /// @name Getters and Setters
+  //@{
+  /// Gets `x` value.
+  T x() const { return xyz_.x(); }
+  /// Sets `x` value.
+  void set_x(const T& x) { xyz_.x() = x; }
+  /// Gets `y` value.
+  T y() const { return xyz_.y(); }
+  /// Sets `y` value.
+  void set_y(const T& y) { xyz_.y() = y; }
+  /// Gets `z` vaue.
+  T z() const { return xyz_.z(); }
+  /// Sets `z` value.
+  void set_z(const T& z) { xyz_.z() = z; }
+  //@}
+
+  // TODO(jadecastro): Add unit test.
+  bool operator==(const GeoPositionWithAutoDiff<T>& rhs) const {
+    return (x() == rhs.x()) && (y() == rhs.y()) && (z() == rhs.z());
+  }
+
+ private:
+  Vector3<T> xyz_;
+
+  explicit GeoPositionWithAutoDiff(const Vector3<T>& xyz) : xyz_(xyz) {}
+};
+
 /// A 3-dimensional position in a `Lane`-frame, consisting of three components:
 ///  * s is longitudinal position, as arc-length along a Lane's reference line.
 ///  * r is lateral position, perpendicular to the reference line at s.
@@ -226,6 +296,65 @@ class LanePosition {
 /// @p out. This method is provided for the purposes of debugging or
 /// text-logging. It is not intended for serialization.
 std::ostream& operator<<(std::ostream& out, const LanePosition& lane_position);
+
+/// A 3-dimensional position in a `Lane`-frame, consisting of three components:
+///  * s is longitudinal position, as arc-length along a Lane's reference line.
+///  * r is lateral position, perpendicular to the reference line at s.
+///  * h is height above the road surface.
+///
+/// Instantiated templates for the following kinds of T's are provided:
+/// - double
+/// - drake::AutoDiffXd
+///
+/// They are already available to link against in the containing library.
+
+// TODO(jadecastro); Unit tests.
+// TODO(jadecastro): Rename to LanePositionT or similar.
+template <typename T>
+class LanePositionWithAutoDiff {
+ public:
+  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(LanePositionWithAutoDiff)
+
+  /// Default constructor, initializing all components to zero.
+  LanePositionWithAutoDiff() : srh_(0., 0., 0.) {}
+
+  /// Fully parameterized constructor.
+  LanePositionWithAutoDiff(const T& s, const T& r, const T& h) : srh_(s, r, h)
+  {}
+
+  /// Constructs a LanePositionWithAutoDiff from a 3-vector @p srh of the form
+  /// `[s, r, h]`.
+  static LanePositionWithAutoDiff<T> FromSrh(const Vector3<T>& srh) {
+    return LanePositionWithAutoDiff<T>(srh);
+  }
+
+  /// Returns all components as 3-vector `[s, r, h]`.
+  const Vector3<T>& srh() const { return srh_; }
+  /// Sets all components from 3-vector `[s, r, h]`.
+  void set_srh(const Vector3<T>& srh) { srh_ = srh; }
+
+  /// @name Getters and Setters
+  //@{
+  /// Gets `s` value.
+  T s() const { return srh_.x(); }
+  /// Sets `s` value.
+  void set_s(const T& s) { srh_.x() = s; }
+  /// Gets `r` value.
+  T r() const { return srh_.y(); }
+  /// Sets `r` value.
+  void set_r(const T& r) { srh_.y() = r; }
+  /// Gets `h` value.
+  T h() const { return srh_.z(); }
+  /// Sets `h` value.
+  void set_h(const T& h) { srh_.z() = h; }
+  //@}
+
+ private:
+  Vector3<T> srh_;
+
+  explicit LanePositionWithAutoDiff(const Vector3<T>& srh) : srh_(srh) {}
+};
+
 
 /// Isometric velocity vector in a `Lane`-frame.
 ///

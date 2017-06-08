@@ -111,6 +111,14 @@ class Lane {
     return DoToLanePosition(geo_position, nearest_point, distance);
   }
 
+  ///      
+  LanePositionWithAutoDiff<AutoDiffXd> ToLanePositionWithAutoDiff(
+      const GeoPositionWithAutoDiff<AutoDiffXd>& geo_position,
+      GeoPositionWithAutoDiff<AutoDiffXd>* nearest_point,
+      AutoDiffXd* distance) const {
+    return DoToLanePositionWithAutoDiff(geo_position, nearest_point, distance);
+  }
+
   // TODO(maddog@tri.global) Method to convert LanePosition to that of
   //                         another Lane.  (Should assert that both
   //                         lanes belong to same Segment.)  It should look
@@ -199,6 +207,14 @@ class Lane {
   virtual LanePosition DoToLanePosition(const GeoPosition& geo_position,
                                         GeoPosition* nearest_point,
                                         double* distance) const = 0;
+
+  virtual LanePositionWithAutoDiff<AutoDiffXd>
+  DoToLanePositionWithAutoDiff(
+      const GeoPositionWithAutoDiff<AutoDiffXd>& geo_position,
+      GeoPositionWithAutoDiff<AutoDiffXd>* nearest_point,
+      AutoDiffXd* distance) const {
+    DRAKE_ABORT();
+  }
 
   virtual Rotation DoGetOrientation(const LanePosition& lane_pos) const = 0;
 
