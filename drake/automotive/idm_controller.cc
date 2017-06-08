@@ -184,7 +184,9 @@ void IdmController<T>::ComputePartials(
         std::is_same<T1, AutoDiffXd>::value, T1>>& params,
     AutoDiffXd* s_dot_ego, AutoDiffXd* s_dot_lead, AutoDiffXd* headway_distance)
 const {
-  // The ego car's position has intact partial derivatives AFAICT.
+  // The ego car's position has intact partial derivatives.  NOTE: For some
+  // reason, these derivatives only exist in the AutoDiffXd data structure when
+  // compiling with SNOPT (they do not exist when compiled with IPOPT - why??).
   auto ego_trans = ego_pose.get_isometry().translation();
   /*
   std::cout << " x ego_trans " << ego_trans.x() << std::endl;
@@ -194,7 +196,8 @@ const {
   std::cout << " y derivs ego_trans " << ego_trans.y().derivatives() << std::endl;
   std::cout << " z derivs ego_trans " << ego_trans.z().derivatives() << std::endl;
 
-  // The ego car's velocity has intact partial derivatives AFAICT.
+  // The ego car's velocity has intact partial derivatives (regardless of the
+  // chosen optimizer).
   auto ego_vel = ego_velocity.get_velocity().translational();
   std::cout << " x ego_vel " << ego_vel.x() << std::endl;
   std::cout << " y ego_vel " << ego_vel.y() << std::endl;
@@ -203,7 +206,7 @@ const {
   std::cout << " y ego_vel derivs " << ego_vel.y().derivatives() << std::endl;
   std::cout << " z ego_vel derivs " << ego_vel.z().derivatives() << std::endl;
 
-  // Note that the partial derivatives of the lead car's velocity are EMPTY.
+  // Note that the partial derivatives of the lead car's velocity are empty.
   auto lead_vel = lead_car_odom.vel.get_velocity().translational();
   std::cout << " x lead_vel " << lead_vel.x() << std::endl;
   std::cout << " y lead_vel " << lead_vel.y() << std::endl;
@@ -262,8 +265,17 @@ const {
       ego_pos_vector(0).derivatives()).finished())};
       std::cerr << ego_position_prime(0) << std::endl;*/
 
-  // Spike test: Assign random numbers to the derivatves here and see if there
-  // is any change to the resulting TrajectoryCar states.
+  // Spike test: Assign derivatives manually to fill in the missing derivatives.
+  // NOTE: These derivatives are specific to the AutomotiveSimulator diagram
+  // when consumed by the Dircol trajectory optimization solver, where index 0
+  // is time, and the remaining indices are the derivatives with respect to the
+  // diagram's states at time index k, followed by those at time index k+1.  For
+  // this particular AutomotiveSimulator diagram, we have four states, ordered
+  // as follows:
+  //  - lead car s-position
+  //  - lead car s-velocity (sigma_v)
+  //  - ego s-position
+  //  - ego s-velocity (sigma_v)
   (*headway_distance).derivatives()(0) = 0.;
   (*headway_distance).derivatives()(1) = 1.;
   (*headway_distance).derivatives()(2) = 0.;
