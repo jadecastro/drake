@@ -158,6 +158,7 @@ drake_cc_library(
         ":generated_vectors",
         ":idm_planner",
         ":pose_selector",
+        ":road_odometry",
         "//drake/automotive/maliput/api",
         "//drake/common:autodiff",
         "//drake/common:extract_double",
@@ -210,6 +211,7 @@ drake_cc_library(
         ":idm_planner",
         ":lane_direction",
         ":pose_selector",
+        ":road_odometry",
         "//drake/automotive/maliput/api",
         "//drake/common:cond",
         "//drake/common:symbolic",
@@ -235,10 +237,12 @@ drake_cc_library(
     hdrs = ["pose_selector.h"],
     visibility = [],
     deps = [
-        "//drake/automotive:lane_direction",
+        ":lane_direction",
+        ":road_odometry",
         "//drake/automotive/maliput/api",
         "//drake/common:autodiff",
         "//drake/common:extract_double",
+        "//drake/math:geometric_transform",
         "//drake/math:saturate",
         "//drake/systems/rendering:pose_bundle",
         "//drake/systems/rendering:pose_vector",
@@ -285,6 +289,17 @@ drake_cc_library(
         ":generated_vectors",
         ":lane_direction",
         ":pure_pursuit",
+        "//drake/systems/rendering:pose_vector",
+    ],
+)
+
+drake_cc_library(
+    name = "road_odometry",
+    srcs = ["road_odometry.cc"],
+    hdrs = ["road_odometry.h"],
+    deps = [
+        "//drake/automotive/maliput/api",
+        "//drake/systems/rendering:frame_velocity",
         "//drake/systems/rendering:pose_vector",
     ],
 )
@@ -578,6 +593,7 @@ drake_cc_googletest(
     deps = [
         "//drake/automotive:idm_controller",
         "//drake/automotive/maliput/dragway",
+        "//drake/multibody/multibody_tree/math:spatial_velocity",
     ],
 )
 

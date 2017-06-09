@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "drake/common/drake_assert.h"
+#include "drake/common/extract_double.h"
 #include "drake/math/saturate.h"
 
 namespace drake {
@@ -52,9 +53,10 @@ const ClosestPose<T> PoseSelector<T>::FindSingleClosestPose(
   result.distance = std::numeric_limits<T>::infinity();
   ClosestPose<T> default_result = result;
 
-  const GeoPosition ego_geo_position{ego_pose.get_translation().x(),
-                                     ego_pose.get_translation().y(),
-                                     ego_pose.get_translation().z()};
+  const GeoPosition ego_geo_position{
+    ExtractDoubleOrThrow(ego_pose.get_translation().x()),
+        ExtractDoubleOrThrow(ego_pose.get_translation().y()),
+        ExtractDoubleOrThrow(ego_pose.get_translation().z())};
   const LanePosition ego_lane_position =
       lane->ToLanePosition(ego_geo_position, nullptr, nullptr);
 
@@ -84,9 +86,10 @@ const ClosestPose<T> PoseSelector<T>::FindSingleClosestPose(
     T distance_increment{};
     for (int i = 0; i < traffic_poses.get_num_poses(); ++i) {
       Isometry3<T> traffic_iso = traffic_poses.get_pose(i);
-      const GeoPosition traffic_geo_position(traffic_iso.translation().x(),
-                                             traffic_iso.translation().y(),
-                                             traffic_iso.translation().z());
+      const GeoPosition traffic_geo_position(
+          ExtractDoubleOrThrow(traffic_iso.translation().x()),
+          ExtractDoubleOrThrow(traffic_iso.translation().y()),
+          ExtractDoubleOrThrow(traffic_iso.translation().z()));
 
       if (ego_geo_position == traffic_geo_position) continue;
       if (!IsWithinLane(traffic_geo_position, lane_direction.lane)) continue;
@@ -206,7 +209,7 @@ const RoadOdometry<T> PoseSelector<T>::set_default_odometry(
 
 template <typename T>
 template <typename T1>
-void IdmController<T>::CalcLanePosition(
+void PoseSelector<T>::CalcLanePosition(
     const PoseVector<std::enable_if_t<std::is_same<T1, double>::value, T1>>&
     ego_pose) {
   DRAKE_ABORT();
@@ -214,7 +217,7 @@ void IdmController<T>::CalcLanePosition(
 
 template <typename T>
 template <typename T1>
-void IdmController<T>::CalcLanePosition(
+void PoseSelector<T>::CalcLanePosition(
     const PoseVector<std::enable_if_t<std::is_same<T1, AutoDiffXd>::value, T1>>&
     ego_pose) {
   DRAKE_ABORT();

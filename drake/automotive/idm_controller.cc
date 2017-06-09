@@ -8,7 +8,7 @@
 #include "drake/automotive/road_odometry.h"
 #include "drake/common/cond.h"
 #include "drake/common/drake_assert.h"
-#include "drake/common/symbolic_formula.h"
+#include "drake/common/extract_double.h"
 
 namespace drake {
 namespace automotive {
@@ -105,7 +105,9 @@ void IdmController<T>::ImplDoCalcOutput(
 
   auto translation = ego_pose.get_isometry().translation();
   const maliput::api::GeoPosition geo_position(
-      translation.x(), translation.y(), translation.z());
+      ExtractDoubleOrThrow(translation.x()),
+      ExtractDoubleOrThrow(translation.y()),
+      ExtractDoubleOrThrow(translation.z()));
   const RoadPosition ego_position =
       road_.ToRoadPosition(geo_position, nullptr, nullptr, nullptr);
 
@@ -113,7 +115,7 @@ void IdmController<T>::ImplDoCalcOutput(
   const ClosestPose<T> lead_car_pose = PoseSelector<T>::FindSingleClosestPose(
       ego_position.lane, ego_pose, ego_velocity, traffic_poses,
       idm_params.scan_ahead_distance(), AheadOrBehind::kAhead);
-  const double headway_distance = lead_car_pose.distance;
+  const T headway_distance = lead_car_pose.distance;
 
   T s_dot_ego = PoseSelector<T>::GetSigmaVelocity({ego_position, ego_velocity});
   T s_dot_lead = PoseSelector<T>::GetSigmaVelocity(lead_car_pose.odometry);
@@ -127,6 +129,11 @@ void IdmController<T>::ImplDoCalcOutput(
   // Compute the acceleration command from the IDM equation.
   (*command)[0] = IdmPlanner<T>::Evaluate(idm_params, s_dot_ego, net_distance,
                                           closing_velocity);
+}
+
+template <typename T>
+IdmController<AutoDiffXd>* IdmController<T>::DoToAutoDiffXd() const {
+  return new IdmController<AutoDiffXd>(road_);
 }
 
 // These instantiations must match the API documentation in idm_controller.h.

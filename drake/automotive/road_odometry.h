@@ -2,14 +2,14 @@
 
 #include "drake/automotive/maliput/api/lane.h"
 #include "drake/automotive/maliput/api/lane_data.h"
-#include "drake/systems/rendering/pose_bundle.h"
+#include "drake/systems/rendering/frame_velocity.h"
 #include "drake/systems/rendering/pose_vector.h"
 
 namespace drake {
 namespace automotive {
 
-/// Contains the position of the vehicle with respect to a lane in a road, along
-/// with its velocity vector in the world frame.
+/// RoadOdometry Contains the position of the vehicle with respect to a lane in
+/// a road, along with its velocity vector in the world frame.
 template <typename T>
 struct RoadOdometry {
   /// Default constructor.

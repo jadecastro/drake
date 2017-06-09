@@ -1,5 +1,7 @@
 #include "drake/automotive/idm_controller.h"
 
+#include <limits>
+
 #include <gtest/gtest.h>
 
 #include "drake/automotive/maliput/dragway/road_geometry.h"

@@ -126,13 +126,14 @@ class PoseSelector {
       const maliput::api::Lane* const Lane, const AheadOrBehind side);
 
   template <typename T1 = T>
-  void IdmController<T>::CalcLanePosition(
-      const PoseVector<std::enable_if_t<std::is_same<T1, double>::value, T1>>&
+  void CalcLanePosition(
+      const systems::rendering::PoseVector<
+      std::enable_if_t<std::is_same<T1, double>::value, T1>>&
       ego_pose);
 
   template <typename T1 = T>
-  void IdmController<T>::CalcLanePosition(
-      const PoseVector<std::enable_if_t<
+  void CalcLanePosition(
+      const systems::rendering::PoseVector<std::enable_if_t<
       std::is_same<T1, AutoDiffXd>::value, T1>>& ego_pose);
 };
 
