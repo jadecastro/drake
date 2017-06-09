@@ -211,7 +211,7 @@ GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorIdmTest) {
 
   EXPECT_EQ(prog.Solve(), solvers::SolutionResult::kSolutionFound);
 
-    // Plot the solution.
+  // Plot the solution.
   // Note: see lcm_call_matlab.h for instructions on viewing the plot.
   Eigen::MatrixXd inputs;
   Eigen::MatrixXd states;

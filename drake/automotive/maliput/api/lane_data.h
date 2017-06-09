@@ -333,6 +333,15 @@ class LanePositionWithAutoDiff {
   /// Sets all components from 3-vector `[s, r, h]`.
   void set_srh(const Vector3<T>& srh) { srh_ = srh; }
 
+  /// Returns all components as a LanePosition.
+  /*
+  const GeoPosition geo_position() const {
+    return GeoPosition(ExtractDoubleOrThrow(srh_.x()),
+                       ExtractDoubleOrThrow(srh_.y()),
+                       ExtractDoubleOrThrow(srh_.z()));
+  }
+  */
+
   /// @name Getters and Setters
   //@{
   /// Gets `s` value.

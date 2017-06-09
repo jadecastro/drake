@@ -135,11 +135,13 @@ api::LanePositionWithAutoDiff<AutoDiffXd> Lane::DoToLanePositionWithAutoDiff(
   const AutoDiffXd max_x{length_};
   const AutoDiffXd min_y{driveable_bounds_.r_min + y_offset_};
   const AutoDiffXd max_y{driveable_bounds_.r_max + y_offset_};
+  const AutoDiffXd min_z = elevation_bounds_.min();
+  const AutoDiffXd max_z = elevation_bounds_.max();
 
   const api::GeoPositionWithAutoDiff<AutoDiffXd> closest_point{
     math::saturate(geo_pos.x(), min_x, max_x),
     math::saturate(geo_pos.y(), min_y, max_y),
-    geo_pos.z()};
+    math::saturate(geo_pos.z(), min_z, max_z)};
   if (nearest_point != nullptr) {
     *nearest_point = closest_point;
   }

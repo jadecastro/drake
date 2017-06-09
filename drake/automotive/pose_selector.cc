@@ -12,9 +12,11 @@ namespace drake {
 namespace automotive {
 
 using maliput::api::GeoPosition;
+using maliput::api::GeoPositionWithAutoDiff;
 using maliput::api::Lane;
 using maliput::api::LaneEnd;
 using maliput::api::LanePosition;
+using maliput::api::LanePositionWithAutoDiff;
 using maliput::api::RoadGeometry;
 using maliput::api::RoadPosition;
 using systems::rendering::FrameVelocity;
@@ -50,20 +52,19 @@ const ClosestPose<T> PoseSelector<T>::FindSingleClosestPose(
 
   ClosestPose<T> result;
   result.odometry = set_default_odometry(lane, ahead_or_behind);
+  // N.B.           ^^^ Possible partial-derivative-loss.
   result.distance = std::numeric_limits<T>::infinity();
   ClosestPose<T> default_result = result;
 
-  const GeoPosition ego_geo_position{
-    ExtractDoubleOrThrow(ego_pose.get_translation().x()),
-        ExtractDoubleOrThrow(ego_pose.get_translation().y()),
-        ExtractDoubleOrThrow(ego_pose.get_translation().z())};
-  const LanePosition ego_lane_position =
-      lane->ToLanePosition(ego_geo_position, nullptr, nullptr);
+  const LanePositionWithAutoDiff<T> ego_lane_position =
+      CalcLanePosition(lane, ego_pose.get_isometry());
 
   // Get ego car's heading with respect to the trial lane.
   const Eigen::Quaternion<T> ego_rotation = ego_pose.get_rotation();
   const Eigen::Quaternion<T> lane_rotation =
-      lane->GetOrientation(ego_lane_position).quat();
+      lane->GetOrientation({ExtractDoubleOrThrow(ego_lane_position.s()),
+              ExtractDoubleOrThrow(ego_lane_position.r()),
+              ExtractDoubleOrThrow(ego_lane_position.h())}).quat();
   // with_s is interpereted as the direction, in a particular lane, along which
   // we are observing other cars.  initial_with_s is the value of with_s in the
   // initial lane.
@@ -76,14 +77,23 @@ const ClosestPose<T> PoseSelector<T>::FindSingleClosestPose(
   // N.B. `distance_scanned` is a net distance, so will always increase.  Note
   // also that the result will always be positive, as the current lane's length
   // is always added to the result at each loop iteration.
-  T distance_scanned = initial_with_s
-                           ? T(-ego_lane_position.s())
-                           : T(ego_lane_position.s() - lane->length());
+  //DRAKE_DEMAND(ego_lane_position.s() != 0.);
+  //T one = ego_lane_position.s() / ego_lane_position.s();
+  T distance_scanned = (initial_with_s)
+                           ? -ego_lane_position.s()
+                           : ego_lane_position.s() - lane->length();
+  // N.B.      Possible partial-derivative-loss.  ^^^^^
+
+  const GeoPosition ego_geo_position(
+      ExtractDoubleOrThrow(ego_pose.get_translation().x()),
+      ExtractDoubleOrThrow(ego_pose.get_translation().y()),
+      ExtractDoubleOrThrow(ego_pose.get_translation().z()));
 
   // Traverse forward or backward from the current lane the given scan_distance,
   // looking for traffic cars.
   while (distance_scanned < scan_distance) {
-    T distance_increment{};
+    T distance_increment{0.};
+    // N.B.   ^^^ Possible partial-derivative-loss.
     for (int i = 0; i < traffic_poses.get_num_poses(); ++i) {
       Isometry3<T> traffic_iso = traffic_poses.get_pose(i);
       const GeoPosition traffic_geo_position(
@@ -94,9 +104,9 @@ const ClosestPose<T> PoseSelector<T>::FindSingleClosestPose(
       if (ego_geo_position == traffic_geo_position) continue;
       if (!IsWithinLane(traffic_geo_position, lane_direction.lane)) continue;
 
-      const LanePosition traffic_lane_position =
-          lane_direction.lane->ToLanePosition(traffic_geo_position, nullptr,
-                                              nullptr);
+      const LanePositionWithAutoDiff<T> traffic_lane_position =
+          CalcLanePosition(lane_direction.lane, traffic_poses.get_pose(i));
+
       // Ignore traffic that are not in the desired direction (ahead or behind)
       // of the ego car (with respect to the car's current direction) when the
       // two share the same lane.
@@ -129,12 +139,13 @@ const ClosestPose<T> PoseSelector<T>::FindSingleClosestPose(
 
       // Update the result with the new candidate.
       result.odometry =
-          RoadOdometry<T>({lane_direction.lane, traffic_lane_position},
+          RoadOdometry<T>(lane_direction.lane, traffic_lane_position,
                           traffic_poses.get_velocity(i));
       distance_increment =
           lane_direction.with_s
               ? result.odometry.pos.s()
-              : (lane_direction.lane->length() - result.odometry.pos.s());
+              : (T(lane_direction.lane->length()) - result.odometry.pos.s());
+      // N.B.   ^^^ Possible partial-derivative-loss.
     }
 
     if (std::abs(result.odometry.pos.s()) <
@@ -147,6 +158,7 @@ const ClosestPose<T> PoseSelector<T>::FindSingleClosestPose(
     }
     // Increment distance_scanned.
     distance_scanned += T(lane_direction.lane->length());
+    // N.B.            ^^^ Possible partial-derivative-loss.
 
     // Obtain the next lane_direction in the scanned sequence.
     get_default_ongoing_lane(&lane_direction);
@@ -160,8 +172,10 @@ const T PoseSelector<T>::GetSigmaVelocity(
     const RoadOdometry<T>& road_odometry) {
   const double kLargeSValue{1e9};
   const LanePosition sat_position{
-      math::saturate(road_odometry.pos.s(), -kLargeSValue, kLargeSValue),
-      road_odometry.pos.r(), road_odometry.pos.h()};
+    math::saturate(ExtractDoubleOrThrow(road_odometry.pos.s()),
+                   -kLargeSValue, kLargeSValue),
+        ExtractDoubleOrThrow(road_odometry.pos.r()),
+        ExtractDoubleOrThrow(road_odometry.pos.h())};
   const maliput::api::Rotation rot =
       road_odometry.lane->GetOrientation(sat_position);
   const Vector3<T>& vel = road_odometry.vel.get_velocity().translational();
@@ -209,18 +223,32 @@ const RoadOdometry<T> PoseSelector<T>::set_default_odometry(
 
 template <typename T>
 template <typename T1>
-void PoseSelector<T>::CalcLanePosition(
-    const PoseVector<std::enable_if_t<std::is_same<T1, double>::value, T1>>&
-    ego_pose) {
-  DRAKE_ABORT();
+LanePositionWithAutoDiff<std::enable_if_t<std::is_same<T1, double>::value, T1>>
+PoseSelector<T>::CalcLanePosition(
+    const Lane* const lane,
+    const Isometry3<std::enable_if_t<std::is_same<T1, double>::value, T1>>&
+        pose) {
+  // Simply call the vanilla lane->ToLanePosition().
+  const GeoPosition geo_position{
+    pose.translation().x(), pose.translation().y(), pose.translation().z()};
+  const LanePosition lane_position =
+      lane->ToLanePosition(geo_position, nullptr, nullptr);
+  return LanePositionWithAutoDiff<double>(lane_position.s(), lane_position.r(),
+                                          lane_position.h());
 }
 
 template <typename T>
 template <typename T1>
-void PoseSelector<T>::CalcLanePosition(
-    const PoseVector<std::enable_if_t<std::is_same<T1, AutoDiffXd>::value, T1>>&
-    ego_pose) {
-  DRAKE_ABORT();
+LanePositionWithAutoDiff<
+    std::enable_if_t<std::is_same<T1, AutoDiffXd>::value, T1>>
+PoseSelector<T>::CalcLanePosition(
+    const Lane* const lane,
+    const Isometry3<std::enable_if_t<std::is_same<T1, AutoDiffXd>::value, T1>>&
+        pose) {
+  const GeoPositionWithAutoDiff<AutoDiffXd> geo_position{
+      pose.translation().x(), pose.translation().y(), pose.translation().z()};
+  return lane->ToLanePositionWithAutoDiff(
+      geo_position, nullptr, nullptr);
 }
 
 // These instantiations must match the API documentation in pose_selector.h.

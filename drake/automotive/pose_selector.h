@@ -12,6 +12,7 @@
 #include "drake/automotive/maliput/api/road_geometry.h"
 #include "drake/automotive/road_odometry.h"
 #include "drake/common/drake_copyable.h"
+#include "drake/common/eigen_types.h"
 #include "drake/systems/rendering/pose_bundle.h"
 #include "drake/systems/rendering/pose_vector.h"
 
@@ -126,15 +127,20 @@ class PoseSelector {
       const maliput::api::Lane* const Lane, const AheadOrBehind side);
 
   template <typename T1 = T>
-  void CalcLanePosition(
-      const systems::rendering::PoseVector<
-      std::enable_if_t<std::is_same<T1, double>::value, T1>>&
-      ego_pose);
+  static maliput::api::LanePositionWithAutoDiff<
+      std::enable_if_t<std::is_same<T1, double>::value, T1>>
+  CalcLanePosition(
+      const maliput::api::Lane* const lane,
+      const Isometry3<
+          std::enable_if_t<std::is_same<T1, double>::value, T1>>& pose);
 
   template <typename T1 = T>
-  void CalcLanePosition(
-      const systems::rendering::PoseVector<std::enable_if_t<
-      std::is_same<T1, AutoDiffXd>::value, T1>>& ego_pose);
+  static maliput::api::LanePositionWithAutoDiff<
+      std::enable_if_t<std::is_same<T1, AutoDiffXd>::value, T1>>
+  CalcLanePosition(
+      const maliput::api::Lane* const lane,
+      const Isometry3<
+          std::enable_if_t<std::is_same<T1, AutoDiffXd>::value, T1>>& pose);
 };
 
 }  // namespace automotive

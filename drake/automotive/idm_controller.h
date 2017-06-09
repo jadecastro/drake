@@ -88,6 +88,39 @@ class IdmController : public systems::LeafSystem<T> {
 
   IdmController<AutoDiffXd>* DoToAutoDiffXd() const override;
 
+  // Helper function specialized for AutoDiffXd that prints partial derivatives
+  // for each of the input variables and allows them to be modified as necessary
+  // for quick and dirty spike testing.
+  template <typename T1 = T>
+  void PrintAndModifyPartials(
+      const systems::rendering::PoseVector<
+          std::enable_if_t<std::is_same<T1, AutoDiffXd>::value, T1>>& ego_pose,
+      const systems::rendering::FrameVelocity<std::enable_if_t<
+          std::is_same<T1, AutoDiffXd>::value, T1>>& ego_velocity,
+      const RoadOdometry<std::enable_if_t<std::is_same<T1, AutoDiffXd>::value,
+                                          T1>>& lead_car_odom,
+      const systems::rendering::PoseBundle<std::enable_if_t<
+          std::is_same<T1, AutoDiffXd>::value, T1>>& traffic_poses,
+      const IdmPlannerParameters<std::enable_if_t<
+          std::is_same<T1, AutoDiffXd>::value, T1>>& params,
+      AutoDiffXd* s_dot_ego, AutoDiffXd* s_dot_lead,
+      AutoDiffXd* headway_distance) const;
+
+  // No-op double specialization of PrintAndModifyPartials().
+  template <typename T1 = T>
+  void PrintAndModifyPartials(
+      const systems::rendering::PoseVector<
+          std::enable_if_t<std::is_same<T1, double>::value, T1>>& ego_pose,
+      const systems::rendering::FrameVelocity<
+          std::enable_if_t<std::is_same<T1, double>::value, T1>>& ego_velocity,
+      const RoadOdometry<std::enable_if_t<std::is_same<T1, double>::value, T1>>&
+          lead_car_odom,
+      const systems::rendering::PoseBundle<
+          std::enable_if_t<std::is_same<T1, double>::value, T1>>& traffic_poses,
+      const IdmPlannerParameters<std::enable_if_t<
+          std::is_same<T1, double>::value, T1>>& params,
+      double* s_dot_ego, double* s_dot_lead, double* headway_distance) const;
+
   const maliput::api::RoadGeometry& road_;
 
   // Indices for the input / output ports.

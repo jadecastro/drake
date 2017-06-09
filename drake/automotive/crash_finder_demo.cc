@@ -131,6 +131,7 @@ int DoMain(void) {
   auto simulator_lcm = SetupSimulator(true /* is_playback_mode */, &states);
   simulator_lcm->Build();
 
+  DRAKE_ABORT();
   // Pipe the offending initial condition into AutomotiveSimulator.
   const auto& plant_lcm = simulator_lcm->GetDiagram();
   auto context_lcm = plant_lcm.CreateDefaultContext();
