@@ -245,6 +245,7 @@ const {
   std::cout << " headway_distance " << *headway_distance << std::endl;
   std::cout << " headway_distance derivs " << headway_distance->derivatives()
             << std::endl;
+  /*
   (*headway_distance).derivatives()(0) = 0.;
   (*headway_distance).derivatives()(1) = 1.;
   (*headway_distance).derivatives()(2) = 0.;
@@ -256,6 +257,7 @@ const {
   (*headway_distance).derivatives()(8) = 0.;
   std::cout << " NEW headway_distance derivs "
             << headway_distance->derivatives() << std::endl;
+  */
 }
 
 template <typename T>

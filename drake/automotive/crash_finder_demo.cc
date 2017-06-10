@@ -86,8 +86,8 @@ int DoMain(void) {
   auto context = plant.CreateDefaultContext();
 
   // Set up a direct-collocation feasibility problem.
-  const double duration = 5.;  // seconds
-  const int kNumTimeSamples = 10;
+  const double duration = 10.;  // seconds
+  const int kNumTimeSamples = 30;
 
   systems::DircolTrajectoryOptimization prog(&plant, *context, kNumTimeSamples,
                                              duration, duration);
@@ -96,22 +96,25 @@ int DoMain(void) {
   prog.AddTimeIntervalBounds(duration / (kNumTimeSamples - 1),
                              duration / (kNumTimeSamples - 1));
 
-  prog.AddLinearConstraint(prog.initial_state()(0) >= 15.);  // s traffic0
-  prog.AddLinearConstraint(prog.initial_state()(1) == 10.);  // s_dot traffic0
+  // Begin with a reasonable spacing between cars.
+  prog.AddLinearConstraint(prog.initial_state()(0) >= prog.initial_state()(2) + 2.6);
+  //prog.AddLinearConstraint(prog.initial_state()(0) >= 15.);  // s traffic0
+  prog.AddLinearConstraint(prog.initial_state()(1) == 1.);  // s_dot traffic0
   prog.AddLinearConstraint(prog.initial_state()(2) == 0.5);  // s ego
   prog.AddLinearConstraint(prog.initial_state()(3) >= 20.);  // s_dot ego
 
   // Set state constaints for all time steps; constraints on state() with
   // indeterminate time-steps does not seem to work??
   for (int i{0}; i < kNumTimeSamples; ++i) {
-    prog.AddLinearConstraint(prog.state(i)(0) >= 15.);  // s traffic0
-    prog.AddLinearConstraint(prog.state(i)(1) == 10.);  // s_dot traffic0
+    //prog.AddLinearConstraint(prog.state()(0) >= prog.state()(2));
+    prog.AddLinearConstraint(prog.state(i)(0) >= 2.);  // s traffic0
+    prog.AddLinearConstraint(prog.state(i)(1) == 1.);  // s_dot traffic0
     prog.AddLinearConstraint(prog.state(i)(2) >= 0.5);  // s ego
-    prog.AddLinearConstraint(prog.state(i)(3) >= 5.);  // s_dot ego <-- should
+    prog.AddLinearConstraint(prog.state(i)(3) >= 0.5);  // s_dot ego <-- should
                                                        // be epsilon.
   }
 
-  prog.AddLinearConstraint(prog.final_state()(0) <= prog.final_state()(2) + 5.);
+  prog.AddLinearConstraint(prog.final_state()(0) <= prog.final_state()(2) + 2.5);
 
   EXPECT_EQ(prog.Solve(), solvers::SolutionResult::kSolutionFound);
 
@@ -131,17 +134,17 @@ int DoMain(void) {
   auto simulator_lcm = SetupSimulator(true /* is_playback_mode */, &states);
   simulator_lcm->Build();
 
-  DRAKE_ABORT();
+  /*
   // Pipe the offending initial condition into AutomotiveSimulator.
   const auto& plant_lcm = simulator_lcm->GetDiagram();
   auto context_lcm = plant_lcm.CreateDefaultContext();
   context_lcm->get_mutable_continuous_state()->SetFromVector(states.col(0));
 
-  simulator_lcm->Start(1. /* target realtime rate (seconds) */,
-                       std::move(context_lcm) /* initial context */);
-  simulator_lcm->StepBy(
-      std::numeric_limits<double>::infinity() /* simulation time*/);
-
+  simulator_lcm->Start(1.  target realtime rate (seconds),
+      std::move(context_lcm)  initial context );
+       simulator_lcm->StepBy(
+            std::numeric_limits<double>::infinity() simulation time);
+  */
   return 0;
 }
 

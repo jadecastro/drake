@@ -148,7 +148,10 @@ GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorIdmTest) {
   std::unique_ptr<const maliput::api::RoadGeometry> road_geometry =
       std::make_unique<const maliput::dragway::RoadGeometry>(
           maliput::api::RoadGeometryId({"Dircol Test Dragway"}),
-          1 , 100. , 2. , 0.);
+          1 , 100. , 2. ,
+          0. /* shoulder width */, 5. /* maximum_height */,
+          std::numeric_limits<double>::epsilon() /* linear_tolerance */,
+          std::numeric_limits<double>::epsilon() /* angular_tolerance */);
   auto simulator = std::make_unique<AutomotiveSimulator<double>>();
 
   auto simulator_road = simulator->SetRoadGeometry(std::move(road_geometry));

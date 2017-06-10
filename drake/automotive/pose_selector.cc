@@ -48,6 +48,8 @@ const ClosestPose<T> PoseSelector<T>::FindSingleClosestPose(
     const Lane* const lane, const PoseVector<T>& ego_pose,
     const FrameVelocity<T>& ego_velocity, const PoseBundle<T>& traffic_poses,
     const T& scan_distance, const AheadOrBehind ahead_or_behind) {
+  using std::abs;
+
   DRAKE_DEMAND(lane != nullptr);
 
   ClosestPose<T> result;
@@ -79,9 +81,8 @@ const ClosestPose<T> PoseSelector<T>::FindSingleClosestPose(
   // is always added to the result at each loop iteration.
   //DRAKE_DEMAND(ego_lane_position.s() != 0.);
   //T one = ego_lane_position.s() / ego_lane_position.s();
-  T distance_scanned = (initial_with_s)
-                           ? -ego_lane_position.s()
-                           : ego_lane_position.s() - lane->length();
+  T distance_scanned = cond(initial_with_s, -ego_lane_position.s(),
+                            ego_lane_position.s() - T(lane->length()));
   // N.B.      Possible partial-derivative-loss.  ^^^^^
 
   const GeoPosition ego_geo_position(
@@ -142,13 +143,12 @@ const ClosestPose<T> PoseSelector<T>::FindSingleClosestPose(
           RoadOdometry<T>(lane_direction.lane, traffic_lane_position,
                           traffic_poses.get_velocity(i));
       distance_increment =
-          lane_direction.with_s
-              ? result.odometry.pos.s()
-              : (T(lane_direction.lane->length()) - result.odometry.pos.s());
+          cond(lane_direction.with_s, result.odometry.pos.s(),
+               T(lane_direction.lane->length()) - result.odometry.pos.s());
       // N.B.   ^^^ Possible partial-derivative-loss.
     }
 
-    if (std::abs(result.odometry.pos.s()) <
+    if (abs(result.odometry.pos.s()) <
         std::numeric_limits<double>::infinity()) {
       // Figure out whether or not the result is within scan_distance.
       if (distance_scanned + distance_increment < scan_distance) {
@@ -170,6 +170,9 @@ const ClosestPose<T> PoseSelector<T>::FindSingleClosestPose(
 template <typename T>
 const T PoseSelector<T>::GetSigmaVelocity(
     const RoadOdometry<T>& road_odometry) {
+  using std::cos;
+  using std::sin;
+
   const double kLargeSValue{1e9};
   const LanePosition sat_position{
     math::saturate(ExtractDoubleOrThrow(road_odometry.pos.s()),
@@ -179,7 +182,7 @@ const T PoseSelector<T>::GetSigmaVelocity(
   const maliput::api::Rotation rot =
       road_odometry.lane->GetOrientation(sat_position);
   const Vector3<T>& vel = road_odometry.vel.get_velocity().translational();
-  return vel(0) * std::cos(rot.yaw()) + vel(1) * std::sin(rot.yaw());
+  return vel(0) * cos(rot.yaw()) + vel(1) * sin(rot.yaw());
 }
 
 template <typename T>
