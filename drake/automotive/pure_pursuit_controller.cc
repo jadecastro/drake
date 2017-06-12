@@ -4,6 +4,7 @@
 
 #include "drake/automotive/pure_pursuit.h"
 #include "drake/common/drake_assert.h"
+#include "drake/common/eigen_autodiff_types.h"
 
 namespace drake {
 
@@ -93,9 +94,16 @@ void PurePursuitController<T>::ImplDoCalcOutput(
       PurePursuit<T>::Evaluate(pp_params, car_params, lane_direction, ego_pose);
 }
 
+template <typename T>
+PurePursuitController<AutoDiffXd>* PurePursuitController<T>::DoToAutoDiffXd()
+    const {
+  return new PurePursuitController<AutoDiffXd>();
+}
+
 // These instantiations must match the API documentation in
 // pure_pursuit_controller.h.
 template class PurePursuitController<double>;
+template class PurePursuitController<AutoDiffXd>;
 
 }  // namespace automotive
 }  // namespace drake

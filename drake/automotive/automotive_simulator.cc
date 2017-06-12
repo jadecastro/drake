@@ -283,6 +283,7 @@ int AutomotiveSimulator<T>::AddIdmControlledCar(
 
   auto coord_transform =
       builder_->template AddSystem<SimpleCarToEulerFloatingJoint<T>>();
+  coord_transform->set_name(name + "_transform");
 
   if (to_lane != nullptr) {
     const LaneDirection lane_direction(to_lane, true /* with_s */);
@@ -315,8 +316,6 @@ int AutomotiveSimulator<T>::AddIdmControlledCar(
                       idm_controller->ego_pose_input());
     builder_->Connect(simple_car->velocity_output(),
                       idm_controller->ego_velocity_input());
-    builder_->Connect(aggregator_->get_output_port(0),
-                      idm_controller->traffic_input());
 
     builder_->Connect(simple_car->pose_output(), pursuit->ego_pose_input());
     builder_->Connect(lane_source->get_output_port(0), pursuit->lane_input());
@@ -331,6 +330,7 @@ int AutomotiveSimulator<T>::AddIdmControlledCar(
     ConnectCarOutputsAndPriusVis(id, simple_car->pose_output(),
                                  simple_car->velocity_output());
     if (lcm_) AddPublisher(*simple_car, id);
+
   } else {
     auto trajectory_car = builder_->template AddSystem<TrajectoryCar<T>>(curve);
     trajectory_car->set_name(name);
@@ -342,7 +342,6 @@ int AutomotiveSimulator<T>::AddIdmControlledCar(
     trajectory_car_initial_states_[trajectory_car].set_value(
         initial_state.get_value());
 
-    coord_transform->set_name(name + "_transform");
     builder_->Connect(trajectory_car->raw_pose_output(),
                       coord_transform->get_input_port(0));
 

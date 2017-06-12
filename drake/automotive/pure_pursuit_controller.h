@@ -17,9 +17,6 @@ namespace automotive {
 /// PurePursuitController implements a pure pursuit controller.  See PurePursuit
 /// for details on the approach.
 ///
-/// Instantiated templates for the following kinds of T's are provided:
-/// - double
-///
 /// They are already available to link against in the containing library.
 ///
 /// Input Port 0: a LaneDirection representing the requested lane and direction
@@ -31,6 +28,10 @@ namespace automotive {
 ///
 /// Output Port 0: A BasicVector of size one with the commanded steering angle.
 ///   (InputPortDescriptor getter: steering_command_output())
+///
+/// Instantiated templates for the following kinds of T's are provided:
+/// - double
+/// - drake::AutoDiffXd
 ///
 /// @ingroup automotive_controllers
 template <typename T>
@@ -56,6 +57,8 @@ class PurePursuitController : public systems::LeafSystem<T> {
                         const LaneDirection& lane_direction,
                         const systems::rendering::PoseVector<T>& ego_pose,
                         systems::BasicVector<T>* command) const;
+
+  PurePursuitController<AutoDiffXd>* DoToAutoDiffXd() const override;
 
   // Indices for the input / output ports.
   const int lane_index_{};

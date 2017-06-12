@@ -113,19 +113,6 @@ class PoseSelector {
   static bool IsWithinLane(const maliput::api::GeoPosition& geo_position,
                            const maliput::api::Lane* lane);
 
- private:
-  // Mutates `lane_direction` according to the next default lane based on the
-  // current lane and travel direction contained within `lane_direction`.
-  // `lane_direction` contains a null pointer in the `lane` field if no default
-  // branch is found.
-  static std::unique_ptr<maliput::api::LaneEnd> get_default_ongoing_lane(
-      LaneDirection* lane_direction);
-
-  // Assign the with default positions extending to, respectively, positive and
-  // negative infinity and with zero velocities.
-  static const RoadOdometry<T> set_default_odometry(
-      const maliput::api::Lane* const Lane, const AheadOrBehind side);
-
   template <typename T1 = T>
   static maliput::api::LanePositionWithAutoDiff<
       std::enable_if_t<std::is_same<T1, double>::value, T1>>
@@ -141,6 +128,19 @@ class PoseSelector {
       const maliput::api::Lane* const lane,
       const Isometry3<
           std::enable_if_t<std::is_same<T1, AutoDiffXd>::value, T1>>& pose);
+
+ private:
+  // Mutates `lane_direction` according to the next default lane based on the
+  // current lane and travel direction contained within `lane_direction`.
+  // `lane_direction` contains a null pointer in the `lane` field if no default
+  // branch is found.
+  static std::unique_ptr<maliput::api::LaneEnd> get_default_ongoing_lane(
+      LaneDirection* lane_direction);
+
+  // Assign the with default positions extending to, respectively, positive and
+  // negative infinity and with zero velocities.
+  static const RoadOdometry<T> set_default_odometry(
+      const maliput::api::Lane* const Lane, const AheadOrBehind side);
 };
 
 }  // namespace automotive

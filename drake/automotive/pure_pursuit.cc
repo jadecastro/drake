@@ -4,9 +4,11 @@
 #include <memory>
 
 #include "drake/automotive/maliput/api/lane.h"
+#include "drake/automotive/pose_selector.h"
 #include "drake/common/autodiff_overloads.h"
 #include "drake/common/cond.h"
 #include "drake/common/drake_assert.h"
+#include "drake/common/eigen_autodiff_types.h"
 #include "drake/common/symbolic_formula.h"
 #include "drake/math/saturate.h"
 
@@ -16,6 +18,7 @@ namespace automotive {
 using maliput::api::GeoPosition;
 using maliput::api::Lane;
 using maliput::api::LanePosition;
+using maliput::api::LanePositionWithAutoDiff;
 using systems::rendering::PoseVector;
 
 template <typename T>
@@ -26,47 +29,45 @@ T PurePursuit<T>::Evaluate(const PurePursuitParams<T>& pp_params,
   DRAKE_DEMAND(pp_params.IsValid());
   DRAKE_DEMAND(car_params.IsValid());
 
-  using std::atan;
+  using std::atan2;
   using std::cos;
   using std::pow;
   using std::sin;
 
-  const GeoPosition goal_position =
+  T goal_x, goal_y;
+  std::tie(goal_x, goal_y) =
       ComputeGoalPoint(pp_params.s_lookahead(), lane_direction, pose);
 
   const T x = pose.get_translation().translation().x();
   const T y = pose.get_translation().translation().y();
   const T heading = pose.get_rotation().z();
 
-  const T delta_r = -(goal_position.x() - x) * sin(heading) +
-                    (goal_position.y() - y) * cos(heading);
-  const T curvature = 2 * delta_r / pow(pp_params.s_lookahead(), 2.);
+  const T delta_r = -(goal_x - x) * sin(heading) + (goal_y - y) * cos(heading);
+  const T curvature = T(2.) * delta_r / pow(pp_params.s_lookahead(), T(2.));
 
   // Return the steering angle.
-  return atan(car_params.wheelbase() * curvature);
+  return atan2(car_params.wheelbase() * curvature, T(1.));
 }
 
 template <typename T>
-const GeoPosition PurePursuit<T>::ComputeGoalPoint(
+const std::pair<T, T> PurePursuit<T>::ComputeGoalPoint(
     const T& s_lookahead, const LaneDirection& lane_direction,
     const PoseVector<T>& pose) {
   const Lane* const lane = lane_direction.lane;
   const bool with_s = lane_direction.with_s;
-  const LanePosition position =
-      lane->ToLanePosition({pose.get_isometry().translation().x(),
-                            pose.get_isometry().translation().y(),
-                            pose.get_isometry().translation().z()},
-                           nullptr, nullptr);
+  const LanePositionWithAutoDiff<T> position =
+      PoseSelector<T>::CalcLanePosition(lane, pose.get_isometry());
   const T s_new =
-      cond(with_s, position.s() + s_lookahead, position.s() - s_lookahead);
-  const T s_goal = math::saturate(s_new, 0., lane->length());
+      cond(with_s, position.s() + T(s_lookahead),
+           position.s() - T(s_lookahead));
+  const T s_goal = math::saturate(s_new, T(0.), T(lane->length()));
   // TODO(jadecastro): Add support for locating goal points in ongoing lanes.
-  return lane->ToGeoPosition({s_goal, 0., position.h()});
+  return std::make_pair(s_goal, T(0.));
 }
 
 // These instantiations must match the API documentation in pure_pursuit.h.
-// The only scalar type supported is double.
 template class PurePursuit<double>;
+template class PurePursuit<AutoDiffXd>;
 
 }  // namespace automotive
 }  // namespace drake

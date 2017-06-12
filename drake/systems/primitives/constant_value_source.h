@@ -21,6 +21,7 @@ namespace systems {
 ///
 /// Instantiated templates for the following kinds of T's are provided:
 /// - double
+/// - drake::AutoDiffXd
 ///
 /// They are already available to link against in the containing library.
 template <typename T>
@@ -36,6 +37,12 @@ class ConstantValueSource : public LeafSystem<T> {
                     SystemOutput<T>* output) const override;
 
  private:
+
+  ConstantValueSource<AutoDiffXd>* DoToAutoDiffXd() const override {
+    //const source = systems::AbstractValue;
+    return new ConstantValueSource<AutoDiffXd>(source_value_->Clone());
+  }
+
   // TODO(david-german-tri): move source_value_ to the system's parameters.
   const std::unique_ptr<AbstractValue> source_value_;
 };

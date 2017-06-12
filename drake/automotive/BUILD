@@ -273,6 +273,7 @@ drake_cc_library(
     deps = [
         ":generated_vectors",
         ":lane_direction",
+        ":pose_selector",
         "//drake/automotive/maliput/api",
         "//drake/common:cond",
         "//drake/common:symbolic",
