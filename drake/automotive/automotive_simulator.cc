@@ -26,6 +26,7 @@
 #include "drake/systems/framework/system.h"
 #include "drake/systems/lcm/lcm_subscriber_system.h"
 #include "drake/systems/lcm/lcmt_drake_signal_translator.h"
+#include "drake/systems/primitives/constant_value_source.h"
 #include "drake/systems/primitives/constant_vector_source.h"
 #include "drake/systems/primitives/multiplexer.h"
 
@@ -258,49 +259,109 @@ int AutomotiveSimulator<T>::AddPriusTrajectoryCar(const std::string& name,
 
 // TODO(jadecastro): Add a unit test for this function.
 template <typename T>
-int AutomotiveSimulator<T>::AddIdmControlledPriusTrajectoryCar(
+int AutomotiveSimulator<T>::AddIdmControlledCar(
     const std::string& name, const Curve2<double>& curve, double start_speed,
-    double start_position) {
+    double start_position, const maliput::api::Lane* to_lane) {
   DRAKE_DEMAND(!has_started());
   DRAKE_DEMAND(aggregator_ != nullptr);
+  if (road_ == nullptr) {
+    throw std::runtime_error(
+        "AutomotiveSimulator::AddIdmControlledCar(): "
+        "RoadGeometry not set. Please call SetRoadGeometry() first before "
+        "calling this method.");
+  }
+  // TODO(jadecastro): Also verify that the lane is a dragway.
+  if (to_lane != nullptr) {
+    DRAKE_DEMAND(road_->junction(0)->segment(0)->num_lanes() > 1);
+  }
+
   CheckNameUniqueness(name);
   const int id = allocate_vehicle_number();
 
-  auto trajectory_car = builder_->template AddSystem<TrajectoryCar<T>>(curve);
-  trajectory_car->set_name(name);
-  vehicles_[id] = trajectory_car;
-
-  auto controller = builder_->template AddSystem<IdmController<T>>(*road_);
-  controller->set_name(name + "_IdmController");
-
-  TrajectoryCarState<double> initial_state{};
-  initial_state.set_position(start_position);
-  initial_state.set_speed(start_speed);
-  trajectory_car_initial_states_[trajectory_car].set_value(
-      initial_state.get_value());
+  auto idm_controller = builder_->template AddSystem<IdmController<T>>(*road_);
+  idm_controller->set_name(name + "_IdmController");
 
   auto coord_transform =
       builder_->template AddSystem<SimpleCarToEulerFloatingJoint<T>>();
-  coord_transform->set_name(name + "_transform");
-  builder_->Connect(trajectory_car->raw_pose_output(),
-                    coord_transform->get_input_port(0));
 
-  builder_->Connect(trajectory_car->pose_output(),
-                    controller->ego_pose_input());
-  builder_->Connect(trajectory_car->velocity_output(),
-                    controller->ego_velocity_input());
-  builder_->Connect(aggregator_->get_output_port(0),
-                    controller->traffic_input());
-  builder_->Connect(controller->acceleration_output(),
-                    trajectory_car->command_input());
+  if (to_lane != nullptr) {
+    const LaneDirection lane_direction(to_lane, true /* with_s */);
+    auto lane_source =
+        builder_->template AddSystem<systems::ConstantValueSource<T>>(
+            systems::AbstractValue::Make<LaneDirection>(lane_direction));
 
-  ConnectCarOutputsAndPriusVis(id, trajectory_car->pose_output(),
-                               trajectory_car->velocity_output());
+    auto simple_car = builder_->template AddSystem<SimpleCar<T>>();
+    simple_car->set_name(name + "_simple_car");
+    vehicles_[id] = simple_car;
 
-  if (lcm_) {
-    AddPublisher(*trajectory_car, id);
-    AddPublisher(*coord_transform, id);
+    SimpleCarState<T> initial_state;
+    // The following presumes we are on a dragway, in which x -> s, y -> r.
+    initial_state.set_x(start_position);
+    initial_state.set_y(curve.GetPosition(0.).position(1));
+    initial_state.set_heading(0.);
+    initial_state.set_velocity(start_speed);
+    simple_car_initial_states_[simple_car].set_value(initial_state.get_value());
+
+    auto pursuit = builder_->template AddSystem<PurePursuitController<T>>();
+    pursuit->set_name(name + "_pure_pursuit_controller");
+    auto mux = builder_->template AddSystem<systems::Multiplexer<T>>(
+        DrivingCommand<T>());
+    mux->set_name(name + "_mux");
+    builder_->Connect(simple_car->state_output(),
+                      coord_transform->get_input_port(0));
+
+    // Wire up the lane change source and IdmController.
+    builder_->Connect(simple_car->pose_output(),
+                      idm_controller->ego_pose_input());
+    builder_->Connect(simple_car->velocity_output(),
+                      idm_controller->ego_velocity_input());
+    builder_->Connect(aggregator_->get_output_port(0),
+                      idm_controller->traffic_input());
+
+    builder_->Connect(simple_car->pose_output(), pursuit->ego_pose_input());
+    builder_->Connect(lane_source->get_output_port(0), pursuit->lane_input());
+    // Build DrivingCommand via a mux of two scalar outputs (a BasicVector where
+    // row 0 = steering command, row 1 = acceleration command).
+    builder_->Connect(pursuit->steering_command_output(),
+                      mux->get_input_port(0));
+    builder_->Connect(idm_controller->acceleration_output(),
+                      mux->get_input_port(1));
+    builder_->Connect(mux->get_output_port(0), simple_car->get_input_port(0));
+
+    ConnectCarOutputsAndPriusVis(id, simple_car->pose_output(),
+                                 simple_car->velocity_output());
+    if (lcm_) AddPublisher(*simple_car, id);
+  } else {
+    auto trajectory_car = builder_->template AddSystem<TrajectoryCar<T>>(curve);
+    trajectory_car->set_name(name);
+    vehicles_[id] = trajectory_car;
+
+    TrajectoryCarState<double> initial_state{};
+    initial_state.set_position(start_position);
+    initial_state.set_speed(start_speed);
+    trajectory_car_initial_states_[trajectory_car].set_value(
+        initial_state.get_value());
+
+    coord_transform->set_name(name + "_transform");
+    builder_->Connect(trajectory_car->raw_pose_output(),
+                      coord_transform->get_input_port(0));
+
+    builder_->Connect(trajectory_car->pose_output(),
+                      idm_controller->ego_pose_input());
+    builder_->Connect(trajectory_car->velocity_output(),
+                      idm_controller->ego_velocity_input());
+    builder_->Connect(idm_controller->acceleration_output(),
+                      trajectory_car->command_input());
+
+    ConnectCarOutputsAndPriusVis(id, trajectory_car->pose_output(),
+                                 trajectory_car->velocity_output());
+    if (lcm_) AddPublisher(*trajectory_car, id);
   }
+
+  builder_->Connect(aggregator_->get_output_port(0),
+                    idm_controller->traffic_input());
+  if (lcm_) AddPublisher(*coord_transform, id);
+
   return id;
 }
 

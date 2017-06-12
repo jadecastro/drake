@@ -22,8 +22,7 @@ namespace {
 
 static std::unique_ptr<AutomotiveSimulator<double>>
 SetupSimulator(bool is_playback_mode,
-               const Eigen::MatrixXd* states = nullptr) {
-  if (is_playback_mode) DRAKE_DEMAND(states != nullptr);
+               const maliput::api::Lane* lane = nullptr) {
   std::unique_ptr<const maliput::api::RoadGeometry> road_geometry =
       std::make_unique<const maliput::dragway::RoadGeometry>(
           maliput::api::RoadGeometryId({"Dircol Test Dragway"}),
@@ -42,29 +41,20 @@ SetupSimulator(bool is_playback_mode,
 
   const int lane_index = 0;
 
-  // These defaults are ignored by the solver.
-  if (is_playback_mode) {
-    std::cout << " all_states(0) " << (*states)(0) << std::endl;
-    std::cout << " all_states(1) " << (*states)(1) << std::endl;
-    std::cout << " all_states(2) " << (*states)(2) << std::endl;
-    std::cout << " all_states(3) " << (*states)(3) << std::endl;
-    // DRAKE_ABORT();
-  }
-
-  // TODO: We can replace these values with garbage or just delete them
-  // altogether.
-  const double start_position_follower = (is_playback_mode) ? (*states)(2) : 5.;
-  const double start_speed_follower = (is_playback_mode) ? (*states)(3) : 20.;
-  const double start_position_leader = (is_playback_mode) ? (*states)(0) : 20.;
-  const double speed_leader = (is_playback_mode) ? (*states)(1) : 10.;
+  // TODO: We can just delete these altogether.
+  const double start_position_follower = 5.;
+  const double start_speed_follower = 20.;
+  const double start_position_leader = 20.;
+  const double speed_leader = 10.;
 
   const auto& params_follower = CreateTrajectoryParamsForDragway(
       *dragway_road_geometry, lane_index, start_speed_follower,
       start_position_follower);
-  simulator->AddIdmControlledPriusTrajectoryCar("following_trajectory_car",
-                                                std::get<0>(params_follower),
-                                                start_speed_follower,
-                                                start_position_follower);
+  simulator->AddIdmControlledCar("following_trajectory_car",
+                                 std::get<0>(params_follower),
+                                 start_speed_follower,
+                                 start_position_follower,
+                                 lane);
   const auto& params_leader = CreateTrajectoryParamsForDragway(
       *dragway_road_geometry, lane_index, speed_leader,
       start_position_leader);
@@ -72,12 +62,14 @@ SetupSimulator(bool is_playback_mode,
                                    std::get<0>(params_leader),
                                    speed_leader,
                                    start_position_leader);
-
-  // TODO(jadecastro): Double Check:
+  // TODO(jadecastro): Double Check!
   return std::unique_ptr<AutomotiveSimulator<double>>(simulator.release());
 }
 
 int DoMain(void) {
+
+  const Lane* to_lane = ;
+  if (lane
   auto simulator = SetupSimulator(false /* is_playback_mode */);
 
   simulator->BuildAndInitialize();
@@ -130,8 +122,13 @@ int DoMain(void) {
   common::CallMatlab("xlabel", "s lead (m)");
   common::CallMatlab("ylabel", "s lead - s ego (m)");
 
+  std::cout << " all_states(0) " << states(0) << std::endl;
+  std::cout << " all_states(1) " << states(1) << std::endl;
+  std::cout << " all_states(2) " << states(2) << std::endl;
+  std::cout << " all_states(3) " << states(3) << std::endl;
+
   // Build another simulator with LCM capability and run in play-back mode.
-  auto simulator_lcm = SetupSimulator(true /* is_playback_mode */, &states);
+  auto simulator_lcm = SetupSimulator(true /* is_playback_mode */);
   simulator_lcm->Build();
 
   /*

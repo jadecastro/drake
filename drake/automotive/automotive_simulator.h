@@ -125,9 +125,13 @@ class AutomotiveSimulator {
                             const Curve2<double>& curve, double speed,
                             double start_time);
 
-  /// Adds a TrajectoryCar to this simulation visualized as a Toyota Prius that
-  /// is controlled via an IdmController. This includes its EulerFloatingJoint
-  /// output.
+  /// Adds a car and IdmController to this simulation.  If @p to_lane is null
+  /// then a TrajectoryCar is added to the simulator that is powered by an
+  /// IdmController.  Otherwise, a SimpleCar is added, powered by an
+  /// IdmController and a PurePursuitController that takes as input a constant
+  /// source that contains the @p to_lane as the destination lane for the car.
+  /// The car is visualized as a Toyota Prius. This includes its
+  /// EulerFloatingJoint output.
   ///
   /// @pre Start() has NOT been called.
   ///
@@ -140,10 +144,12 @@ class AutomotiveSimulator {
   ///
   /// @param start_time See documentation of TrajectoryCar::TrajectoryCar.
   ///
+  /// @param to_lane   
+  ///
   /// @return The ID of the car that was just added to the simulation.
-  int AddIdmControlledPriusTrajectoryCar(
+  int AddIdmControlledCar(
       const std::string& name, const Curve2<double>& curve, double speed,
-      double start_time);
+      double start_time, const maliput::api::Lane* to_lane = nullptr);
 
   /// Adds a MaliputRailcar to this simulation visualized as a Toyota Prius.
   ///
