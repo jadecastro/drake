@@ -26,7 +26,9 @@ Multiplexer<T>::Multiplexer(std::vector<int> input_sizes)
 
 template <typename T>
 Multiplexer<T>::Multiplexer(const systems::BasicVector<T>& model_vector)
-    : input_sizes_(std::vector<int>(model_vector.size(), 1)) {
+    : input_sizes_(std::vector<int>(model_vector.size(), 1)),
+      model_vector_(std::unique_ptr<systems::BasicVector<T>>(
+          model_vector.Clone())) {
   for (int i = 0; i < model_vector.size(); ++i) {
     this->DeclareInputPort(kVectorValued, 1);
   }
@@ -43,6 +45,22 @@ void Multiplexer<T>::DoCalcOutput(const Context<T>& context,
     output_vector.segment(output_vector_index, input_size) =
         this->EvalEigenVectorInput(context, i);
     output_vector_index += input_size;
+  }
+}
+
+template <typename T>
+Multiplexer<AutoDiffXd>* Multiplexer<T>::DoToAutoDiffXd() const {
+  if (model_vector_ != nullptr) {
+    VectorX<AutoDiffXd> vector =
+        VectorX<AutoDiffXd>::Zero(model_vector_->size());
+    for (int i{0}; i < model_vector_->size(); ++i) {
+      vector(i) = AutoDiffXd(model_vector_->GetAtIndex(i));
+    }
+    const std::unique_ptr<BasicVector<AutoDiffXd>>
+        new_vector(new BasicVector<AutoDiffXd>(vector));
+    return new Multiplexer<AutoDiffXd>(*new_vector);
+  } else {
+    return new Multiplexer<AutoDiffXd>(input_sizes_);
   }
 }
 

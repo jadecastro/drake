@@ -79,7 +79,7 @@ class SimpleCar : public systems::LeafSystem<T> {
                         systems::rendering::FrameVelocity<T>* velocity) const;
   void ImplCalcTimeDerivatives(const SimpleCarParams<T>& params,
                                const SimpleCarState<T>& state,
-                               const DrivingCommand<T>& input,
+                               const systems::BasicVector<T>& input,
                                SimpleCarState<T>* rates) const;
 };
 

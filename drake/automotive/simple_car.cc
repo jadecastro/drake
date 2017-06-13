@@ -26,7 +26,7 @@ namespace automotive {
 
 template <typename T>
 SimpleCar<T>::SimpleCar() {
-  this->DeclareVectorInputPort(DrivingCommand<T>());
+  this->DeclareVectorInputPort(systems::BasicVector<T>(2));
   this->DeclareVectorOutputPort(SimpleCarState<T>());
   this->DeclareVectorOutputPort(PoseVector<T>());
   this->DeclareVectorOutputPort(FrameVelocity<T>());
@@ -133,8 +133,8 @@ void SimpleCar<T>::DoCalcTimeDerivatives(
   DRAKE_ASSERT(state);
 
   // Obtain the input.
-  const DrivingCommand<T>* const input =
-      this->template EvalVectorInput<DrivingCommand>(context, 0);
+  const systems::BasicVector<T>* const input =
+      this->template EvalVectorInput<systems::BasicVector>(context, 0);
   DRAKE_ASSERT(input);
 
   // Obtain the result structure.
@@ -152,7 +152,7 @@ void SimpleCar<T>::DoCalcTimeDerivatives(
 template <typename T>
 void SimpleCar<T>::ImplCalcTimeDerivatives(const SimpleCarParams<T>& params,
                                            const SimpleCarState<T>& state,
-                                           const DrivingCommand<T>& input,
+                                           const systems::BasicVector<T>& input,
                                            SimpleCarState<T>* rates) const {
   using std::abs;
   using std::cos;
@@ -160,18 +160,18 @@ void SimpleCar<T>::ImplCalcTimeDerivatives(const SimpleCarParams<T>& params,
   using std::sin;
 
   // Sanity check our input.
-  DRAKE_DEMAND(abs(input.steering_angle()) < M_PI);
+  DRAKE_DEMAND(abs(input.GetAtIndex(0)) < M_PI);
 
   // Compute the smooth acceleration that the vehicle actually executes.
   // TODO(jwnimmer-tri) We should saturate to params.max_acceleration().
-  const T desired_acceleration = input.acceleration();
+  const T desired_acceleration = input.GetAtIndex(1);
   const T smooth_acceleration =
       calc_smooth_acceleration(desired_acceleration, params.max_velocity(),
                                params.velocity_limit_kp(), state.velocity());
 
   // Determine steering.
   const T saturated_steering_angle =
-      math::saturate(input.steering_angle(), -params.max_abs_steering_angle(),
+      math::saturate(input.GetAtIndex(0), -params.max_abs_steering_angle(),
                      params.max_abs_steering_angle());
   const T curvature = tan(saturated_steering_angle) / params.wheelbase();
 

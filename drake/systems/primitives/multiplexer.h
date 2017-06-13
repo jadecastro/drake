@@ -46,7 +46,10 @@ class Multiplexer : public LeafSystem<T> {
   void DoCalcOutput(const Context<T>& context,
                     SystemOutput<T>* output) const override;
 
+  Multiplexer<AutoDiffXd>* DoToAutoDiffXd() const override;
+
   const std::vector<int> input_sizes_;
+  const std::unique_ptr<systems::BasicVector<T>> model_vector_;
 };
 
 }  // namespace systems

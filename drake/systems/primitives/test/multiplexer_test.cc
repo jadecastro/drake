@@ -78,7 +78,8 @@ TEST_F(MultiplexerTest, ScalarConstructor) {
 }
 
 TEST_F(MultiplexerTest, ModelVectorConstructor) {
-  mux_ = make_unique<Multiplexer<double>>(MyVector<2, double>());
+  const MyVector<2, double> my_vector;
+  mux_ = make_unique<Multiplexer<double>>(&my_vector);
   context_ = mux_->CreateDefaultContext();
   output_ = mux_->AllocateOutput(*context_);
 
