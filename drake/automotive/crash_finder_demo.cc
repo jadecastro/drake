@@ -21,7 +21,7 @@ namespace {
 
 static constexpr int kNumTrafficCarsForLaneChange = 2;
 static constexpr int kNumDragwayLanesForLaneChange = 2;
-static constexpr double kLaneWidth = 2.;
+static constexpr double kLaneWidth = 3.;
 
 static std::unique_ptr<AutomotiveSimulator<double>>
 SetupSimulator(bool is_playback_mode, bool is_lane_change = false) {
@@ -101,7 +101,7 @@ int DoMain(void) {
   auto context = plant.CreateDefaultContext();
 
   // Set up a direct-collocation feasibility problem.
-  const double duration = 10.;  // seconds
+  const double duration = 3.5;  // seconds
   const int kNumTimeSamples = 30;
 
   systems::DircolTrajectoryOptimization prog(&plant, *context, kNumTimeSamples,
@@ -111,41 +111,53 @@ int DoMain(void) {
   prog.AddTimeIntervalBounds(duration / (kNumTimeSamples - 1),
                              duration / (kNumTimeSamples - 1));
 
-  // TODO(jadecastro): Need to work out the correspondences for all the indices.
+  //.TODO(jadecastro): For lane change case, verify that the initial conditions
+  // satisfy the preconditions for the "move to the left lane" action in MOBIL.
+
+  // TODO(jadecastro): How best to obtain correspondences for all the indices?
   if (is_lane_change) {
+    DRAKE_DEMAND(kNumDragwayLanesForLaneChange == 2);
+    DRAKE_DEMAND(kNumTrafficCarsForLaneChange == 2);
     // Begin with a reasonable spacing between cars.
-    // Traffic Car 0
-    prog.AddLinearConstraint(prog.initial_state()(0) >= 60.);  // s traffic0
-    prog.AddLinearConstraint(prog.initial_state()(1) == 1.);  // s_dot traffic0
-    // Traffic Car 1
-    prog.AddLinearConstraint(prog.initial_state()(2) >= 0.5);  // s traffic1
-    prog.AddLinearConstraint(prog.initial_state()(3) == 1.);  // s_dot traffic1
-    // Ego Car
+    // Traffic Car 1 (left lane)
+    prog.AddLinearConstraint(prog.initial_state()(0) >= 5.);  // s traffic1
+    //prog.AddLinearConstraint(prog.initial_state()(0) <= 47.5);  // s traffic1
+    prog.AddLinearConstraint(prog.initial_state()(1) >= 5.);  // s_dot traffic1
+    // Traffic Car 0 (right lane)
+    prog.AddLinearConstraint(prog.initial_state()(2) >= 60.);  // s traffic0
+    prog.AddLinearConstraint(prog.initial_state()(3) == 5.);  // s_dot traffic0
+    // Ego Car (right lane)
     prog.AddLinearConstraint(prog.initial_state()(4) == 50.);  // x ego
-    prog.AddLinearConstraint(prog.initial_state()(5) == 0.5 * kLaneWidth);
+    prog.AddLinearConstraint(prog.initial_state()(5) == -0.5 * kLaneWidth);
                                                                // y ego
+    //  ... Ego starts out in the right lane.
     prog.AddLinearConstraint(prog.initial_state()(6) == 0.);  // heading ego
-    prog.AddLinearConstraint(prog.initial_state()(7) >= 0.5);  // velocity ego
+    prog.AddLinearConstraint(prog.initial_state()(7) == 5.5);  // velocity ego
 
     // Set state constaints for all time steps; constraints on state() with
     // indeterminate time-steps does not seem to work??
     for (int i{0}; i < kNumTimeSamples; ++i) {
       //prog.AddLinearConstraint(prog.state()(0) >= prog.state()(2));
-      // Traffic Car 0
-      prog.AddLinearConstraint(prog.state(i)(0) >= 60.);  // s traffic0
-      prog.AddLinearConstraint(prog.state(i)(1) == 1.);  // s_dot traffic0
-      // Traffic Car 1
-      prog.AddLinearConstraint(prog.state(i)(2) >= 0.5);  // s traffic1
-      prog.AddLinearConstraint(prog.state(i)(3) == 1.);  // s_dot traffic1
+      // Traffic Car 1 (left lane)
+      prog.AddLinearConstraint(prog.state(i)(0) >= 5.);  // s traffic0
+      prog.AddLinearConstraint(prog.state(i)(1) >= 5.);  // s_dot traffic0
+      // Traffic Car 0 (right lane)
+      prog.AddLinearConstraint(prog.state(i)(2) >= 60.);  // s traffic1
+      prog.AddLinearConstraint(prog.state(i)(3) == 5.);  // s_dot traffic1
       // Ego Car
       prog.AddLinearConstraint(prog.state(i)(4) >= 50.);  // x ego
-      prog.AddLinearConstraint(prog.state(i)(5) >= 0.5 * kLaneWidth);  // y ego
-      prog.AddLinearConstraint(prog.state(i)(6) >= 0.);  // heading ego
-      prog.AddLinearConstraint(prog.state(i)(7) >= 0.5);  // velocity ego <--
-                                                          // should be epsilon.
+      prog.AddLinearConstraint(prog.state(i)(5) >= -0.5 * kLaneWidth);  // y ego
+      //prog.AddLinearConstraint(prog.state(i)(6) >= 0.);  // heading ego
+      prog.AddLinearConstraint(prog.state(i)(7) <= 7.);  // velocity ego
+      prog.AddLinearConstraint(prog.state(i)(7) >= 4.);  // velocity ego
     }
-    prog.AddLinearConstraint(prog.final_state()(0) <=
-                             prog.final_state()(2) + 2.5);
+    // Unsafe criterion: Find a collision with the traffic car in left lane.
+    // y ego >= 0. && x ego <= x traffic1 + 2.5 && x ego >= x traffic1 - 2.5
+    prog.AddLinearConstraint(prog.final_state()(5) >= 0.);
+    prog.AddLinearConstraint(prog.final_state()(4) >=
+                             prog.final_state()(0) - 2.5);
+    prog.AddLinearConstraint(prog.final_state()(4) <=
+                             prog.final_state()(0) + 2.5);
   } else {
     // Begin with a reasonable spacing between cars.
     prog.AddLinearConstraint(prog.initial_state()(0) >=
@@ -184,13 +196,18 @@ int DoMain(void) {
   std::vector<double> times_out;
   prog.GetResultSamples(&inputs, &states, &times_out);
   if (is_lane_change) {
+    common::CallMatlab("figure");
+    common::CallMatlab("plot", states.row(4), states.row(5));
+    common::CallMatlab("xlabel", "x ego (m)");
+    common::CallMatlab("ylabel", "y ego (m)");
+    common::CallMatlab("figure");
+    common::CallMatlab("plot", states.row(0), states.row(2));
+    common::CallMatlab("xlabel", "x traffic1 (m)");
+    common::CallMatlab("ylabel", "x traffic0 (m)");
+  } else {
     common::CallMatlab("plot", states.row(0), states.row(0) - states.row(2));
     common::CallMatlab("xlabel", "s lead (m)");
     common::CallMatlab("ylabel", "s lead - s ego (m)");
-  } else {
-    common::CallMatlab("plot", states.row(0), states.row(2));
-    common::CallMatlab("xlabel", "x ego (m)");
-    common::CallMatlab("ylabel", "y ego (m)");
   }
 
   for (int i{0}; i < states.size(); ++i) {
@@ -202,17 +219,15 @@ int DoMain(void) {
                                       is_lane_change);
   simulator_lcm->Build();
 
-  /*
   // Pipe the offending initial condition into AutomotiveSimulator.
+  
   const auto& plant_lcm = simulator_lcm->GetDiagram();
   auto context_lcm = plant_lcm.CreateDefaultContext();
   context_lcm->get_mutable_continuous_state()->SetFromVector(states.col(0));
 
-  simulator_lcm->Start(1.  target realtime rate (seconds),
-      std::move(context_lcm)  initial context );
-       simulator_lcm->StepBy(
-            std::numeric_limits<double>::infinity() simulation time);
-  */
+  simulator_lcm->Start(1., std::move(context_lcm));
+  simulator_lcm->StepBy(10.);
+  
   return 0;
 }
 

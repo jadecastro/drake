@@ -45,10 +45,10 @@ T PurePursuit<T>::Evaluate(const PurePursuitParams<T>& pp_params,
   const T delta_r = -(goal_x - x) * sin(heading) + (goal_y - y) * cos(heading);
   const T curvature =
       T(2.) * delta_r / (pp_params.s_lookahead() * pp_params.s_lookahead());
-  const T one_over_curvature = 1. / curvature;
+  const T wheelbase_inverse = T(1.) / car_params.wheelbase();
 
   // Return the steering angle.
-  return atan2(car_params.wheelbase(), one_over_curvature);
+  return atan2(curvature, wheelbase_inverse);
 }
 
 template <typename T>
