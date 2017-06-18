@@ -23,11 +23,13 @@ Segment::Segment(Junction* junction,
   // To better understand the semantics of the variables defined in this method,
   // see the class description.
 
+  const double delta_y = 0.;
+
   const api::HBounds elevation_bounds(0., maximum_height);
   const api::RBounds lane_bounds({-lane_width / 2, lane_width / 2});
   const double road_width = num_lanes * lane_width + 2 * shoulder_width;
-  const double y_min = -road_width / 2;
-  const double y_max = road_width / 2;
+  const double y_min = -road_width / 2 + delta_y;
+  const double y_max = road_width / 2 + delta_y;
 
   for (int i = 0; i < num_lanes; ++i) {
     const double y_offset =

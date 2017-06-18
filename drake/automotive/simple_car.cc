@@ -165,7 +165,7 @@ void SimpleCar<T>::ImplCalcTimeDerivatives(const SimpleCarParams<T>& params,
   // Compute the smooth acceleration that the vehicle actually executes.
   // TODO(jwnimmer-tri) We should saturate to params.max_acceleration().
   const T desired_acceleration = input.GetAtIndex(1);
-  const T smooth_acceleration =
+  const T smooth_acceleration = 
       calc_smooth_acceleration(desired_acceleration, params.max_velocity(),
                                params.velocity_limit_kp(), state.velocity());
 
