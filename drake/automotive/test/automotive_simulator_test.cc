@@ -1,5 +1,6 @@
 #include "drake/automotive/automotive_simulator.h"
 
+#include <fstream>
 #include <stdexcept>
 
 #include <gtest/gtest.h>
@@ -56,7 +57,7 @@ GTEST_TEST(AutomotiveSimulatorTest, TestPriusSimpleCar) {
   // Set up a basic simulation with just a Prius SimpleCar.
   auto simulator = std::make_unique<AutomotiveSimulator<double>>(
       std::make_unique<lcm::DrakeMockLcm>());
-  const int id = simulator->AddPriusSimpleCar("Foo", kCommandChannelName);
+  const int id = simulator->AddPriusSimpleCar("SimpleCar", kCommandChannelName);
   EXPECT_EQ(id, 0);
 
   const int num_vis_elements = PriusVis<double>(0, "").num_poses();
@@ -120,6 +121,13 @@ GTEST_TEST(AutomotiveSimulatorTest, TestPriusSimpleCar) {
   EXPECT_EQ(&simulator->GetDiagramSystemByName(driving_command_name),
             &command_sub);
   EXPECT_EQ(&simulator->GetDiagramSystemByName(joint_state_name), &state_pub);
+
+  // Graphviz output.
+  const std::string dot = simulator->GetDiagram().GetGraphvizString();
+  std::ofstream dotfile;
+  dotfile.open("simple_car.dot");
+  dotfile << dot << std::endl;
+  dotfile.close();
 }
 
 // Tests the ability to initialize a SimpleCar to a non-zero initial state.
@@ -220,6 +228,13 @@ GTEST_TEST(AutomotiveSimulatorTest, TestMobilControlledSimpleCar) {
   // Expect the SimpleCar to start steering to the left; y value increases.
   const double mobil_y = draw_message.position.at(0).at(1);
   EXPECT_GE(mobil_y, -2.);
+
+  // Graphviz output.
+  const std::string dot = simulator->GetDiagram().GetGraphvizString();
+  std::ofstream dotfile;
+  dotfile.open("mobil_controlled_simple_car.dot");
+  dotfile << dot << std::endl;
+  dotfile.close();
 }
 
 // Cover AddTrajectoryCar (and thus AddPublisher).
@@ -577,13 +592,20 @@ GTEST_TEST(AutomotiveSimulatorTest, TestIdmControllerUniqueName) {
           std::numeric_limits<double>::epsilon() /* linear_tolerance */,
           std::numeric_limits<double>::epsilon() /* angular_tolerance */));
   simulator->AddIdmControlledPriusMaliputRailcar(
-      "Alice", LaneDirection(road->junction(0)->segment(0)->lane(0)), params,
+      "Car 0", LaneDirection(road->junction(0)->segment(0)->lane(0)), params,
       MaliputRailcarState<double>() /* initial state */);
   simulator->AddIdmControlledPriusMaliputRailcar(
-      "Bob", LaneDirection(road->junction(0)->segment(0)->lane(0)), params,
+      "Car 1", LaneDirection(road->junction(0)->segment(0)->lane(0)), params,
       MaliputRailcarState<double>() /* initial state */);
 
   EXPECT_NO_THROW(simulator->Start());
+
+  // Graphviz output.
+  const std::string dot = simulator->GetDiagram().GetGraphvizString();
+  std::ofstream dotfile;
+  dotfile.open("idm_controlled_simple_car.dot");
+  dotfile << dot << std::endl;
+  dotfile.close();
 }
 
 // Verifies that the velocity outputs of the MaliputRailcars are connected to
