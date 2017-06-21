@@ -1,5 +1,6 @@
 #include "drake/automotive/automotive_simulator.h"
 
+#include <fstream>
 #include <stdexcept>
 
 #include <gtest/gtest.h>
@@ -221,6 +222,13 @@ GTEST_TEST(AutomotiveSimulatorTest, TestMobilControlledSimpleCar) {
   // Expect the SimpleCar to start steering to the left; y value increases.
   const double mobil_y = draw_message.position.at(0).at(1);
   EXPECT_GE(mobil_y, -2.);
+
+  // Graphviz output.
+  const std::string dot = simulator->GetDiagram().GetGraphvizString();
+  std::ofstream dotfile;
+  dotfile.open("mobil_controlled_simple_car.dot");
+  dotfile << dot << std::endl;
+  dotfile.close();
 }
 
 // Cover AddTrajectoryCar (and thus AddPublisher).
