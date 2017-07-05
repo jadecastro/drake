@@ -106,7 +106,7 @@ SetupSimulator(bool is_playback_mode, int num_dragway_lanes = 1) {
 
 int DoMain(void) {
 
-  const int kNumLanes = 3;  // Number of lanes in the scenario.
+  const int kNumLanes = 2;  // Number of lanes in the scenario.
 
   auto simulator = SetupSimulator(false /* is_playback_mode */, kNumLanes);
 
@@ -157,8 +157,8 @@ int DoMain(void) {
   // constraints for each scenario.  How best to obtain correspondences for all
   // the indices?
   const double delta_y =  0.; //0.5 * kLaneWidth;
-  VectorX<double> vect0(14);
-  VectorX<double> vectf(14);
+  VectorX<double> vect0(8);
+  VectorX<double> vectf(8);
   if (kNumLanes == 3) {
     vect0 << 20., 1. * kLaneWidth + delta_y, 0., 10., 30., 5., 60., 8.,
         40., 5., 30., -1. * kLaneWidth + delta_y, 0., 5.5;

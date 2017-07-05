@@ -23,6 +23,23 @@ using systems::rendering::FrameVelocity;
 using systems::rendering::PoseBundle;
 using systems::rendering::PoseVector;
 
+static void PrintPartials(const AutoDiffXd& x) {
+  std::cout << "  PoseSelector: x partials " << x.derivatives() << std::endl;
+}
+
+static void PrintPartials(const double& x) {}
+
+static void SetZeroPartials(const AutoDiffXd& model_value, AutoDiffXd* x) {
+  const int num_partials = model_value.derivatives().size();
+  auto& derivs = (*x).derivatives();
+  if (derivs.size() == 0) {
+    derivs.resize(num_partials);
+    derivs.setZero();
+  }
+}
+
+static void SetZeroPartials(const double& model_value, double* x) {}
+
 template <typename T>
 const std::map<AheadOrBehind, const ClosestPose<T>>
 PoseSelector<T>::FindClosestPair(const Lane* const lane,
@@ -83,6 +100,8 @@ const ClosestPose<T> PoseSelector<T>::FindSingleClosestPose(
   //T one = ego_lane_position.s() / ego_lane_position.s();
   T distance_scanned = cond(initial_with_s, -ego_lane_position.s(),
                             ego_lane_position.s() - T(lane->length()));
+  std::cout << " distance_scanned " << std::endl;
+  PrintPartials(distance_scanned);
   // N.B.      Possible partial-derivative-loss.  ^^^^^
 
   const GeoPosition ego_geo_position(
@@ -145,6 +164,8 @@ const ClosestPose<T> PoseSelector<T>::FindSingleClosestPose(
       distance_increment =
           cond(lane_direction.with_s, result.odometry.pos.s(),
                T(lane_direction.lane->length()) - result.odometry.pos.s());
+      std::cout << " distance_increment " << std::endl;
+      PrintPartials(distance_increment);
       // N.B.   ^^^ Possible partial-derivative-loss.
     }
 
@@ -153,17 +174,28 @@ const ClosestPose<T> PoseSelector<T>::FindSingleClosestPose(
       // Figure out whether or not the result is within scan_distance.
       if (distance_scanned + distance_increment < scan_distance) {
         result.distance = distance_scanned + distance_increment;
+        std::cout << " result.distance " << result.distance << std::endl;
+        PrintPartials(distance_scanned);
         return result;
       }
     }
     // Increment distance_scanned.
     distance_scanned += T(lane_direction.lane->length());
+    std::cout << " distance_scanned (in loop) " << std::endl;
+    PrintPartials(distance_scanned);
     // N.B.            ^^^ Possible partial-derivative-loss.
 
     // Obtain the next lane_direction in the scanned sequence.
     get_default_ongoing_lane(&lane_direction);
-    if (lane_direction.lane == nullptr) return result;  // +/- Infinity.
+    if (lane_direction.lane == nullptr) {
+      std::cout << " result.distance " << result.distance << std::endl;
+      PrintPartials(result.distance);
+      return result;  // +/- Infinity.
+    }
   }
+  std::cout << " default_result.distance " << default_result.distance << std::endl;
+  SetZeroPartials(distance_scanned, &default_result.distance);
+  PrintPartials(default_result.distance);
   return default_result;
 }
 

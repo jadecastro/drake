@@ -172,6 +172,7 @@ drake_cc_library(
     srcs = ["idm_planner.cc"],
     hdrs = ["idm_planner.h"],
     deps = [
+        "//drake/common:extract_double",
         ":generated_vectors",
         "//drake/common:symbolic",
     ],
@@ -440,6 +441,22 @@ drake_cc_binary(
         "//drake/multibody:rigid_body_tree_construction",
         "//drake/multibody/rigid_body_plant",
         "//drake/systems/controllers:pid_controlled_system",
+    ],
+)
+
+drake_cc_googletest(
+    name = "loss_function",
+    srcs = ["loss_function.cc"],
+    deps = [
+        "//drake/automotive:automotive_simulator",
+        "//drake/automotive:create_trajectory_params",
+        "//drake/automotive:simple_car",
+        "//drake/automotive/maliput/api",
+        "//drake/automotive/maliput/dragway",
+        "//drake/common:call_matlab",
+        "//drake/math:autodiff",
+        "//drake/systems/trajectory_optimization:direct_collocation",
+        "@com_github_gflags_gflags//:gflags",
     ],
 )
 

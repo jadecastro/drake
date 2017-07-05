@@ -24,6 +24,13 @@ using systems::rendering::PoseVector;
 
 namespace automotive {
 
+static void PrintPartials(const AutoDiffXd& x) {
+  std::cout << "  SimpleCar: x partials " << x.derivatives() << std::endl;
+}
+
+static void PrintPartials(const double& x) {}
+static void PrintPartials(const symbolic::Expression& x) {}
+
 template <typename T>
 SimpleCar<T>::SimpleCar() {
   this->DeclareVectorInputPort(systems::BasicVector<T>(2));
@@ -89,7 +96,7 @@ void SimpleCar<T>::ImplCalcOutput(const SimpleCarState<T>& state,
 template <typename T>
 void SimpleCar<T>::ImplCalcPose(const SimpleCarState<T>& state,
                                 PoseVector<T>* pose) const {
-  pose->set_translation(Eigen::Translation<T, 3>(state.x(), state.y(), 0));
+  pose->set_translation(Eigen::Translation<T, 3>(state.x(), state.y(), T(0)));
   const Vector3<T> z_axis{0.0, 0.0, 1.0};
   const Eigen::AngleAxis<T> rotation(state.heading(), z_axis);
   pose->set_rotation(Eigen::Quaternion<T>(rotation));
@@ -131,6 +138,7 @@ void SimpleCar<T>::DoCalcTimeDerivatives(
   const SimpleCarState<T>* const state = dynamic_cast<const SimpleCarState<T>*>(
       &context.get_continuous_state_vector());
   DRAKE_ASSERT(state);
+  PrintPartials(state->x());
 
   // Obtain the input.
   const systems::BasicVector<T>* const input =
@@ -165,7 +173,7 @@ void SimpleCar<T>::ImplCalcTimeDerivatives(const SimpleCarParams<T>& params,
   // Compute the smooth acceleration that the vehicle actually executes.
   // TODO(jwnimmer-tri) We should saturate to params.max_acceleration().
   const T desired_acceleration = input.GetAtIndex(1);
-  const T smooth_acceleration = 
+  const T smooth_acceleration =
       calc_smooth_acceleration(desired_acceleration, params.max_velocity(),
                                params.velocity_limit_kp(), state.velocity());
 

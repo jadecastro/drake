@@ -54,7 +54,7 @@ void DirectCollocationConstraint::DoEval(
   const auto x1 = x.segment(1 + num_states_, num_states_);
   const auto u0 = x.segment(1 + (2 * num_states_), num_inputs_);
   const auto u1 = x.segment(1 + (2 * num_states_) + num_inputs_, num_inputs_);
-
+  /*
   std::cout << " num_inputs_ " << num_inputs_ << std::endl;
   std::cout << " num_states_ " << num_states_ << std::endl;
 
@@ -63,12 +63,12 @@ void DirectCollocationConstraint::DoEval(
     std::cout << " x(" << i << ").derivatives() \n" << x(i).derivatives()
               << std::endl;
   }
-
+  */
   // TODO(sam.creasey): We should cache the dynamics outputs to avoid
   // recalculating for every knot point as we advance.
   AutoDiffVecXd xdot0;
   dynamics(x0, u0, &xdot0);
-
+  /*
   std::cout << " x0 \n" << x0 << std::endl;
   for (int i = 0; i < num_states_; ++i) {
     std::cout << " x0(" << i << ").derivatives() \n" << x0(i).derivatives()
@@ -80,12 +80,12 @@ void DirectCollocationConstraint::DoEval(
               << xdot0(i).derivatives() << std::endl;
   }
   std::cout << " u0 \n" << u0 << std::endl;
-
+  */
   Eigen::MatrixXd dxdot0 = ExtractDerivativesMatrix(xdot0);
 
   AutoDiffVecXd xdot1;
   dynamics(x1, u1, &xdot1);
-
+  /*
   std::cout << " x1 \n" << x1 << std::endl;
   for (int i = 0; i < num_states_; ++i) {
     std::cout << " x1(" << i << ").derivatives() \n" << x1(i).derivatives()
@@ -97,7 +97,7 @@ void DirectCollocationConstraint::DoEval(
               << xdot1(i).derivatives() << std::endl;
   }
   std::cout << " u1 \n" << u1 << std::endl;
-
+  */
   Eigen::MatrixXd dxdot1 = ExtractDerivativesMatrix(xdot1);
 
   // Cubic interpolation to get xcol and xdotcol.

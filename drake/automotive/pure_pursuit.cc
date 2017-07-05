@@ -21,6 +21,18 @@ using maliput::api::LanePosition;
 using maliput::api::LanePositionWithAutoDiff;
 using systems::rendering::PoseVector;
 
+static void SetZeroPartials(const AutoDiffXd& model_value, AutoDiffXd* x) {
+  std::cout << "  x partials " << x->derivatives() << std::endl;
+  const int num_partials = model_value.derivatives().size();
+  auto& derivs = (*x).derivatives();
+  if (derivs.size() == 0) {
+    derivs.resize(num_partials);
+    derivs.setZero();
+  }
+}
+
+static void SetZeroPartials(const double& model_value, double* x) {}
+
 template <typename T>
 T PurePursuit<T>::Evaluate(const PurePursuitParams<T>& pp_params,
                            const SimpleCarParams<T>& car_params,
@@ -43,9 +55,9 @@ T PurePursuit<T>::Evaluate(const PurePursuitParams<T>& pp_params,
   const T heading = pose.get_rotation().z();
 
   const T delta_r = -(goal_x - x) * sin(heading) + (goal_y - y) * cos(heading);
-  const T curvature =
-      T(2.) * delta_r / (pp_params.s_lookahead() * pp_params.s_lookahead());
-  const T wheelbase_inverse = T(1.) / car_params.wheelbase();
+  const T curvature = T(2.) * delta_r / T(pow(pp_params.s_lookahead(), 2.));
+  T wheelbase_inverse = T(1.) / T(car_params.wheelbase());
+  SetZeroPartials(curvature, &wheelbase_inverse);
 
   // Return the steering angle.
   return atan2(curvature, wheelbase_inverse);
