@@ -270,11 +270,6 @@ int AutomotiveSimulator<T>::AddIdmControlledCar(
         "RoadGeometry not set. Please call SetRoadGeometry() first before "
         "calling this method.");
   }
-  // TODO(jadecastro): Also verify that the lane is a dragway.
-  if (to_lane != nullptr) {
-    DRAKE_DEMAND(road_->junction(0)->segment(0)->num_lanes() > 1);
-  }
-
   CheckNameUniqueness(name);
   const int id = allocate_vehicle_number();
 

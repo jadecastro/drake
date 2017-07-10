@@ -22,12 +22,13 @@ using systems::rendering::PoseVector;
 
 static constexpr int kIdmParamsIndex{0};
 
+/*
 static void PrintPartials(const AutoDiffXd& x) {
   std::cout << "  IDM: x partials " << x.derivatives() << std::endl;
 }
 
 static void PrintPartials(const double& x) {}
-
+*/
 template <typename T>
 IdmController<T>::IdmController(const RoadGeometry& road)
     : road_(road),
@@ -110,7 +111,7 @@ void IdmController<T>::ImplDoCalcOutput(
   // Initialize to a "model value" that has entries for the derivatives.
 
   auto translation = ego_pose.get_isometry().translation();
-  PrintPartials(translation.x());
+  //PrintPartials(translation.x());
 
   const maliput::api::GeoPosition geo_position(
       ExtractDoubleOrThrow(translation.x()),
@@ -124,7 +125,7 @@ void IdmController<T>::ImplDoCalcOutput(
       ego_position.lane, ego_pose, ego_velocity, traffic_poses,
       idm_params.scan_ahead_distance(), AheadOrBehind::kAhead);
   T headway_distance = lead_car_pose.distance;
-  PrintPartials(headway_distance);
+  //PrintPartials(headway_distance);
 
   T s_dot_ego = PoseSelector<T>::GetSigmaVelocity({ego_position, ego_velocity});
   T s_dot_lead = PoseSelector<T>::GetSigmaVelocity(lead_car_pose.odometry);
@@ -251,9 +252,12 @@ const {
   //  - lead car s-velocity (sigma_v)
   //  - ego s-position
   //  - ego s-velocity (sigma_v)
+
+  /*
   std::cout << " headway_distance " << *headway_distance << std::endl;
   std::cout << " headway_distance derivs " << headway_distance->derivatives()
             << std::endl;
+  */
   /*
   (*headway_distance).derivatives()(0) = 0.;
   (*headway_distance).derivatives()(1) = 1.;

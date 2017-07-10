@@ -96,6 +96,8 @@ class TrajectoryCar : public systems::LeafSystem<T> {
   }
   /// @}
 
+  const Curve2<T>& get_curve() const { return curve_; }
+
  protected:
   /// Data structure returned by CalcRawPose containing raw pose information.
   struct PositionHeading {

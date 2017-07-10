@@ -24,13 +24,14 @@ using systems::rendering::PoseVector;
 
 namespace automotive {
 
+/*
 static void PrintPartials(const AutoDiffXd& x) {
   std::cout << "  SimpleCar: x partials " << x.derivatives() << std::endl;
 }
 
 static void PrintPartials(const double& x) {}
 static void PrintPartials(const symbolic::Expression& x) {}
-
+*/
 template <typename T>
 SimpleCar<T>::SimpleCar() {
   this->DeclareVectorInputPort(systems::BasicVector<T>(2));
@@ -138,7 +139,7 @@ void SimpleCar<T>::DoCalcTimeDerivatives(
   const SimpleCarState<T>* const state = dynamic_cast<const SimpleCarState<T>*>(
       &context.get_continuous_state_vector());
   DRAKE_ASSERT(state);
-  PrintPartials(state->x());
+  //PrintPartials(state->x());
 
   // Obtain the input.
   const systems::BasicVector<T>* const input =

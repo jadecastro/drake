@@ -22,7 +22,7 @@ using maliput::api::LanePositionWithAutoDiff;
 using systems::rendering::PoseVector;
 
 static void SetZeroPartials(const AutoDiffXd& model_value, AutoDiffXd* x) {
-  std::cout << "  x partials " << x->derivatives() << std::endl;
+  // std::cout << "  x partials " << x->derivatives() << std::endl;
   const int num_partials = model_value.derivatives().size();
   auto& derivs = (*x).derivatives();
   if (derivs.size() == 0) {
