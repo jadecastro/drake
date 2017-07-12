@@ -14,7 +14,7 @@ static void ReplaceNanPartials(AutoDiffXd* x) {
   auto& derivs = (*x).derivatives();
   const int num_partials = derivs.size();
   for (int i{0}; i < num_partials; ++i) {
-    if (isnan(derivs(i))) derivs(i) = 0.;
+    if (std::isnan(derivs(i))) derivs(i) = 0.;
   }
 }
 
