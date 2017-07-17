@@ -406,6 +406,32 @@ drake_cc_library(
     ],
 )
 
+drake_cc_library(
+    name = "automotive_simulator_setup",
+    srcs = ["automotive_simulator_setup.cc"],
+    hdrs = ["automotive_simulator_setup.h"],
+    deps = [
+        ":automotive_simulator",
+        ":create_trajectory_params",
+        ":generated_vectors",
+        ":simple_car",
+        "//drake/automotive/maliput/api",
+        "//drake/automotive/maliput/dragway",
+        "//drake/common:autodiff",
+    ],
+)
+
+drake_cc_library(
+    name = "autodiff_utils",
+    srcs = ["autodiff_utils.cc"],
+    hdrs = ["autodiff_utils.h"],
+    deps = [
+        ":generated_vectors",
+        "//drake/common:autodiff",
+        "//drake/math:autodiff",
+    ],
+)
+
 drake_cc_binary(
     name = "automotive_demo",
     srcs = [
@@ -448,14 +474,10 @@ drake_cc_googletest(
     name = "loss_function",
     srcs = ["loss_function.cc"],
     deps = [
-        "//drake/automotive:automotive_simulator",
-        "//drake/automotive:create_trajectory_params",
-        "//drake/automotive:simple_car",
-        "//drake/automotive/maliput/api",
-        "//drake/automotive/maliput/dragway",
+        ":autodiff_utils",
+        ":automotive_simulator_setup",
+        ":generated_vectors",
         "//drake/common:call_matlab",
-        "//drake/math:autodiff",
-        "//drake/systems/trajectory_optimization:direct_collocation",
         "@com_github_gflags_gflags//:gflags",
     ],
 )
@@ -531,6 +553,22 @@ filegroup(
 )
 
 # === test/ ===
+'''
+drake_cc_googletest(
+    name = "autodiff_utils_test",
+    deps = [
+        "//drake/automotive:autodiff_utils",
+    ],
+)
+'''
+drake_cc_googletest(
+    name = "automotive_simulator_setup_test",
+    deps = [
+        "//drake/automotive:automotive_simulator_setup",
+        "//drake/automotive:autodiff_utils",
+        "//drake/common:call_matlab",
+     ],
+)
 
 drake_cc_googletest(
     name = "automotive_simulator_test",
