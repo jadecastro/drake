@@ -357,7 +357,7 @@ GTEST_TEST(AutomotiveSimulatorTest, TestPriusTrajectoryCar) {
   }
 }
 
-GTEST_TEST(AutomotiveSimulatorTest, TestIdmControlledTrajectoryCar) {
+GTEST_TEST(AutomotiveSimulatorTest, TestIdmControlledCar) {
   const std::string kJointStateChannelName = "0_FLOATING_JOINT_STATE";
 
   const std::string joint_state_name =
@@ -375,7 +375,10 @@ GTEST_TEST(AutomotiveSimulatorTest, TestIdmControlledTrajectoryCar) {
       road = simulator->SetRoadGeometry(
           std::make_unique<const maliput::dragway::RoadGeometry>(
               maliput::api::RoadGeometryId({"TestDragway"}), 2 /* num lanes */,
-              100 /* length */, 4 /* lane width */, 1 /* shoulder width */)));
+              100 /* length */, 4 /* lane width */, 1 /* shoulder width */,
+              5 /* maximum_height */,
+              std::numeric_limits<double>::epsilon() /* linear_tolerance */,
+              std::numeric_limits<double>::epsilon() /* angular_tolerance */)));
 
   // ------------------------------------------------------------------
   // +---->  +s, +x     | TrajectoryCar |       |     Decoy     |
@@ -388,7 +391,7 @@ GTEST_TEST(AutomotiveSimulatorTest, TestIdmControlledTrajectoryCar) {
       *dragway_road, 0 /* lane index */, start_speed, start_position);
 
   const int id_idm_trajectory_car =
-      simulator->AddIdmControlledPriusTrajectoryCar(
+      simulator->AddIdmControlledCar(
           "idm_trajectory_car", std::get<0>(params), start_speed,
           start_position);
   EXPECT_EQ(id_idm_trajectory_car, 0);

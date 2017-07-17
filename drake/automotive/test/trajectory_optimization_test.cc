@@ -169,10 +169,10 @@ GTEST_TEST(TrajectoryOptimizationTest, AutomotiveSimulatorIdmTest) {
   const auto& params_follower = CreateTrajectoryParamsForDragway(
       *dragway_road_geometry, lane_index, start_speed_follower,
       start_position_follower);
-  simulator->AddIdmControlledPriusTrajectoryCar("following_trajectory_car",
-                                                std::get<0>(params_follower),
-                                                start_speed_follower,
-                                                start_position_follower);
+  simulator->AddIdmControlledCar("following_trajectory_car",
+                                 std::get<0>(params_follower),
+                                 start_speed_follower,
+                                 start_position_follower);
   const auto& params_leader = CreateTrajectoryParamsForDragway(
       *dragway_road_geometry, lane_index, speed_leader,
       start_position_leader);
