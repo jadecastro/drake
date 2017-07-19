@@ -371,6 +371,7 @@ drake_cc_library(
         ":curve2",
         ":generated_vectors",
         "//drake/common:autodiff",
+        "//drake/common:extract_double",
         "//drake/systems/rendering:frame_velocity",
         "//drake/systems/rendering:pose_vector",
     ],
