@@ -9,6 +9,7 @@
 #include "drake/automotive/maliput/dragway/segment.h"
 #include "drake/common/cond.h"
 #include "drake/common/drake_assert.h"
+#include "drake/math/autodiff.h"
 #include "drake/math/saturate.h"
 
 using std::make_unique;
@@ -17,20 +18,7 @@ namespace drake {
 namespace maliput {
 namespace dragway {
 
-// Pad the partial derivatives of an AutoDiffXd variable `x` with a zero vector
-// of the same dimension as `model_value`.  The `result` has the same value as
-// `x`.
-static AutoDiffXd PadZeroPartials(const AutoDiffXd& x,
-                                  const AutoDiffXd& model_value) {
-  DRAKE_DEMAND(x.derivatives().size() == 0);
-  AutoDiffXd result(x);
-  result.derivatives().resize(model_value.derivatives().size());
-  result.derivatives().setZero();
-  return result;
-}
-
-// No-op overload of SetZeroPartials when the arguments are of type double.
-static double PadZeroPartials(const double& x, const double&) { return x; }
+using math::PadZeroPartials;
 
 Lane::Lane(const Segment* segment, const api::LaneId& id,  int index,
     double length, double y_offset, const api::RBounds& lane_bounds,

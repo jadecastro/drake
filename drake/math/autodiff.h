@@ -9,6 +9,7 @@
 #include <Eigen/Dense>
 #include <unsupported/Eigen/AutoDiff>
 
+#include "drake/common/eigen_autodiff_types.h"
 #include "drake/common/unused.h"
 
 namespace drake {
@@ -271,6 +272,21 @@ initializeAutoDiffTuple(const Eigen::MatrixBase<Deriveds>&... args) {
       values, ret, dynamic_num_derivs, 0);
   return ret;
 }
+
+// TODO(jadecastro) Unit test.
+
+// Pad the partial derivatives of an AutoDiffXd variable `x` with a zero vector
+// of the same dimension as `model_value`, stripping the derivatives there
+// already.  The `result` has the same value as `x`.
+AutoDiffXd PadZeroPartials(const AutoDiffXd& x, const AutoDiffXd& model_value) {
+  AutoDiffXd result(x);
+  result.derivatives().resize(model_value.derivatives().size());
+  result.derivatives().setZero();
+  return result;
+}
+
+// No-op overload of SetZeroPartials when the arguments are of type double.
+double PadZeroPartials(const double& x, const double&) { return x; }
 
 }  // namespace math
 }  // namespace drake

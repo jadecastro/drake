@@ -26,6 +26,7 @@ drake_cc_library(
         "//drake/automotive/maliput/api",
         "//drake/common",
         "//drake/common:unused",
+        "//drake/math:autodiff",
         "//drake/math:saturate",
     ],
 )
