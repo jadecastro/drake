@@ -1,9 +1,11 @@
 #include <cmath>
+#include <fstream>
 #include <limits>
 #include <sstream>
 #include <string>
 
 #include <gflags/gflags.h>
+#include "spruce.hh"
 
 #include "drake/automotive/automotive_simulator.h"
 #include "drake/automotive/create_trajectory_params.h"
@@ -84,6 +86,10 @@ DEFINE_bool(onramp_swap_start, false, "Whether to swap the starting lanes of "
 DEFINE_bool(with_stalled_cars, false, "Places a stalled vehicle at the end of "
             "each lane of a dragway. This option is only enabled when the "
             "road is a dragway.");
+
+DEFINE_int32(car_number, 1, "");
+DEFINE_double(maliput_start_s_offset, 1., "");
+DEFINE_double(maliput_start_speed_offset, 1., "");
 
 namespace drake {
 
@@ -377,8 +383,49 @@ RoadNetworkType DetermineRoadNetworkType() {
   }
 }
 
+bool parse_file_sim_data() {
+  std::string dir_string("/tmp/example.txt");
+  std::fstream file_sim_data(dir_string, std::ios_base::in);
+
+  // add check later if file could not be opened and return false
+  // need to add error checking code 
+
+  //std::vector<int> car_num;
+  //std::vector<double> pos_off;
+  //std::vector<double> vel_off; 
+
+  double info;
+
+  int i=0;
+  while (file_sim_data >> info)
+  {
+    // these flags are some that I have added
+    if(i==0) FLAGS_car_number = int(info);
+    else if(i==1) FLAGS_maliput_start_s_offset = info;
+    else FLAGS_maliput_start_speed_offset = info;
+
+    // for now I am just writing ONCE to these variables for testing
+    if(i == 2) break; //i=0;
+    else i++;
+  }
+  file_sim_data.close();
+
+  return true;
+}
+
 int main(int argc, char* argv[]) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
+
+  parse_file_sim_data();
+
+  // Observe that the values of the flags are the same as the data in
+  // example.txt.
+  std::cout << " FLAGS_car_number: " << FLAGS_car_number << std::endl;
+  std::cout << " FLAGS_maliput_start_s_offset: " << FLAGS_maliput_start_s_offset
+            << std::endl;
+  std::cout << " FLAGS_maliput_start_speed_offset: "
+            << FLAGS_maliput_start_speed_offset << std::endl;
+
   logging::HandleSpdlogGflags();
   const RoadNetworkType road_network_type = DetermineRoadNetworkType();
   auto simulator = std::make_unique<AutomotiveSimulator<double>>();
