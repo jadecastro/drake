@@ -9,6 +9,7 @@
 #include <Eigen/Dense>
 #include <unsupported/Eigen/AutoDiff>
 
+#include "drake/common/eigen_autodiff_types.h"
 #include "drake/common/unused.h"
 
 namespace drake {

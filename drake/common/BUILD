@@ -74,6 +74,7 @@ drake_cc_library(
     hdrs = [
         "autodiff_overloads.h",
         "eigen_autodiff_types.h",
+        "eigen_autodiff_utils.h",
     ],
     deps = [
         ":common",
@@ -86,6 +87,14 @@ drake_cc_library(
 drake_cc_library(
     name = "eigen_autodiff_limits",
     hdrs = ["eigen_autodiff_limits.h"],
+)
+
+drake_cc_library(
+    name = "eigen_autodiff_utils",
+    hdrs = ["eigen_autodiff_utils.h"],
+    deps = [
+        ":eigen_autodiff_types",
+    ]
 )
 
 drake_cc_library(

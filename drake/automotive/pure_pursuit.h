@@ -1,5 +1,7 @@
 #pragma once
 
+#include <utility>
+
 #include "drake/automotive/gen/pure_pursuit_params.h"
 #include "drake/automotive/gen/simple_car_params.h"
 #include "drake/automotive/lane_direction.h"
@@ -53,9 +55,13 @@ class PurePursuit {
                     const systems::rendering::PoseVector<T>& pose);
 
   /// Computes the goal point at a distance `s_lookahead` from the closest
-  /// position on the curve in the intended direction of travel, and `with_s`
-  /// and `pose` are the direction of travel and PoseVector for the ego vehicle.
-  static const maliput::api::GeoPosition ComputeGoalPoint(
+  /// position of `pose` to the lane centerline (`lane_direction.lane`) in the
+  /// intended direction of travel (`lane_direction.with_s`).  Specifically,
+  /// `s_lookahead` measures distance along the `s`-coordinate of
+  /// `lane_direction.lane`.
+  ///
+  /// @return A GeoPosition with the goal position in absolute coordinates.
+  static maliput::api::GeoPosition ComputeGoalPoint(
       const T& s_lookahead, const LaneDirection& lane_direction,
       const systems::rendering::PoseVector<T>& pose);
 };
