@@ -12,11 +12,13 @@ namespace sim_setup {
 template std::unique_ptr<AutomotiveSimulator<double>>
 SetupAutomotiveSimulator<double>(
     std::unique_ptr<const maliput::api::RoadGeometry> road_geometry,
-    int num_traffic_cars, int requested_lane_index, int num_dragway_lanes);
+    int num_dragway_lanes, int ego_desired_lane_index,
+    const std::vector<int> traffic_lane_indices);
 template std::unique_ptr<AutomotiveSimulator<AutoDiffXd>>
 SetupAutomotiveSimulator<AutoDiffXd>(
     std::unique_ptr<const maliput::api::RoadGeometry> road_geometry,
-    int num_traffic_cars, int requested_lane_index, int num_dragway_lanes);
+    int num_dragway_lanes, int ego_desired_lane_index,
+    const std::vector<int> traffic_lane_indices);
 
 template std::unique_ptr<systems::Simulator<double>> SetupSimulator<double>(
     const systems::System<double>& plant,
@@ -29,13 +31,15 @@ SetupSimulator<AutoDiffXd>(
     double simulator_time_step);
 
 template std::pair<SimpleCarState<double>*,
-                   std::vector<TrajectoryCarState<double>*>>
+                   std::vector<TrajectoryCarStruct<double>>>
     GetAutomotiveSubsystemStates<double>(const systems::System<double>& plant,
+                                         std::vector<int> traffic_lane_indices,
                                          systems::Context<double>* context);
 template std::pair<SimpleCarState<AutoDiffXd>*,
-                   std::vector<TrajectoryCarState<AutoDiffXd>*>>
+                   std::vector<TrajectoryCarStruct<AutoDiffXd>>>
     GetAutomotiveSubsystemStates<AutoDiffXd>(
         const systems::System<AutoDiffXd>& plant,
+        std::vector<int> traffic_lane_indices,
         systems::Context<AutoDiffXd>* context);
 }  // namespace sim_setup
 }  // namespace automotive

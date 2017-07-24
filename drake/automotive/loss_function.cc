@@ -15,12 +15,14 @@ namespace drake {
 namespace automotive {
 namespace {
 
-static constexpr int kNumDragwayLanes = 2;
+static constexpr int kNumDragwayLanes = 3;
 static constexpr double kLaneWidth = 2.;
 static constexpr double kDragwayLength = 150.;
 
 static AutoDiffXd EvalInstantaneousLossFunction(
-    systems::Simulator<AutoDiffXd>& simulator) {
+    systems::Simulator<AutoDiffXd>& simulator,
+    const maliput::api::RoadGeometry& road,
+    std::vector<int> traffic_lane_indices) {
   using std::max;
   using std::pow;
 
@@ -28,22 +30,33 @@ static AutoDiffXd EvalInstantaneousLossFunction(
   auto context = simulator.get_mutable_context();
 
   SimpleCarState<AutoDiffXd>* ego_state = nullptr;
-  std::vector<TrajectoryCarState<AutoDiffXd>*> traffic_states{};
-  std::tie(ego_state, traffic_states) =
-      sim_setup::GetAutomotiveSubsystemStates(plant, context);
+  std::vector<TrajectoryCarStruct<AutoDiffXd>> traffic_structs{};
+  std::tie(ego_state, traffic_structs) =
+      sim_setup::GetAutomotiveSubsystemStates(plant, traffic_lane_indices,
+                                              context);
 
-  // TODO(jadecastro): Figure out some systematic way of referencing the cars.
   AutoDiffXd x_ego = ego_state->x();
   AutoDiffXd y_ego = ego_state->y();
+  std::cout << "  " << std::endl;
+  std::cout << " x_ego " << x_ego << std::endl;
+  std::cout << " y_ego " << y_ego << std::endl;
 
   // The loss is the inverse sums of squares distance between the cars.
   AutoDiffXd result{-std::numeric_limits<AutoDiffXd>::infinity()};
-  for (auto& traffic_state : traffic_states) {
-    AutoDiffXd x_traffic = traffic_state->position();
-    AutoDiffXd y_traffic{kLaneWidth / 2.};  // <--- bring actual value in via
-                                            // system getter.
-    autodiff::SetZeroPartials(y_ego, &y_traffic);  // Use any state as the model
-                                                   // vector
+  const maliput::api::Segment* segment = road.junction(0)->segment(0);
+  int i{0};
+  for (auto& traffic_struct : traffic_structs) {
+    AutoDiffXd x_traffic = traffic_struct.states->position();
+    const maliput::api::Lane* lane = segment->lane(traffic_lane_indices[
+        traffic_lane_indices.size() - 1 - i++]);
+    AutoDiffXd y_traffic =
+        lane->ToGeoPosition({0., 0., 0.}).y();
+    autodiff::SetZeroPartials(y_ego, &y_traffic);  // Use any state variable as
+                                                   // the model vector
+
+    std::cout << " x_traffic " << x_traffic << std::endl;
+    std::cout << " y_traffic " << y_traffic << std::endl;
+
     const AutoDiffXd car_loss =
         1. / (pow(x_ego - x_traffic, 2.) + pow(y_ego - y_traffic, 2.));
     result = max(result, car_loss);
@@ -53,7 +66,9 @@ static AutoDiffXd EvalInstantaneousLossFunction(
 
 static AutoDiffXd EvalLossFunction(
     std::unique_ptr<systems::Simulator<AutoDiffXd>> simulator,
-    const AutoDiffXd& time_step, const AutoDiffXd& time_horizon) {
+    const maliput::api::RoadGeometry& road,
+    std::vector<int> traffic_lane_indices, const AutoDiffXd& time_step,
+    const AutoDiffXd& time_horizon) {
   using std::max;
 
   AutoDiffXd t = simulator->get_context().get_time();
@@ -63,7 +78,8 @@ static AutoDiffXd EvalLossFunction(
     t = simulator->get_context().get_time();
 
     // Evaluate the loss function at this time step.
-    const AutoDiffXd running_loss = EvalInstantaneousLossFunction(*simulator);
+    const AutoDiffXd running_loss =
+        EvalInstantaneousLossFunction(*simulator, road, traffic_lane_indices);
     // Take the max loss encountered over all time instants.
     result = max(result, running_loss);
 
@@ -82,31 +98,38 @@ int DoMain(void) {
           5. /* maximum height above road */,
           std::numeric_limits<double>::epsilon() /* linear tolerance */,
           std::numeric_limits<double>::epsilon() /* angular tolerance */);
-  const int num_traffic_cars{kNumDragwayLanes};
 
   // Build an AutomotiveSimulator containing traffic cars and an ego car.
+  const int ego_initial_lane_index = 0;
+  const int ego_desired_lane_index = 1;
+  const std::vector<int> traffic_lane_indices{0, 1};
+
   auto automotive_simulator = sim_setup::SetupAutomotiveSimulator<double>(
-      std::move(road_geometry), num_traffic_cars, 1 /* requested lane index */,
-      kNumDragwayLanes);
+      std::move(road_geometry), kNumDragwayLanes, ego_desired_lane_index,
+      traffic_lane_indices);
   const auto plant = automotive_simulator->GetDiagram().ToAutoDiffXd();
   auto context = plant->CreateDefaultContext();
 
   // Retrieve a vector of states corresponding to each car subsystem.
   SimpleCarState<AutoDiffXd>* ego_state = nullptr;
-  std::vector<TrajectoryCarState<AutoDiffXd>*> traffic_states{};
-  std::tie(ego_state, traffic_states) =
-      sim_setup::GetAutomotiveSubsystemStates(*plant, context.get());
-  DRAKE_DEMAND(traffic_states.size() == num_traffic_cars);
+  std::vector<TrajectoryCarStruct<AutoDiffXd>> traffic_structs{};
+  std::tie(ego_state, traffic_structs) =
+      sim_setup::GetAutomotiveSubsystemStates(*plant, traffic_lane_indices,
+                                              context.get());
+  DRAKE_DEMAND(traffic_structs.size() == traffic_lane_indices.size());
 
   // Set all of the initial states by name.
+  const double desired_lane_y_value =
+      -kLaneWidth / 2. * (kNumDragwayLanes - 1) +
+      ego_initial_lane_index * kLaneWidth;
   ego_state->set_x(50.);
-  ego_state->set_y(kLaneWidth / 2.);
+  ego_state->set_y(desired_lane_y_value);
   ego_state->set_heading(0.);
   ego_state->set_velocity(5.);
-  traffic_states[0]->set_position(60.);
-  traffic_states[0]->set_speed(5.);
-  traffic_states[1]->set_position(5.);
-  traffic_states[1]->set_speed(5.);
+  traffic_structs[0].states->set_position(60.);
+  traffic_structs[0].states->set_speed(5.);
+  traffic_structs[1].states->set_position(5.);
+  traffic_structs[1].states->set_speed(5.);
 
   autodiff::InitializeAutoDiffContext(context.get());
 
@@ -118,7 +141,9 @@ int DoMain(void) {
   // Simulate forward up to the specified horizon, and evaluate the loss
   // function at the desired time steps along the way.
   AutoDiffXd loss =
-      EvalLossFunction(std::move(simulator), 0.1 /* evaluation time step */,
+      EvalLossFunction(std::move(simulator),
+                       *automotive_simulator->GetRoadGeometry(),
+                       traffic_lane_indices, 0.1 /* evaluation time step */,
                        5. /* time horizon */);
   // Report the returned loss value and its partial derivatives.
   std::cout << "\n Loss: " << loss << std::endl;
