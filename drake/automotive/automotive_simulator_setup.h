@@ -42,7 +42,7 @@ std::unique_ptr<AutomotiveSimulator<T>> SetupAutomotiveSimulator(
   // TODO(jadecastro): Replace with MobilControlledSimpleCar once trajectory
   // optimization can be formulated as a MI problem.
   const auto segment = dragway_road_geometry->junction(0)->segment(0);
-  DRAKE_DEMAND(ego_desired_lane_index > 0 &&
+  DRAKE_DEMAND(ego_desired_lane_index >= 0 &&
                ego_desired_lane_index < segment->num_lanes());
   const maliput::api::Lane* ego_desired_lane =
       segment->lane(ego_desired_lane_index);

@@ -71,12 +71,16 @@ const std::pair<T, T> PurePursuit<T>::ComputeGoalPoint(
   const bool with_s = lane_direction.with_s;
   const LanePositionWithAutoDiff<T> position =
       PoseSelector<T>::CalcLanePosition(lane, pose.get_isometry());
+
   const T s_new =
       cond(with_s, position.s() + T(s_lookahead),
            position.s() - T(s_lookahead));
   const T s_goal = math::saturate(s_new, T(0.), T(lane->length()));
   // TODO(jadecastro): Add support for locating goal points in ongoing lanes.
-  return std::make_pair(s_goal, T(0.));
+  const GeoPosition geo_position = lane->ToGeoPosition({
+      ExtractDoubleOrThrow(position.s()), 0.,
+      ExtractDoubleOrThrow(position.h())});
+  return std::make_pair(s_goal, T(geo_position.y()));
 }
 
 // These instantiations must match the API documentation in pure_pursuit.h.

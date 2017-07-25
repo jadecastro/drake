@@ -9,6 +9,11 @@
 #include "drake/common/drake_assert.h"
 #include "drake/math/saturate.h"
 
+
+
+#include <iostream>
+
+
 using std::make_unique;
 
 namespace drake {
@@ -130,7 +135,6 @@ api::LanePositionWithAutoDiff<AutoDiffXd> Lane::DoToLanePositionWithAutoDiff(
     const api::GeoPositionWithAutoDiff<AutoDiffXd>& geo_pos,
     api::GeoPositionWithAutoDiff<AutoDiffXd>* nearest_point,
     AutoDiffXd* distance) const {
-
   const AutoDiffXd min_x{0.};
   const AutoDiffXd max_x{length_};
   const AutoDiffXd min_y{driveable_bounds_.r_min + y_offset_};

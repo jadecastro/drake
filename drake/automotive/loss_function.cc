@@ -15,7 +15,6 @@ namespace drake {
 namespace automotive {
 namespace {
 
-static constexpr int kNumDragwayLanes = 3;
 static constexpr double kLaneWidth = 2.;
 static constexpr double kDragwayLength = 150.;
 
@@ -37,9 +36,6 @@ static AutoDiffXd EvalInstantaneousLossFunction(
 
   AutoDiffXd x_ego = ego_state->x();
   AutoDiffXd y_ego = ego_state->y();
-  std::cout << "  " << std::endl;
-  std::cout << " x_ego " << x_ego << std::endl;
-  std::cout << " y_ego " << y_ego << std::endl;
 
   // The loss is the inverse sums of squares distance between the cars.
   AutoDiffXd result{-std::numeric_limits<AutoDiffXd>::infinity()};
@@ -53,12 +49,10 @@ static AutoDiffXd EvalInstantaneousLossFunction(
         lane->ToGeoPosition({0., 0., 0.}).y();
     autodiff::SetZeroPartials(y_ego, &y_traffic);  // Use any state variable as
                                                    // the model vector
-
-    std::cout << " x_traffic " << x_traffic << std::endl;
-    std::cout << " y_traffic " << y_traffic << std::endl;
-
+    // N.B. Coefficients chosen to get the greatest response along the x-axis.
     const AutoDiffXd car_loss =
-        1. / (pow(x_ego - x_traffic, 2.) + pow(y_ego - y_traffic, 2.));
+        1. / (0.05 * pow(x_ego - x_traffic, 2.) +
+              0.5 * pow(y_ego - y_traffic, 2.));
     result = max(result, car_loss);
   }
   return result;
@@ -90,22 +84,41 @@ static AutoDiffXd EvalLossFunction(
 }
 
 int DoMain(void) {
+  // ==================================
+  // Parameters and initial conditions.
+  const int num_dragway_lanes = 2;
+
+  // Ego car parameters and initial conditions.
+  const int ego_initial_lane_index = 0;
+  const int ego_desired_lane_index = 1;  // Remove this once we have MOBIL.
+  const double ego_x = 50.;
+  const double ego_heading = 0.;
+  const double ego_velocity = 5.;
+
+  // Traffic car initial conditions.
+  const std::vector<int> traffic_lane_indices{0, 1};  // N.B. vector's size
+                                                      // determines the number
+                                                      // of traffic cars.
+  std::vector<double> traffic_pos(traffic_lane_indices.size());
+  std::vector<double> traffic_speed(traffic_lane_indices.size());
+  traffic_pos[0] = 60.;
+  traffic_speed[0] = 5.;
+  traffic_pos[1] = 5.;
+  traffic_speed[1] = 5.;
+  // ==================================
+
   // Build the scenario.
   std::unique_ptr<const maliput::api::RoadGeometry> road_geometry =
       std::make_unique<const maliput::dragway::RoadGeometry>(
-          maliput::api::RoadGeometryId({"dragway"}), kNumDragwayLanes,
+          maliput::api::RoadGeometryId({"dragway"}), num_dragway_lanes,
           kDragwayLength, kLaneWidth, 0. /* shoulder width */,
           5. /* maximum height above road */,
           std::numeric_limits<double>::epsilon() /* linear tolerance */,
           std::numeric_limits<double>::epsilon() /* angular tolerance */);
 
   // Build an AutomotiveSimulator containing traffic cars and an ego car.
-  const int ego_initial_lane_index = 0;
-  const int ego_desired_lane_index = 1;
-  const std::vector<int> traffic_lane_indices{0, 1};
-
   auto automotive_simulator = sim_setup::SetupAutomotiveSimulator<double>(
-      std::move(road_geometry), kNumDragwayLanes, ego_desired_lane_index,
+      std::move(road_geometry), num_dragway_lanes, ego_desired_lane_index,
       traffic_lane_indices);
   const auto plant = automotive_simulator->GetDiagram().ToAutoDiffXd();
   auto context = plant->CreateDefaultContext();
@@ -119,18 +132,19 @@ int DoMain(void) {
   DRAKE_DEMAND(traffic_structs.size() == traffic_lane_indices.size());
 
   // Set all of the initial states by name.
-  const double desired_lane_y_value =
-      -kLaneWidth / 2. * (kNumDragwayLanes - 1) +
+  const double initial_lane_y_value =
+      -kLaneWidth / 2. * (num_dragway_lanes - 1) +
       ego_initial_lane_index * kLaneWidth;
-  ego_state->set_x(50.);
-  ego_state->set_y(desired_lane_y_value);
-  ego_state->set_heading(0.);
-  ego_state->set_velocity(5.);
-  traffic_structs[0].states->set_position(60.);
-  traffic_structs[0].states->set_speed(5.);
-  traffic_structs[1].states->set_position(5.);
-  traffic_structs[1].states->set_speed(5.);
+  ego_state->set_x(ego_x);
+  ego_state->set_y(initial_lane_y_value);
+  ego_state->set_heading(ego_heading);
+  ego_state->set_velocity(ego_velocity);
+  for (int i{0}; i < (int)traffic_structs.size(); ++i) {
+    traffic_structs[i].states->set_position(traffic_pos[i]);
+    traffic_structs[i].states->set_speed(traffic_speed[i]);
+  }
 
+  // Declare the partial derivatives for all of the context members.
   autodiff::InitializeAutoDiffContext(context.get());
 
   // Initialize the Drake Simulator.
@@ -144,7 +158,7 @@ int DoMain(void) {
       EvalLossFunction(std::move(simulator),
                        *automotive_simulator->GetRoadGeometry(),
                        traffic_lane_indices, 0.1 /* evaluation time step */,
-                       5. /* time horizon */);
+                       10. /* time horizon */);
   // Report the returned loss value and its partial derivatives.
   std::cout << "\n Loss: " << loss << std::endl;
   std::cout << " Loss partials:\n" << loss.derivatives() << std::endl;
