@@ -776,6 +776,13 @@ class System {
   /// of the type name may produce differing results across platforms and
   /// because the address can vary from run to run.
   std::string GetMemoryObjectName() const {
+#define GCC_VERSION (__GNUC__ * 10000           \
+                     + __GNUC_MINOR__ * 100     \
+                     + __GNUC_PATCHLEVEL__)
+#if GCC_VERSION < 40900 && !defined __clang__
+    return "@" + std::to_string(GetGraphvizId());
+#endif
+#undef GCC_VERSION
     return SystemImpl::GetMemoryObjectName(NiceTypeName::Get(*this),
                                            GetGraphvizId());
   }
