@@ -38,6 +38,12 @@ class TrajectorySource : public SingleOutputVectorSource<T> {
                             int output_derivative_order = 0,
                             bool zero_derivatives_beyond_limits = true);
 
+  /// @param trajectory Trajectory used by the system.
+  /// @param model_vector A model vector prescribing the type on the BasicVector
+  /// output.
+  TrajectorySource(const Trajectory& trajectory,
+                   const systems::BasicVector<T>& model_vector);
+
   ~TrajectorySource() override = default;
 
  protected:

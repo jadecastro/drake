@@ -28,6 +28,17 @@ TrajectorySource<T>::TrajectorySource(const Trajectory& trajectory,
 }
 
 template <typename T>
+TrajectorySource<T>::TrajectorySource(
+    const Trajectory& trajectory, const systems::BasicVector<T>& model_vector)
+    : SingleOutputVectorSource<T>(model_vector),
+    // Make a copy of the input trajectory.
+    trajectory_(trajectory.Clone()),
+    clamp_derivatives_(false) {
+  // TODO(jadecastro): DRAKE_DEMAND the trajectory matches model_vector's
+  // dimension.
+}
+
+template <typename T>
 void TrajectorySource<T>::DoCalcVectorOutput(
     const Context<T>& context, Eigen::VectorBlock<VectorX<T>>* output) const {
   int len = trajectory_->rows();
