@@ -287,7 +287,6 @@ drake_cc_library(
     name = "road_path",
     srcs = ["road_path.cc"],
     hdrs = ["road_path.h"],
-    visibility = [],
     deps = [
         ":lane_direction",
         ":monolane_onramp_merge",
