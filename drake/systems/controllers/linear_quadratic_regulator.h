@@ -13,6 +13,11 @@ struct LinearQuadraticRegulatorResult {
   Eigen::MatrixXd K;
 };
 
+struct TimeVaryingLqrResult {
+  PiecewisePolynomialTrajectory S;
+  PiecewisePolynomialTrajectory K;
+};
+
 /// Computes the optimal feedback controller, u=-Kx
 ///
 ///   @f[ \dot{x} = Ax + Bu @f]
@@ -89,6 +94,46 @@ std::unique_ptr<AffineSystem<double>> LinearQuadraticRegulator(
     const System<double>& system, const Context<double>& context,
     const Eigen::Ref<const Eigen::MatrixXd>& Q,
     const Eigen::Ref<const Eigen::MatrixXd>& R,
+    const Eigen::Ref<const Eigen::MatrixXd>& N =
+        Eigen::Matrix<double, 0, 0>::Zero());
+
+///         
+TimeVaryingLqrResult TimeVaryingLinearQuadraticRegulator(
+    const PiecewisePolynomialTrajectory& A,
+    const PiecewisePolynomialTrajectory& B,
+    const PiecewisePolynomialTrajectory& Q,
+    const PiecewisePolynomialTrajectory& R,
+    const Eigen::Ref<const Eigen::MatrixXd>& Qterm =
+    Eigen::Matrix<double, 0, 0>::Zero(),  // <-- want this to simply be Q (if Q
+                                          // is constant)
+    const PiecewisePolynomialTrajectory& N =
+    PiecewisePolynomialTrajectory(PiecewisePolynomial<double>()));
+
+///         
+std::unique_ptr<systems::TimeVaryingStateFeedbackController<double>>
+TimeVaryingLinearQuadraticRegulator(
+    const System<double>& system,
+    const PiecewisePolynomialTrajectory& x0,
+    const PiecewisePolynomialTrajectory& u0,
+    const PiecewisePolynomialTrajectory& Q,
+    const PiecewisePolynomialTrajectory& R,
+    const Eigen::Ref<const Eigen::MatrixXd>& Qterm =
+    Eigen::Matrix<double, 0, 0>::Zero(),  // <-- want this to simply be Q (if Q
+                                          // is constant)
+    const PiecewisePolynomialTrajectory& N =
+    PiecewisePolynomialTrajectory(PiecewisePolynomial<double>()));
+
+///         
+std::unique_ptr<systems::TimeVaryingStateFeedbackController<double>>
+TimeVaryingLinearQuadraticRegulator(
+    const System<double>& system,
+    const PiecewisePolynomialTrajectory& x0,
+    const PiecewisePolynomialTrajectory& u0,
+    const Eigen::Ref<const Eigen::MatrixXd>& Q,
+    const Eigen::Ref<const Eigen::MatrixXd>& R,
+    const Eigen::Ref<const Eigen::MatrixXd>& Qterm =
+    Eigen::Matrix<double, 0, 0>::Zero(),  // <-- want this to simply be Q (if Q
+                                          // is constant)
     const Eigen::Ref<const Eigen::MatrixXd>& N =
         Eigen::Matrix<double, 0, 0>::Zero());
 
