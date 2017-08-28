@@ -104,7 +104,8 @@ TEST_F(LinearSystemTest, ConvertScalarType) {
   }));
 }
 
-// Test that linearizing an affine system returns the original A,B,C,D matrices.
+// Test that linearizing a continuous-time affine system returns the original
+// A,B,C,D matrices.
 GTEST_TEST(TestLinearize, FromAffine) {
   Eigen::Matrix3d A;
   Eigen::Matrix<double, 3, 1> B;
@@ -145,8 +146,8 @@ GTEST_TEST(TestLinearize, FromAffine) {
                               MatrixCompareType::absolute));
 }
 
-// Test that linearizing a discrete affine system returns the original A,B,C,D
-// matrices.
+// Test that linearizing a discrete-time affine system returns the original
+// A,B,C,D matrices and time period.
 GTEST_TEST(TestLinearize, FromDiscreteAffine) {
   Eigen::Matrix3d A;
   Eigen::Matrix<double, 3, 1> B;
@@ -189,6 +190,33 @@ GTEST_TEST(TestLinearize, FromDiscreteAffine) {
                               MatrixCompareType::absolute));
   EXPECT_TRUE(CompareMatrices(D, linearized_system->D(), tol,
                               MatrixCompareType::absolute));
+  EXPECT_EQ(time_period, linearized_system->time_period());
+}
+
+// A trivial system with discrete state that is not bound to a periodic update
+// cycle.
+class TestNonPeriodicSystem : public LeafSystem<double> {
+ public:
+  TestNonPeriodicSystem() {
+    this->DeclareDiscreteState(1);
+    PublishEvent<double> event(Event<double>::TriggerType::kPerStep);
+    this->DeclarePerStepEvent(event);
+  }
+
+  void DoCalcDiscreteVariableUpdates(
+      const Context<double>& context,
+      const std::vector<const DiscreteUpdateEvent<double>*>&,
+      DiscreteValues<double>* discrete_state) const override {
+    (*discrete_state)[0] = context.get_discrete_state(0)->GetAtIndex(0) + 1;
+  }
+};
+
+// Test that Linearize throws when called on a discrete but non-periodic system.
+GTEST_TEST(TestLinearize, ThrowsWithNonPeriodicDiscreteSystem) {
+  TestNonPeriodicSystem system;
+  auto context = system.CreateDefaultContext();
+
+  EXPECT_THROW(Linearize(system, *context), std::runtime_error);
 }
 
 // Test a few simple systems that are known to be controllable (or not).
