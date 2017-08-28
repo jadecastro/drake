@@ -183,6 +183,7 @@ GTEST_TEST(DiscreteAffineSystemTest, DiscreteTime) {
   AffineSystem<double> system(A, B, f0, C, D, y0, 1.0);
   auto context = system.CreateDefaultContext();
   EXPECT_TRUE(context->has_only_discrete_state());
+  auto system_output = system.AllocateOutput(*context);
 
   Eigen::Vector3d x0(26, 27, 28);
 
@@ -204,6 +205,11 @@ GTEST_TEST(DiscreteAffineSystemTest, DiscreteTime) {
   EXPECT_TRUE(CompareMatrices(system.C(t), C));
   EXPECT_TRUE(CompareMatrices(system.D(t), D));
   EXPECT_TRUE(CompareMatrices(system.y0(t), y0));
+
+  // Compare the calculated output against the expected output.
+  system.CalcOutput(*context, system_output.get());
+  EXPECT_TRUE(CompareMatrices(system_output->get_vector_data(0)->get_value(),
+                              C * x0 + D * u0 + y0));
 }
 
 // xdot = rotmat(t)*x, y = x;

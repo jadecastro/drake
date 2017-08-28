@@ -36,6 +36,9 @@ TimeVaryingAffineSystem<T>::TimeVaryingAffineSystem(int num_states,
     this->DeclareContinuousState(0);
     this->DeclareDiscreteState(num_states_);
     this->DeclarePeriodicDiscreteUpdate(time_period_, 0.0);
+
+    std::unique_ptr<CompositeEventCollection<T>> event_info =
+        this->AllocateCompositeEventCollection();
   }
   if (num_inputs_ > 0)
     this->DeclareInputPort(kVectorValued, num_inputs_);
@@ -71,9 +74,10 @@ void TimeVaryingAffineSystem<T>::CalcOutputY(
   if (num_states_ > 0) {
     const MatrixX<T> Ct = C(t);
     DRAKE_DEMAND(Ct.rows() == num_outputs_ && Ct.cols() == num_states_);
-    const auto& x = dynamic_cast<const BasicVector<T>&>(
-                        context.get_continuous_state_vector())
-                        .get_value();
+    const VectorX<T>& x = (this->time_period() == 0.)
+        ? dynamic_cast<const BasicVector<T>&>(
+            context.get_continuous_state_vector()).get_value()
+        : context.get_discrete_state()->get_vector()->get_value();
     y += Ct * x;
   }
 
@@ -230,9 +234,10 @@ AffineSystem<symbolic::Expression>* AffineSystem<T>::DoToSymbolic() const {
 template <typename T>
 void AffineSystem<T>::CalcOutputY(const Context<T>& context,
                                   BasicVector<T>* output_vector) const {
-  const auto& x =
-      dynamic_cast<const BasicVector<T>&>(context.get_continuous_state_vector())
-          .get_value();
+  const VectorX<T>& x = (this->time_period() == 0.)
+      ? dynamic_cast<const BasicVector<T>&>(
+          context.get_continuous_state_vector()).get_value()
+      : context.get_discrete_state()->get_vector()->get_value();
 
   auto y = output_vector->get_mutable_value();
   y = C_ * x + y0_;
