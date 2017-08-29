@@ -1,114 +1,141 @@
 #include "drake/systems/controllers/linear_model_predictive_controller.h"
 
-#include <memory>
-#include <utility>
+#include <string>
 
-#include "drake/common/eigen_types.h"
 #include "drake/systems/trajectory_optimization/direct_transcription.h"
 
 namespace drake {
 namespace systems {
 namespace controllers {
 
-using solvers::VectorXDecisionVariable;
-using trajectory_optimization::DirectTranscription;
-
 template <typename T>
 LinearModelPredictiveController<T>::LinearModelPredictiveController(
     std::unique_ptr<systems::System<double>> model,
-    std::unique_ptr<systems::Context<double>> base_context,
-    const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R, double time_period,
+    std::unique_ptr<systems::Context<double>> context,
+    const Eigen::MatrixXd& Q,
+    const Eigen::MatrixXd& R,
+    double sampling_time,
     double time_horizon)
     : state_input_index_(
-          this->DeclareVectorInputPort(BasicVector<T>(Q.cols())).get_index()),
-      control_output_index_(
-          this->DeclareVectorOutputPort(
-                  BasicVector<T>(R.cols()),
-                  &LinearModelPredictiveController<T>::CalcControl)
-              .get_index()),
-      model_(std::move(model)),
-      base_context_(std::move(base_context)),
-      num_states_(
-          model_->CreateDefaultContext()->get_discrete_state(0)->size()),
-      num_inputs_(model_->get_input_port(0).size()),
-      Q_(Q),
-      R_(R),
-      time_period_(time_period),
-      time_horizon_(time_horizon) {
-  DRAKE_DEMAND(time_period_ > 0.);
-  DRAKE_DEMAND(time_horizon_ > 0.);
+          this->DeclareInputPort(kVectorValued, Q.cols()).get_index()),
+      control_output_index_(this->DeclareVectorOutputPort(
+          BasicVector<T>(R.cols()),
+          &LinearModelPredictiveController<T>::CalcControl).get_index()),
+      model_(std::move(model)), context_(std::move(context)),
+      sampling_time_(sampling_time), time_horizon_(time_horizon) {
+  DRAKE_DEMAND(sampling_time > 0.);
+  DRAKE_DEMAND(time_horizon > 0.);
 
-  // Check that the model is SISO and has discrete states belonging to a single
-  // group.
-  const auto model_context = model_->CreateDefaultContext();
-  DRAKE_DEMAND(model_context->get_num_discrete_state_groups() == 1);
-  DRAKE_DEMAND(model_context->get_continuous_state()->size() == 0);
-  DRAKE_DEMAND(model_context->get_num_abstract_state_groups() == 0);
-  DRAKE_DEMAND(model_->get_num_input_ports() == 1);
-  DRAKE_DEMAND(model_->get_num_output_ports() == 1);
+  // Check that the model is SISO and has states that belong only to one
+  // discrete state group.
+  const auto context = model.CreateDefaultContext();
+  DRAKE_DEMAND(context.get_num_discrete_state_groups() == 1);
+  DRAKE_DEMAND(context.get_num_continuous_state() == 0);
+  DRAKE_DEMAND(context.get_num_abstract_state_groups() == 0);
+  DRAKE_DEMAND(system.get_num_input_ports() == 1);
+  DRAKE_DEMAND(system.get_num_output_ports() == 1);
 
   // Check that the provided  x0, u0, Q, R are consistent with the model.
-  DRAKE_DEMAND(num_states_ > 0 && num_inputs_ > 0);
-  DRAKE_DEMAND(Q.rows() == num_states_ && Q.cols() == num_states_);
-  DRAKE_DEMAND(R.rows() == num_inputs_ && R.cols() == num_inputs_);
+  const double n = context.get_discrete_state()->get_vector().size();
+  const double m = model.get_input_port().size();
+  DRAKE_DEMAND(n > 0 && m > 0);
+  DRAKE_DEMAND(Q.rows() == n && Q.cols() == n);
+  DRAKE_DEMAND(R.rows() == m && R.cols() == m);
 
-  // N.B. A Cholesky decomposition exists if and only if it is positive
-  // semidefinite, however it turns out that Eigen's algorithm for checking this
-  // is incomplete: it only succeeds on *strictly* positive definite
-  // matrices. We exploit the fact here to check for strict
-  // positive-definiteness of R.
-  Eigen::LLT<Eigen::MatrixXd> R_cholesky(R);
-  if (R_cholesky.info() != Eigen::Success) {
-    throw std::runtime_error("R must be positive definite");
+  this->DeclarePeriodicDiscreteUpdate(sampling_time_);
+
+  if (context_ != nullptr) {
+    // Attempt to linearize the system at that context.
+    linear_model_ = LinearSystem<double>::Linearize(*model, *context);
   }
+}
 
-  this->DeclarePeriodicDiscreteUpdate(time_period_);
+// TODO: Adopt a constructor hierarchy.
+template <typename T>
+LinearModelPredictiveController<T>::LinearModelPredictiveController(
+   const systems::System<double>& model,
+   const PiecewisePolynomialTrajectory& x0,
+   const PiecewisePolynomialTrajectory& u0,
+   const Eigen::MatrixXd& Q,
+   const Eigen::MatrixXd& R,
+   double sampling_time,
+   double time_horizon)
+    : state_input_index_(
+          this->DeclareInputPort(kVectorValued, x0.cols()).get_index()),
+      control_output_index_(this->DeclareVectorOutputPort(
+          BasicVector<T>(u0.cols()),
+          &LinearModelPredictiveController<T>::CalcControl).get_index()),
+  model_(std::move(model)), x0_(x0), u0_(u0), sampling_time_(sampling_time),
+  time_horizon_(time_horizon) {
+  DRAKE_DEMAND(sampling_time > 0.);
+  DRAKE_DEMAND(time_horizon > 0.);
 
-  if (base_context_ != nullptr) {
-    linear_model_ = Linearize(*model_, *base_context_);
-  }
+  // Check that the model is SISO and has states that belong only to one
+  // discrete state group.
+  const auto context = model.CreateDefaultContext();
+  DRAKE_DEMAND(context.get_num_discrete_state_groups() == 1);
+  DRAKE_DEMAND(context.get_num_continuous_state() == 0);
+  DRAKE_DEMAND(context.get_num_abstract_state_groups() == 0);
+  DRAKE_DEMAND(system.get_num_input_ports() == 1);
+  DRAKE_DEMAND(system.get_num_output_ports() == 1);
+
+  // Check that the provided  x0, u0, Q, R are consistent with the model.
+  const double n = context.get_discrete_state()->get_vector().size();
+  const double m = model.get_input_port().size();
+  DRAKE_DEMAND(n > 0 && m > 0);
+  DRAKE_DEMAND(x0.rows() == n && x0.cols() == n);
+  DRAKE_DEMAND(u0.rows() == 1 && u0.cols() == m);
+  DRAKE_DEMAND(Q.rows() == n && Q.cols() == n);
+  DRAKE_DEMAND(R.rows() == m && R.cols() == m);
+
+  this->DeclarePeriodicDiscreteUpdate(sampling_time_);
 }
 
 template <typename T>
 void LinearModelPredictiveController<T>::CalcControl(
     const Context<T>& context, BasicVector<T>* control) const {
-  const Eigen::VectorBlock<const VectorX<T>> current_state =
-      this->EvalEigenVectorInput(context, state_input_index_);
+  // Set up a DirectTranscription problem.
+  DirectTranscription prog(linear_model_.get(), context_, kNumSampleTimes);
 
-  const Eigen::VectorXd current_input =
-      SetupAndSolveQp(*base_context_, current_state);
+  // Apply the cost
+  //
+  if (context_ != nullptr) {
+    const Eigen::VectorBlock<const VectorX<T>> current_state =
+        this->EvalEigenVectorInput(context, input_index_state_);
+    
+    const VectorX<T> state_error = state - state_ref;
+    const VectorX<T> input_error = input - input_ref;
 
-  const VectorX<T> input_ref = model_->EvalEigenVectorInput(*base_context_, 0);
+    prog.AddRunningCost(state_error.transpose() * Q * state_error +
+                        input_error.transpose() * R * input_error);
+  } else {
+    const double t = context.get_time();
+    const Eigen::VectorBlock<const VectorX<T>> current_state =
+        this->EvalEigenVectorInput(context, 0);
+    if (x0_ != )
+      const Eigen::VectorBlock<const VectorX<T>> state_ref = x0_(t);
+    const Eigen::VectorBlock<const VectorX<T>> input_ref = u0_(t);
+    // TODO(jadecastro) Generalize access of arbitrary scheduler
+    // signal.
 
-  control->SetFromVector(current_input + input_ref);
+    // Create decision variables for an array of state profiles and input
+    // profiles.
 
-  // TODO(jadecastro) Implement the time-varying case.
-}
+    // Create trajectories that span between the current time and a fixed
+    // horizon or the end of the trajectory (whichever is smaller).
 
-template <typename T>
-VectorX<T> LinearModelPredictiveController<T>::SetupAndSolveQp(
-    const Context<T>& base_context, const VectorX<T>& current_state) const {
-  DRAKE_DEMAND(linear_model_ != nullptr);
+    const VectorX<T> state_error = state - state_ref;
+    const VectorX<T> input_error = input - input_ref;
 
-  const int kNumSampleTimes =
-      static_cast<int>(time_horizon_ / time_period_ + 0.5);
+    // Do AddCost() at each timestep.
+    prog.AddRunningCost(state_error.transpose() * Q * state_error +
+                        input_error.transpose() * R * input_error);
 
-  DirectTranscription prog(linear_model_.get(), *base_context_,
-                           kNumSampleTimes);
+  }
 
-  const auto state_error = prog.state();
-  const auto input_error = prog.input();
+  DRAKE_DEMAND(prog.Solve(), solvers::SolutionResult::kSolutionFound);
 
-  prog.AddRunningCost(state_error.transpose() * Q_ * state_error +
-                      input_error.transpose() * R_ * input_error);
-
-  const VectorX<T> state_ref =
-      base_context.get_discrete_state()->get_vector()->CopyToVector();
-  prog.AddLinearConstraint(prog.initial_state() == current_state - state_ref);
-
-  DRAKE_DEMAND(prog.Solve() == solvers::SolutionResult::kSolutionFound);
-
-  return prog.GetInputSamples().col(0);
+  control->SetFromVector(prog.ReconstructInputTrajectory()(0));
 }
 
 template class LinearModelPredictiveController<double>;
