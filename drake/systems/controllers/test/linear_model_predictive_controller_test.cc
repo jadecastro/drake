@@ -2,8 +2,15 @@
 
 #include <gtest/gtest.h>
 
-#include "drake/common/test_utilities/eigen_matrix_compare.h"
-#include "drake/math/discrete_algebraic_riccati_equation.h"
+#include "drake/common/eigen_matrix_compare.h"
+#include "drake/common/find_resource.h"
+#include "drake/examples/acrobot/acrobot_plant.h"
+#include "drake/examples/acrobot/gen/acrobot_state_vector.h"
+#include "drake/lcm/drake_lcm.h"
+#include "drake/multibody/joints/floating_base_types.h"
+#include "drake/multibody/parsers/urdf_parser.h"
+#include "drake/multibody/rigid_body_plant/drake_visualizer.h"
+#include "drake/multibody/rigid_body_tree.h"
 #include "drake/systems/analysis/simulator.h"
 #include "drake/systems/framework/diagram.h"
 #include "drake/systems/framework/diagram_builder.h"
@@ -14,254 +21,251 @@ namespace systems {
 namespace controllers {
 namespace {
 
-using math::DiscreteAlgebraicRiccatiEquation;
+using examples::acrobot::AcrobotPlant;
+using examples::acrobot::AcrobotStateVector;
 
-class TestMpcWithDoubleIntegrator : public ::testing::Test {
- protected:
-  void SetUp() override {
-    const double kTimeStep = 0.1;     // discrete time step.
-    const double kTimeHorizon = 10.;  // Time horizon.
+// TODO(jadecastro) This is errantly using the acrobot dev model. Move to an
+// executable within //drake/examples/acrobot/ and turn off visibility in that
+// BUILD file.
 
-    // A discrete approximation of a double integrator.
-    Eigen::Matrix2d A;
-    Eigen::Vector2d B;
-    A << 1, 0.1, 0, 1;
-    B << 0.005, 0.1;
-    const auto C = Eigen::Matrix<double, 2, 2>::Identity();
-    const auto D = Eigen::Matrix<double, 2, 1>::Zero();
+std::unique_ptr<LinearModelPredictiveController<double>>
+AcrobotBalancingMpcController(std::unique_ptr<AcrobotPlant<double>> acrobot,
+                              double time_step, double time_horizon) {
+  auto context = acrobot->CreateDefaultContext();
 
-    std::unique_ptr<LinearSystem<double>> system =
-        std::make_unique<LinearSystem<double>>(A, B, C, D, kTimeStep);
+  // Set nominal torque to zero.
+  context->FixInputPort(0, Vector1d::Constant(0.0));
 
-    // Nominal, fixed reference condition.
-    const Eigen::Vector2d x0 = Eigen::Vector2d::Zero();
-    const Vector1d u0 = Vector1d::Zero();
+  // Set nominal state to the upright fixed point.
+  AcrobotStateVector<double>* x = dynamic_cast<AcrobotStateVector<double>*>(
+      context->get_mutable_discrete_state()->get_mutable_vector());
+  DRAKE_ASSERT(x != nullptr);
+  x->set_theta1(M_PI);
+  x->set_theta2(0.0);
+  x->set_theta1dot(0.0);
+  x->set_theta2dot(0.0);
 
-    std::unique_ptr<Context<double>> system_context =
-        system->CreateDefaultContext();
-    system_context->FixInputPort(0, u0);
-    system_context->get_mutable_discrete_state(0)->SetFromVector(x0);
+  // Setup quadratic cost matrices (penalize position error 10x more than
+  // velocity to roughly address difference in units, using sqrt(g/l) as the
+  // time constant.
+  Eigen::Matrix4d Q = Eigen::Matrix4d::Identity();
+  Q(0, 0) = 10.;
+  Q(1, 1) = 10.;
+  Vector1d R = Vector1d::Constant(1.);
 
-    dut_.reset(new LinearModelPredictiveController<double>(
-        std::move(system), std::move(system_context), Q_, R_, kTimeStep,
-        kTimeHorizon));
-
-    // Store another copy of the linear plant model.
-    system_.reset(new LinearSystem<double>(A, B, C, D, kTimeStep));
-  }
-
-  // Cost matrices.
-  const Eigen::Matrix2d Q_ = Eigen::Matrix2d::Identity();
-  const Vector1d R_ = Vector1d::Constant(1.);
-
-  std::unique_ptr<LinearModelPredictiveController<double>> dut_;
-  std::unique_ptr<LinearSystem<double>> system_;
-};
-
-TEST_F(TestMpcWithDoubleIntegrator, TestAgainstInfiniteHorizonSolution) {
-  const double kTolerance = 1e-5;
-
-  const Eigen::Matrix2d A = system_->A();
-  const Eigen::Matrix<double, 2, 1> B = system_->B();
-
-  // Analytical solution to the LQR problem.
-  const Eigen::Matrix2d S = DiscreteAlgebraicRiccatiEquation(A, B, Q_, R_);
-  const Eigen::Matrix<double, 1, 2> K =
-      -(R_ + B.transpose() * S * B).inverse() * (B.transpose() * S * A);
-
-  const Eigen::Matrix<double, 2, 1> x0 = Eigen::Vector2d::Ones();
-
-  auto context = dut_->CreateDefaultContext();
-  context->FixInputPort(0, BasicVector<double>::Make(x0(0), x0(1)));
-  std::unique_ptr<SystemOutput<double>> output = dut_->AllocateOutput(*context);
-
-  dut_->CalcOutput(*context, output.get());
-
-  EXPECT_TRUE(CompareMatrices(K * x0, output->get_vector_data(0)->get_value(),
-                              kTolerance));
+  return std::make_unique<LinearModelPredictiveController<double>>(
+      std::move(acrobot), std::move(context), Q, R, time_step, time_horizon);
 }
 
-namespace {
+std::unique_ptr<systems::Diagram<double>> MakeControlledSystem(
+    double time_step, double time_horizon) {
+  auto tree = std::make_unique<RigidBodyTree<double>>();
+  parsers::urdf::AddModelInstanceFromUrdfFileToWorld(
+      FindResourceOrThrow("drake/examples/acrobot/Acrobot.urdf"),
+      multibody::joints::kFixed, tree.get());
 
-// A discrete-time cubic polynomial system.
-template <typename T>
-class CubicPolynomialSystem final : public LeafSystem<T> {
- public:
-  explicit CubicPolynomialSystem(double time_step)
-      : LeafSystem<T>(
-            SystemTypeTag<systems::controllers::CubicPolynomialSystem>{}),
-        time_step_(time_step) {
-    this->DeclareInputPort(systems::kVectorValued, 1);
-    this->DeclareVectorOutputPort(BasicVector<T>(2),
-                                  &CubicPolynomialSystem::OutputState);
-    this->DeclareDiscreteState(2);
-    this->DeclarePeriodicDiscreteUpdate(time_step);
-  }
+  DiagramBuilder<double> builder;
+  auto acrobot = builder.AddSystem<AcrobotPlant>(time_step);  //NB. Try this in
+                                                              //CT.
+  acrobot->set_name("acrobot");
+  drake::lcm::DrakeLcm lcm;
+  auto publisher = builder.AddSystem<systems::DrakeVisualizer>(*tree, &lcm);
+  publisher->set_name("publisher");
+  builder.Connect(acrobot->get_output_port(0), publisher->get_input_port(0));
 
-  template <typename U>
-  CubicPolynomialSystem(const CubicPolynomialSystem<U>& other)
-      : CubicPolynomialSystem(other.time_step_) {}
+  auto controller =
+      builder.AddSystem(AcrobotBalancingMpcController(
+          std::make_unique<AcrobotPlant<double>>(time_step), time_step,
+          time_horizon));
+  controller->set_name("controller");
+  builder.Connect(acrobot->get_output_port(0), controller->get_state_port());
+  builder.Connect(controller->get_control_port(), acrobot->get_input_port(0));
 
- private:
-  template <typename> friend class CubicPolynomialSystem;
+  return builder.Build();
+}
 
-  // x1(k+1) = u(k)
-  // x2(k+1) = -x1³(k)
-  void DoCalcDiscreteVariableUpdates(
-      const Context<T>& context,
-      const std::vector<const DiscreteUpdateEvent<T>*>&,
-      DiscreteValues<T>* next_state) const final {
-    using std::pow;
-    const T& x1 = context.get_discrete_state(0)->get_value()[0];
-    const T& u = this->EvalVectorInput(context, 0)->get_value()[0];
-    next_state->get_mutable_vector(0)->SetAtIndex(0, u);
-    next_state->get_mutable_vector(0)->SetAtIndex(1, pow(x1, 3.));
-  }
-
-  void OutputState(const systems::Context<T>& context,
-                   BasicVector<T>* output) const {
-    output->set_value(context.get_discrete_state(0)->get_value());
-  }
-
-  // TODO(jadecastro) We know a discrete system of this format does not have
-  // direct feedthrough, even though sparsity reports the opposite.  This is a
-  // hack to patch in the correct result.
-  optional<bool> DoHasDirectFeedthrough(int, int) const override {
-    return false;
-  }
-
-  const double time_step_{0.};
-};
-
-template class CubicPolynomialSystem<double>;
-template class CubicPolynomialSystem<AutoDiffXd>;
-
-}  // namespace
-
-class TestMpcWithCubicSystem : public ::testing::Test {
- protected:
-  const System<double>& GetSystemByName(std::string name,
-                                        const Diagram<double>& diagram) {
-    const System<double>* result{nullptr};
-    for (const System<double>* system : diagram.GetSystems()) {
-      if (system->get_name() == name) result = system;
+// TODO(jadecastro): Incorporate into Diagram -- I find myself using this
+// frequently.
+const systems::System<double>& GetSystemByName(
+    std::string name, const Diagram<double>& diagram) {
+  const systems::System<double>* result{nullptr};
+  for (const systems::System<double>* system : diagram.GetSystems()) {
+    if (system->get_name() == name) {
+      DRAKE_THROW_UNLESS(!result);
+      result = system;
     }
-    return *result;
   }
-
-  void MakeTimeInvariantMpcController() {
-    EXPECT_NE(nullptr, system_);
-    auto context = system_->CreateDefaultContext();
-
-    // Set nominal input to zero.
-    context->FixInputPort(0, Vector1d::Constant(0.));
-
-    // Set the nominal state.
-    BasicVector<double>* x =
-        context->get_mutable_discrete_state()->get_mutable_vector();
-    x->SetFromVector(Eigen::Vector2d::Zero());  // Fixed point is zero.
-
-    dut_.reset(new LinearModelPredictiveController<double>(
-        std::move(system_), std::move(context), Q_, R_, time_step_,
-        time_horizon_));
-  }
-
-  void MakeControlledSystem(bool is_time_varying) {
-    EXPECT_FALSE(is_time_varying);  // TODO(jadecastro) Introduce tests for the
-                                    // time-varying case.
-    EXPECT_EQ(nullptr, diagram_);
-
-    system_.reset(new CubicPolynomialSystem<double>(time_step_));
-    EXPECT_FALSE(system_->HasAnyDirectFeedthrough());
-
-    DiagramBuilder<double> builder;
-    auto cubic_system = builder.AddSystem<CubicPolynomialSystem>(time_step_);
-    cubic_system->set_name("cubic_system");
-
-    MakeTimeInvariantMpcController();
-    EXPECT_NE(nullptr, dut_);
-    auto controller = builder.AddSystem(std::move(dut_));
-    controller->set_name("controller");
-
-    builder.Connect(cubic_system->get_output_port(0),
-                    controller->get_state_port());
-    builder.Connect(controller->get_control_port(),
-                    cubic_system->get_input_port(0));
-
-    diagram_ = builder.Build();
-  }
-
-  void Simulate() {
-    EXPECT_NE(nullptr, diagram_);
-    EXPECT_EQ(nullptr, simulator_);
-
-    simulator_.reset(new Simulator<double>(*diagram_));
-
-    const auto& cubic_system = GetSystemByName("cubic_system", *diagram_);
-    Context<double>& cubic_system_context =
-        diagram_->GetMutableSubsystemContext(cubic_system,
-                                             simulator_->get_mutable_context());
-    BasicVector<double>* x0 =
-        cubic_system_context.get_mutable_discrete_state()->get_mutable_vector();
-
-    // Set an initial condition near the fixed point.
-    x0->SetFromVector(10. * Eigen::Vector2d::Ones());
-
-    simulator_->set_target_realtime_rate(1.);
-    simulator_->Initialize();
-    simulator_->StepTo(time_horizon_);
-  }
-
-  const double time_step_ = 0.1;
-  const double time_horizon_ = 0.2;
-
-  // Set up the quadratic cost matrices.
-  const Eigen::Matrix2d Q_ = Eigen::Matrix2d::Identity();
-  const Vector1d R_ = Vector1d::Constant(1.);
-
-  std::unique_ptr<Simulator<double>> simulator_;
-
- private:
-  std::unique_ptr<LinearModelPredictiveController<double>> dut_;
-  std::unique_ptr<CubicPolynomialSystem<double>> system_;
-  std::unique_ptr<Diagram<double>> diagram_;
-};
-
-TEST_F(TestMpcWithCubicSystem, TimeInvariantMpc) {
-  const double kTolerance = 1e-10;
-  MakeControlledSystem(false /* is NOT time-varying */);
-  Simulate();
-
-  // Result should be deadbeat; expect convergence to within a tiny tolerance in
-  // one step.
-  Eigen::Vector2d result =
-      simulator_->get_mutable_context()->get_discrete_state(0)->get_value();
-  EXPECT_TRUE(CompareMatrices(result, Eigen::Vector2d::Zero(), kTolerance));
+  DRAKE_THROW_UNLESS(!result);
+  return *result;
 }
 
-GTEST_TEST(TestMpcConstructor, ThrowIfRNotStrictlyPositiveDefinite) {
-  const auto A = Eigen::Matrix<double, 2, 2>::Identity();
-  const auto B = Eigen::Matrix<double, 2, 2>::Identity();
-  const auto C = Eigen::Matrix<double, 2, 2>::Identity();
-  const auto D = Eigen::Matrix<double, 2, 2>::Zero();
+GTEST_TEST(TestMpc, TestAcrobotSimulation) {
+  const double kTimeStep = 0.1;
+  const double kTimeHorizon = 10.;
 
-  std::unique_ptr<LinearSystem<double>> system =
-      std::make_unique<LinearSystem<double>>(A, B, C, D, 1.);
+  auto diagram = MakeControlledSystem(kTimeStep, kTimeHorizon);
+  Simulator<double> simulator(*diagram);
+  const auto& acrobot = GetSystemByName("acrobot", *diagram);
+  Context<double>& acrobot_context = diagram->GetMutableSubsystemContext(
+      acrobot, simulator.get_mutable_context());
 
-  std::unique_ptr<Context<double>> context = system->CreateDefaultContext();
-  context->FixInputPort(0, BasicVector<double>::Make(0., 0.));
+  // Set an initial condition near the upright fixed point.
+  AcrobotStateVector<double>* x0 = dynamic_cast<AcrobotStateVector<double>*>(
+      acrobot_context.get_mutable_discrete_state()->get_mutable_vector());
+  DRAKE_DEMAND(x0 != nullptr);
+  x0->set_theta1(M_PI + 0.1);
+  x0->set_theta2(-.1);
+  x0->set_theta1dot(0.0);
+  x0->set_theta2dot(0.0);
 
-  const Eigen::Matrix2d Q = Eigen::Matrix2d::Identity();
-
-  // Provide a positive-definite matrix (but not strict).
-  Eigen::Matrix2d R = Eigen::Matrix2d::Identity();
-  R(0, 0) = 0.;
-
-  // Expect the constructor to throw since R is not strictly positive definite.
-  EXPECT_THROW(LinearModelPredictiveController<double>(
-      std::move(system), std::move(context), Q, R, 1., 1.),
-               std::runtime_error);
+  simulator.set_target_realtime_rate(1.);
+  simulator.Initialize();
+  simulator.StepTo(10.);
 }
+
+/*
+GTEST_TEST(TestMPC, TestException) {
+  Eigen::Matrix2d A = Eigen::Matrix2d::Zero();
+  Eigen::Vector2d B = Eigen::Vector2d::Zero();
+
+  Eigen::Matrix2d Q = Eigen::Matrix2d::Identity();
+  Eigen::Matrix<double, 1, 1> R = Eigen::MatrixXd::Identity(1, 1);
+
+  EXPECT_NO_THROW(LinearQuadraticRegulator(A, B, Q, R, N));
+  EXPECT_NO_THROW(LinearQuadraticRegulator(A, B, Q, R));
+
+  // R is not positive definite, should throw exception.
+  EXPECT_THROW(LinearQuadraticRegulator(
+        A, B, Q, Eigen::Matrix<double, 1, 1>::Zero()), std::runtime_error);
+  EXPECT_THROW(LinearQuadraticRegulator(
+        A, B, Q, Eigen::Matrix<double, 1, 1>::Zero(), N), std::runtime_error);
+}
+
+void TestLQRAgainstKnownSolution(
+    double tolerance,
+    const Eigen::Ref<const Eigen::MatrixXd>& K_known,
+    const Eigen::Ref<const Eigen::MatrixXd>& S_known,
+    const Eigen::Ref<const Eigen::MatrixXd>& A,
+    const Eigen::Ref<const Eigen::MatrixXd>& B,
+    const Eigen::Ref<const Eigen::MatrixXd>& Q,
+    const Eigen::Ref<const Eigen::MatrixXd>& R,
+    const Eigen::Ref<const Eigen::MatrixXd>& N =
+        Eigen::Matrix<double, 0, 0>::Zero()) {
+  LinearQuadraticRegulatorResult result =
+      LinearQuadraticRegulator(A, B, Q, R, N);
+  EXPECT_TRUE(CompareMatrices(K_known, result.K, tolerance,
+        MatrixCompareType::absolute));
+  EXPECT_TRUE(CompareMatrices(S_known, result.S, tolerance,
+        MatrixCompareType::absolute));
+}
+
+void TestLQRLinearSystemAgainstKnownSolution(
+    double tolerance,
+    const LinearSystem<double>& sys,
+    const Eigen::Ref<const Eigen::MatrixXd>& K_known,
+    const Eigen::Ref<const Eigen::MatrixXd>& Q,
+    const Eigen::Ref<const Eigen::MatrixXd>& R,
+    const Eigen::Ref<const Eigen::MatrixXd>& N =
+        Eigen::Matrix<double, 0, 0>::Zero()) {
+  std::unique_ptr<LinearSystem<double>> linear_lqr =
+      LinearQuadraticRegulator(sys, Q, R, N);
+
+  int n = sys.A().rows();
+  int m = sys.B().cols();
+  EXPECT_TRUE(CompareMatrices(linear_lqr->A(),
+                              Eigen::Matrix<double, 0, 0>::Zero(), tolerance,
+                              MatrixCompareType::absolute));
+  EXPECT_TRUE(CompareMatrices(linear_lqr->B(),
+                              Eigen::MatrixXd::Zero(0, n), tolerance,
+                              MatrixCompareType::absolute));
+  EXPECT_TRUE(CompareMatrices(linear_lqr->C(),
+                              Eigen::MatrixXd::Zero(m, 0), tolerance,
+                              MatrixCompareType::absolute));
+  EXPECT_TRUE(CompareMatrices(linear_lqr->D(), -K_known, tolerance,
+                              MatrixCompareType::absolute));
+}
+
+void TestLQRAffineSystemAgainstKnownSolution(
+    double tolerance,
+    const LinearSystem<double>& sys,
+    const Eigen::Ref<const Eigen::MatrixXd>& K_known,
+    const Eigen::Ref<const Eigen::MatrixXd>& Q,
+    const Eigen::Ref<const Eigen::MatrixXd>& R,
+    const Eigen::Ref<const Eigen::MatrixXd>& N =
+        Eigen::Matrix<double, 0, 0>::Zero()) {
+  int n = sys.A().rows();
+  int m = sys.B().cols();
+
+  auto context = sys.CreateDefaultContext();
+  Eigen::VectorXd x0 = Eigen::VectorXd::Zero(n);
+  Eigen::VectorXd u0 = Eigen::VectorXd::Zero(m);
+
+  context->FixInputPort(0, u0);
+  context->get_mutable_continuous_state()->SetFromVector(x0);
+  std::unique_ptr<AffineSystem<double>> lqr =
+      LinearQuadraticRegulator(sys, *context, Q, R, N);
+
+  EXPECT_TRUE(CompareMatrices(lqr->A(), Eigen::Matrix<double, 0, 0>::Zero(),
+                              tolerance, MatrixCompareType::absolute));
+  EXPECT_TRUE(CompareMatrices(lqr->B(), Eigen::MatrixXd::Zero(0, n),
+                              tolerance, MatrixCompareType::absolute));
+  EXPECT_TRUE(CompareMatrices(lqr->f0(), Eigen::Matrix<double, 0, 1>::Zero(),
+                              tolerance, MatrixCompareType::absolute));
+  EXPECT_TRUE(CompareMatrices(lqr->C(), Eigen::MatrixXd::Zero(m, 0),
+                              tolerance, MatrixCompareType::absolute));
+  EXPECT_TRUE(CompareMatrices(lqr->D(), -K_known,
+                              tolerance, MatrixCompareType::absolute));
+  EXPECT_TRUE(CompareMatrices(lqr->y0(), u0 + K_known * x0,
+                              tolerance, MatrixCompareType::absolute));
+}
+
+GTEST_TEST(TestMpc, DoubleIntegrator) {
+  // Double integrator dynamics: qddot = u, where q is the position coordinate.
+  Eigen::Matrix2d A;
+  Eigen::Vector2d B;
+  A << 0, 1, 0, 0;
+  B << 0, 1;
+  LinearSystem<double> sys(A, B, Eigen::Matrix<double, 0, 2>::Zero(),
+                           Eigen::Matrix<double, 0, 1>::Zero());
+
+  // Trivial cost:
+  Eigen::Matrix2d Q;
+  Eigen::Matrix<double, 1, 1> R;
+  Q << 1, 0, 0, 1;
+  R << 1;
+
+  // Analytical solution
+  Eigen::Matrix<double, 1, 2> K;
+  K << 1, std::sqrt(3);
+
+  Eigen::Matrix<double, 2, 2> S;
+  S << std::sqrt(3), 1, 1, std::sqrt(3);
+
+  double tol = 1e-10;
+
+  TestLQRAgainstKnownSolution(tol, K, S, A, B, Q, R);
+
+  // Test LinearSystem version of the LQR
+  TestLQRLinearSystemAgainstKnownSolution(tol, sys, K, Q, R);
+
+  // Call it as a generic System (by passing in a Context).
+  // Should get the same result, but as an affine system.
+  TestLQRAffineSystemAgainstKnownSolution(tol, sys, K, Q, R);
+
+  // A different cost function with the same Q and R, and an extra N = [1; 0].
+  Eigen::Vector2d N(1, 0);
+  // Known solution
+  K = Eigen::Vector2d(1, 1);
+  S = Eigen::Matrix2d::Identity();
+  TestLQRAgainstKnownSolution(tol, K, S, A, B, Q, R, N);
+
+  // Test LinearSystem version of the LQR
+  TestLQRLinearSystemAgainstKnownSolution(tol, sys, K, Q, R, N);
+
+  // Test AffineSystem version of the LQR
+  TestLQRAffineSystemAgainstKnownSolution(tol, sys, K, Q, R, N);
+}
+*/
 
 }  // namespace
 }  // namespace controllers
