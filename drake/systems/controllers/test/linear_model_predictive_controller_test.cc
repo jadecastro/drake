@@ -1,8 +1,9 @@
 #include "drake/systems/controllers/linear_model_predictive_controller.h"
 
+//#include <gflags/gflags.h>
 #include <gtest/gtest.h>
 
-#include "drake/common/eigen_matrix_compare.h"
+//#include "drake/common/eigen_matrix_compare.h"
 #include "drake/common/find_resource.h"
 #include "drake/examples/acrobot/acrobot_plant.h"
 #include "drake/examples/acrobot/gen/acrobot_state_vector.h"
@@ -24,9 +25,42 @@ namespace {
 using examples::acrobot::AcrobotPlant;
 using examples::acrobot::AcrobotStateVector;
 
-// TODO(jadecastro) This is errantly using the acrobot dev model. Move to an
-// executable within //drake/examples/acrobot/ and turn off visibility in that
-// BUILD file.
+GTEST_TEST(TestMpc, DiscreteDoubleIntegrator) {
+  // Double integrator dynamics: qddot = u, where q is the position coordinate.
+  const double T = 0.1;  // discrete time step.
+  Eigen::Matrix2d A;
+  Eigen::Vector2d B;
+  A << 1, 0.1, 0, 1;
+  B << 0.005, 0.1;
+  auto sys = std::make_unique<LinearSystem<double>>(
+      A, B, Eigen::Matrix<double, 2, 2>::Identity(),
+      Eigen::Matrix<double, 2, 1>::Zero(), T);
+
+  // Trivial cost:
+  Eigen::Matrix2d Q;
+  Eigen::Matrix<double, 1, 1> R;
+  Q << 1, 0, 0, 1;
+  R << 1;
+
+  int n = sys->A().rows();
+  int m = sys->B().cols();
+  Eigen::VectorXd x0 = Eigen::VectorXd::Zero(n);
+  Eigen::VectorXd u0 = Eigen::VectorXd::Zero(m);
+
+  auto context = sys->CreateDefaultContext();
+  context->FixInputPort(0, u0);
+  context->get_mutable_discrete_state(0)->SetFromVector(x0);
+
+  auto mpc = std::make_unique<LinearModelPredictiveController<double>>(
+      std::move(sys), std::move(context), Q, R, T, 10.);
+  //EXPECT_TRUE(CompareMatrices(K_known, result.K, tolerance,
+  //                            MatrixCompareType::absolute));
+
+}
+
+// TODO(jadecastro) This is errantly using the acrobot dev model. Move this code
+// into an executable within //drake/examples/acrobot/ and turn off global
+// visibility in that BUILD file.
 
 std::unique_ptr<LinearModelPredictiveController<double>>
 AcrobotBalancingMpcController(std::unique_ptr<AcrobotPlant<double>> acrobot,
@@ -71,7 +105,7 @@ std::unique_ptr<systems::Diagram<double>> MakeControlledSystem(
   drake::lcm::DrakeLcm lcm;
   auto publisher = builder.AddSystem<systems::DrakeVisualizer>(*tree, &lcm);
   publisher->set_name("publisher");
-  builder.Connect(acrobot->get_output_port(0), publisher->get_input_port(0));
+  //builder.Connect(acrobot->get_output_port(0), publisher->get_input_port(0));
 
   auto controller =
       builder.AddSystem(AcrobotBalancingMpcController(
@@ -95,10 +129,12 @@ const systems::System<double>& GetSystemByName(
       result = system;
     }
   }
-  DRAKE_THROW_UNLESS(!result);
+  DRAKE_THROW_UNLESS(result);
   return *result;
 }
 
+//int do_main(int argc, char* argv[]) {
+//  gflags::ParseCommandLineFlags(&argc, &argv, true);
 GTEST_TEST(TestMpc, TestAcrobotSimulation) {
   const double kTimeStep = 0.1;
   const double kTimeHorizon = 10.;
@@ -121,6 +157,7 @@ GTEST_TEST(TestMpc, TestAcrobotSimulation) {
   simulator.set_target_realtime_rate(1.);
   simulator.Initialize();
   simulator.StepTo(10.);
+  std::cout << " here " << std::endl;
 }
 
 /*
@@ -218,56 +255,13 @@ void TestLQRAffineSystemAgainstKnownSolution(
   EXPECT_TRUE(CompareMatrices(lqr->y0(), u0 + K_known * x0,
                               tolerance, MatrixCompareType::absolute));
 }
-
-GTEST_TEST(TestMpc, DoubleIntegrator) {
-  // Double integrator dynamics: qddot = u, where q is the position coordinate.
-  Eigen::Matrix2d A;
-  Eigen::Vector2d B;
-  A << 0, 1, 0, 0;
-  B << 0, 1;
-  LinearSystem<double> sys(A, B, Eigen::Matrix<double, 0, 2>::Zero(),
-                           Eigen::Matrix<double, 0, 1>::Zero());
-
-  // Trivial cost:
-  Eigen::Matrix2d Q;
-  Eigen::Matrix<double, 1, 1> R;
-  Q << 1, 0, 0, 1;
-  R << 1;
-
-  // Analytical solution
-  Eigen::Matrix<double, 1, 2> K;
-  K << 1, std::sqrt(3);
-
-  Eigen::Matrix<double, 2, 2> S;
-  S << std::sqrt(3), 1, 1, std::sqrt(3);
-
-  double tol = 1e-10;
-
-  TestLQRAgainstKnownSolution(tol, K, S, A, B, Q, R);
-
-  // Test LinearSystem version of the LQR
-  TestLQRLinearSystemAgainstKnownSolution(tol, sys, K, Q, R);
-
-  // Call it as a generic System (by passing in a Context).
-  // Should get the same result, but as an affine system.
-  TestLQRAffineSystemAgainstKnownSolution(tol, sys, K, Q, R);
-
-  // A different cost function with the same Q and R, and an extra N = [1; 0].
-  Eigen::Vector2d N(1, 0);
-  // Known solution
-  K = Eigen::Vector2d(1, 1);
-  S = Eigen::Matrix2d::Identity();
-  TestLQRAgainstKnownSolution(tol, K, S, A, B, Q, R, N);
-
-  // Test LinearSystem version of the LQR
-  TestLQRLinearSystemAgainstKnownSolution(tol, sys, K, Q, R, N);
-
-  // Test AffineSystem version of the LQR
-  TestLQRAffineSystemAgainstKnownSolution(tol, sys, K, Q, R, N);
-}
 */
 
 }  // namespace
 }  // namespace controllers
 }  // namespace systems
 }  // namespace drake
+
+//int main(int argc, char* argv[]) {
+//  return drake::systems::controllers::do_main(argc, argv);
+//}

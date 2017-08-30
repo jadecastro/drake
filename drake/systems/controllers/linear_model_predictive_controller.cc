@@ -54,7 +54,7 @@ LinearModelPredictiveController<T>::LinearModelPredictiveController(
 
   if (base_context_ != nullptr) {
     // Attempt to linearize the system at that context.
-    linear_model_ = Linearize(*model, *base_context_);
+    linear_model_ = Linearize(*model_, *base_context_);
   }
 }
 
