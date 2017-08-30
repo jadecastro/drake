@@ -1,7 +1,7 @@
 # -*- python -*-
 # This file contains rules for Bazel; see drake/doc/bazel.rst.
 
-load("//tools:drake.bzl", "drake_cc_googletest", "drake_cc_library")
+load("//tools:drake.bzl", "drake_cc_googletest", "drake_cc_library", "drake_cc_binary")
 load("//tools:lint.bzl", "add_lint_tests")
 
 package(default_visibility = ["//visibility:public"])
@@ -186,6 +186,48 @@ drake_cc_library(
     ],
 )
 
+'''
+drake_cc_binary(
+    name = "linear_model_predictive_controller_test",
+    srcs = [
+        "test/linear_model_predictive_controller_test.cc",
+    ],
+    data = ["//drake/examples/acrobot:models"],
+    deps = [
+        ":linear_model_predictive_controller",
+        "//drake/common:find_resource",
+        "//drake/examples/acrobot:acrobot_plant",
+        "//drake/examples/acrobot:acrobot_state_vector",
+        "//drake/lcm",
+        "//drake/multibody:rigid_body_tree",
+        "//drake/multibody/parsers",
+        "//drake/multibody/rigid_body_plant:drake_visualizer",
+        "//drake/systems/analysis:simulator",
+        "@com_github_gflags_gflags//:gflags",
+    ],
+)
+'''
+
+'''
+drake_cc_binary(
+    name = "acrobot_run_lqr",
+    srcs = ["//drake/examples/acrobot:acrobot_run_lqr.cc"],
+    add_test_rule = 1,
+    data = ["//drake/examples/acrobot:models"],
+    test_rule_args = ["-realtime_factor=0.0"],
+    deps = [
+        "//drake/examples/acrobot:acrobot_plant",
+        "//drake/common:find_resource",
+        "//drake/lcm",
+        "//drake/multibody:rigid_body_tree",
+        "//drake/multibody/parsers",
+        "//drake/multibody/rigid_body_plant:drake_visualizer",
+        "//drake/systems/analysis:simulator",
+        "@com_github_gflags_gflags//:gflags",
+    ],
+)
+'''
+
 # === test/ ===
 
 drake_cc_googletest(
@@ -214,6 +256,7 @@ drake_cc_googletest(
         "//drake/multibody/parsers",
     ],
 )
+
 
 drake_cc_googletest(
     name = "linear_model_predictive_controller_test",
