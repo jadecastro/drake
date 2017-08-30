@@ -216,6 +216,23 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
+    name = "linear_model_predictive_controller_test",
+    data = ["//drake/examples/acrobot:models"],
+    deps = [
+        ":linear_model_predictive_controller",
+        "//drake/common:eigen_matrix_compare",
+        "//drake/common:find_resource",
+        "//drake/examples/acrobot:acrobot_plant",
+        "//drake/examples/acrobot:acrobot_state_vector",
+        "//drake/lcm",
+        "//drake/multibody:rigid_body_tree",
+        "//drake/multibody/parsers",
+        "//drake/multibody/rigid_body_plant:drake_visualizer",
+        "//drake/systems/analysis:simulator",
+    ],
+)
+
+drake_cc_googletest(
     name = "linear_quadratic_regulator_test",
     deps = [
         ":linear_quadratic_regulator",
