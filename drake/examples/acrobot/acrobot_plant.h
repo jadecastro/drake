@@ -54,7 +54,8 @@ class AcrobotPlant : public systems::LeafSystem<T> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(AcrobotPlant)
 
-  AcrobotPlant(double m1 = 1.0,
+  AcrobotPlant(double time_period = 0.0,
+               double m1 = 1.0,
                double m2 = 1.0,
                double l1 = 1.0,
                double l2 = 2.0,
@@ -83,6 +84,7 @@ class AcrobotPlant : public systems::LeafSystem<T> {
   ///@}
 
   // getters for robot parameters
+  double time_period() const { return time_period_; }
   double m1() const { return m1_; }
   double m2() const { return m2_; }
   double l1() const { return l1_; }
@@ -106,6 +108,21 @@ class AcrobotPlant : public systems::LeafSystem<T> {
   void DoCalcTimeDerivatives(
       const systems::Context<T>& context,
       systems::ContinuousState<T>* derivatives) const override;
+
+  void DoCalcDiscreteVariableUpdates(
+      const systems::Context<T>& context,
+      const std::vector<const drake::systems::DiscreteUpdateEvent<T>*>&,
+      drake::systems::DiscreteValues<T>* updates) const override;
+
+  void ImplCalcTimeDerivatives(const AcrobotStateVector<T>& states,
+                               const T& input,
+                               AcrobotStateVector<T>* derivatives) const;
+
+  // Allocates discrete states of type AcrobotStateVector<T>.
+  std::unique_ptr<systems::DiscreteValues<T>> AllocateDiscreteState()
+  const override;
+
+  const double time_period_{0.};  // sampling time (0 if continuous).
 
   // TODO(russt): Declare these as parameters in the context.
   const double m1_, m2_, l1_, l2_, lc1_, lc2_, Ic1_, Ic2_, b1_, b2_, g_;

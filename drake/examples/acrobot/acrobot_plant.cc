@@ -22,11 +22,13 @@ constexpr int kNumDOF = 2;  // theta1 + theta2.
 }
 
 template <typename T>
-AcrobotPlant<T>::AcrobotPlant(double m1, double m2, double l1, double l2,
-                              double lc1, double lc2, double Ic1, double Ic2,
-                              double b1, double b2, double g)
+AcrobotPlant<T>::AcrobotPlant(double time_period, double m1, double m2,
+                              double l1, double l2, double lc1, double lc2,
+                              double Ic1, double Ic2, double b1, double b2,
+                              double g)
     : systems::LeafSystem<T>(
           systems::SystemTypeTag<acrobot::AcrobotPlant>{}),
+      time_period_(time_period),
       m1_(m1),
       m2_(m2),
       l1_(l1),
@@ -41,17 +43,23 @@ AcrobotPlant<T>::AcrobotPlant(double m1, double m2, double l1, double l2,
   this->DeclareInputPort(systems::kVectorValued, 1);
   this->DeclareVectorOutputPort(&AcrobotPlant::OutputState);
   static_assert(AcrobotStateVectorIndices::kNumCoordinates == kNumDOF * 2, "");
-  this->DeclareContinuousState(
-      AcrobotStateVector<T>(),
-      kNumDOF /* num_q */,
-      kNumDOF /* num_v */,
-      0 /* num_z */);
+  if (time_period_ == 0.) {
+    this->DeclareContinuousState(
+        AcrobotStateVector<T>(),
+        kNumDOF  /* num_q */,
+        kNumDOF  /* num_v */,
+        0        /* num_z */);
+  } else {
+    this->DeclarePeriodicDiscreteUpdate(time_period_);
+  }
+
 }
 
 template <typename T>
 template <typename U>
 AcrobotPlant<T>::AcrobotPlant(const AcrobotPlant<U>& other)
     : AcrobotPlant<T>(
+          other.time_period(),
           other.m1(),
           other.m2(),
           other.l1(),
@@ -66,7 +74,8 @@ AcrobotPlant<T>::AcrobotPlant(const AcrobotPlant<U>& other)
 
 template <typename T>
 std::unique_ptr<AcrobotPlant<T>> AcrobotPlant<T>::CreateAcrobotMIT() {
-  return std::make_unique<AcrobotPlant<T>>(2.4367,   // m1
+  return std::make_unique<AcrobotPlant<T>>(0,        // time period
+                                           2.4367,   // m1
                                            0.6178,   // m2
                                            0.2563,   // l1
                                            0,        // l2
@@ -126,16 +135,58 @@ template <typename T>
 void AcrobotPlant<T>::DoCalcTimeDerivatives(
     const systems::Context<T>& context,
     systems::ContinuousState<T>* derivatives) const {
+  if (time_period_ != 0.0) return;
+
   const AcrobotStateVector<T>& x = dynamic_cast<const AcrobotStateVector<T>&>(
       context.get_continuous_state_vector());
   const T& tau = this->EvalVectorInput(context, 0)->GetAtIndex(0);
 
-  Matrix2<T> H = MatrixH(x);
-  Vector2<T> C = VectorC(x);
+  DRAKE_ASSERT(derivatives != nullptr);
+  systems::VectorBase<T>* derivative_vector = derivatives->get_mutable_vector();
+  DRAKE_ASSERT(derivative_vector != nullptr);
+  AcrobotStateVector<T>* const state_derivatives =
+      dynamic_cast<AcrobotStateVector<T>*>(derivative_vector);
+  DRAKE_ASSERT(state_derivatives != nullptr);
+
+  ImplCalcTimeDerivatives(x, tau, state_derivatives);
+}
+
+template <typename T>
+void AcrobotPlant<T>::DoCalcDiscreteVariableUpdates(
+    const systems::Context<T>& context,
+    const std::vector<const drake::systems::DiscreteUpdateEvent<T>*>&,
+    drake::systems::DiscreteValues<T>* updates) const {
+  if (time_period_ == 0.0) return;
+
+  const AcrobotStateVector<T>& x = dynamic_cast<const AcrobotStateVector<T>&>(
+      *context.get_discrete_state()->get_vector());
+  const T& tau = this->EvalVectorInput(context, 0)->GetAtIndex(0);
+
+  std::unique_ptr<AcrobotStateVector<T>> state_derivatives(
+      new AcrobotStateVector<T>);
+
+  ImplCalcTimeDerivatives(x, tau, state_derivatives.get());
+
+  DRAKE_ASSERT(updates != nullptr);
+  systems::BasicVector<T>* state_updates = updates->get_mutable_vector();
+  DRAKE_ASSERT(state_updates != nullptr);
+
+  // Discretize assuming a first-order hold on the inputs and state derivatives.
+  state_updates->SetFromVector(
+      time_period_ * state_derivatives->CopyToVector() + x.CopyToVector());
+}
+
+template <typename T>
+void AcrobotPlant<T>::ImplCalcTimeDerivatives(
+    const AcrobotStateVector<T>& states,
+    const T& tau,
+    AcrobotStateVector<T>* derivatives) const {
+  Matrix2<T> H = MatrixH(states);
+  Vector2<T> C = VectorC(states);
   Vector2<T> B(0, 1);  // input matrix
 
   Vector4<T> xdot;
-  xdot << x.theta1dot(), x.theta2dot(), H.inverse() * (B * tau - C);
+  xdot << states.theta1dot(), states.theta2dot(), H.inverse() * (B * tau - C);
   derivatives->SetFromVector(xdot);
 }
 
@@ -162,6 +213,21 @@ T AcrobotPlant<T>::DoCalcPotentialEnergy(
   const T c12 = cos(x.theta1() + x.theta2());
 
   return -m1_ * g_ * lc1_ * c1 - m2_ * g_ * (l1_ * c1 + lc2_ * c12);
+}
+
+
+template <typename T>
+std::unique_ptr<systems::DiscreteValues<T>>
+AcrobotPlant<T>::AllocateDiscreteState() const {
+  if (time_period_ != 0.) {
+    std::vector<std::unique_ptr<systems::BasicVector<T>>> discrete_states(1);
+    std::unique_ptr<systems::BasicVector<T>> default_states(
+        new AcrobotStateVector<T>());
+    discrete_states[0] = std::move(default_states);
+    return std::make_unique<systems::DiscreteValues<T>>(
+        std::move(discrete_states));
+  }
+  return std::make_unique<systems::DiscreteValues<T>>();
 }
 
 template class AcrobotPlant<double>;
