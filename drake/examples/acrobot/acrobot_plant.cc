@@ -93,10 +93,17 @@ std::unique_ptr<AcrobotPlant<T>> AcrobotPlant<T>::CreateAcrobotMIT() {
 template <typename T>
 void AcrobotPlant<T>::OutputState(const systems::Context<T>& context,
                                    AcrobotStateVector<T>* output) const {
-  output->set_value(
-      dynamic_cast<const AcrobotStateVector<T>&>(
-          context.get_continuous_state_vector())
-          .get_value());
+  if (time_period_ == 0.) {
+    output->set_value(
+        dynamic_cast<const AcrobotStateVector<T>&>(
+            context.get_continuous_state_vector())
+        .get_value());
+  } else {
+    output->set_value(
+        dynamic_cast<const AcrobotStateVector<T>&>(
+            *context.get_discrete_state()->get_vector())
+      .get_value());
+  }
 }
 
 template <typename T>
