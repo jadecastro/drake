@@ -3,6 +3,7 @@
 #include <string>
 
 #include "drake/common/eigen_types.h"
+#include "drake/common/proto/call_matlab.h"
 #include "drake/systems/trajectory_optimization/direct_transcription.h"
 
 namespace drake {
@@ -111,6 +112,7 @@ void LinearModelPredictiveController<T>::CalcControl(
       this->EvalEigenVectorInput(context, state_input_index_);
 
   const int kNumSampleTimes = (int)(time_horizon_ / time_period_ + 0.5);
+  std::cout << " Num time samples: " << kNumSampleTimes << std::endl;
 
   if (base_context_ == nullptr) {
     // Linearize the system about the current trajectory value.
@@ -174,9 +176,9 @@ void LinearModelPredictiveController<T>::CalcControl(
     InputPortDescriptor<double> descriptor(nullptr, 0, kVectorValued, 0);
     const VectorX<T> input_ref =
         base_context_->EvalVectorInput(nullptr, descriptor)->CopyToVector();
-    unused(state_ref);
-    unused(input_ref);
 
+    std::cout << " state_ref:\n" << state_ref << std::endl;
+    std::cout << " input_ref:\n" << input_ref << std::endl;
     const Eigen::Ref<const MatrixX<symbolic::Expression>> state_error =
         prog.state().cast<symbolic::Expression>() - state_ref;
     const Eigen::Ref<const MatrixX<symbolic::Expression>> input_error =
@@ -187,10 +189,34 @@ void LinearModelPredictiveController<T>::CalcControl(
     prog.AddRunningCost(state_error.transpose() * Q_ * state_error +
                         input_error.transpose() * R_ * input_error);
 
-    DRAKE_DEMAND(prog.Solve() == solvers::SolutionResult::kSolutionFound);
+    std::cout << " Cost: " << state_error.transpose() * Q_ * state_error +
+        input_error.transpose() * R_ * input_error << std::endl;
+
+    //DRAKE_DEMAND(prog.Solve() == solvers::SolutionResult::kSolutionFound);
+    const int result = prog.Solve();
+    std::cout << " Sol RESULT: " << result << std::endl;
+
+    // Plot time histories for two of the states of the solution
+    // Note: see call_matlab.h for instructions on viewing the plot.
+    Eigen::VectorXd times = prog.GetSampleTimes();
+    Eigen::MatrixXd inputs = prog.GetInputSamples();
+    Eigen::MatrixXd states = prog.GetStateSamples();
+    std::cout << " time: " << context.get_time() << std::endl;
+    std::cout << " states:\n" << states.col(0) << std::endl;
+    std::cout << " inputs:\n" << inputs.col(0) << std::endl;
+    common::CallMatlab("figure");
+    common::CallMatlab("plot", times, states.row(0));
+    common::CallMatlab("xlabel", "time");
+    common::CallMatlab("ylabel", "x0");
+    common::CallMatlab("figure");
+    common::CallMatlab("plot", times, states.row(1));
+    common::CallMatlab("xlabel", "time");
+    common::CallMatlab("ylabel", "x1");
 
     PiecewisePolynomialTrajectory input_traj =
         prog.ReconstructInputTrajectory();
+    std::cout << " applied inputs:\n" << input_traj.value(0) << std::endl;
+    std::cout << " \n" << std::endl;
     control->SetFromVector(input_traj.value(0));
   }
 }
