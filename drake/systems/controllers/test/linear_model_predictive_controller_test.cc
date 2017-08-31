@@ -92,19 +92,20 @@ AcrobotBalancingMpcController(std::unique_ptr<AcrobotPlant<double>> acrobot,
 }
 
 std::unique_ptr<systems::Diagram<double>> MakeControlledSystem(
-    double time_step, double time_horizon) {
+    double time_step, double time_horizon, double actual_time_step) {
   auto tree = std::make_unique<RigidBodyTree<double>>();
   parsers::urdf::AddModelInstanceFromUrdfFileToWorld(
       FindResourceOrThrow("drake/examples/acrobot/Acrobot.urdf"),
       multibody::joints::kFixed, tree.get());
 
   DiagramBuilder<double> builder;
-  auto acrobot = builder.AddSystem<AcrobotPlant>(time_step);  //NB. Try this in
-                                                              //CT.
+  auto acrobot = builder.AddSystem<AcrobotPlant>(actual_time_step);
   acrobot->set_name("acrobot");
-  drake::lcm::DrakeLcm lcm;
-  auto publisher = builder.AddSystem<systems::DrakeVisualizer>(*tree, &lcm);
-  publisher->set_name("publisher");
+
+  // TODO(jadecastro) Reinsert the publisher once we've resolved LCM segfault.
+  //drake::lcm::DrakeLcm lcm;
+  //auto publisher = builder.AddSystem<systems::DrakeVisualizer>(*tree, &lcm);
+  //publisher->set_name("publisher");
   //builder.Connect(acrobot->get_output_port(0), publisher->get_input_port(0));
 
   auto controller =
@@ -136,28 +137,35 @@ const systems::System<double>& GetSystemByName(
 //int do_main(int argc, char* argv[]) {
 //  gflags::ParseCommandLineFlags(&argc, &argv, true);
 GTEST_TEST(TestMpc, TestAcrobotSimulation) {
-  const double kTimeStep = 0.1;
-  const double kTimeHorizon = 10.;
+  const double kTimeStep = 0.005;
+  const double kTimeHorizon = 0.5;
+  const double kActualTimeStep = 0.005;
 
-  auto diagram = MakeControlledSystem(kTimeStep, kTimeHorizon);
+  auto diagram = MakeControlledSystem(kTimeStep, kTimeHorizon, kActualTimeStep);
   Simulator<double> simulator(*diagram);
   const auto& acrobot = GetSystemByName("acrobot", *diagram);
   Context<double>& acrobot_context = diagram->GetMutableSubsystemContext(
       acrobot, simulator.get_mutable_context());
 
   // Set an initial condition near the upright fixed point.
-  AcrobotStateVector<double>* x0 = dynamic_cast<AcrobotStateVector<double>*>(
-      acrobot_context.get_mutable_discrete_state()->get_mutable_vector());
+  AcrobotStateVector<double>* x0;
+  if (kActualTimeStep == 0.) {
+    x0 = dynamic_cast<AcrobotStateVector<double>*>(
+        acrobot_context.get_mutable_continuous_state_vector());
+  } else {
+    x0 = dynamic_cast<AcrobotStateVector<double>*>(
+        acrobot_context.get_mutable_discrete_state()->get_mutable_vector());
+  }
   DRAKE_DEMAND(x0 != nullptr);
-  x0->set_theta1(M_PI + 0.1);
-  x0->set_theta2(-.1);
+  x0->set_theta1(M_PI + 0.001);
+  x0->set_theta2(-.001);
   x0->set_theta1dot(0.0);
   x0->set_theta2dot(0.0);
 
   simulator.set_target_realtime_rate(1.);
   simulator.Initialize();
   simulator.StepTo(10.);
-  std::cout << " here " << std::endl;
+  std::cout << " DONE. " << std::endl;
 }
 
 /*
