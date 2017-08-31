@@ -29,6 +29,8 @@ DEFINE_double(realtime_factor, 1.0,
 int do_main(int argc, char* argv[]) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 
+  const double kTimeStep = 0.005;
+
   lcm::DrakeLcm lcm;
   auto tree = std::make_unique<RigidBodyTree<double>>();
   parsers::urdf::AddModelInstanceFromUrdfFileToWorld(
@@ -36,7 +38,7 @@ int do_main(int argc, char* argv[]) {
       multibody::joints::kFixed, tree.get());
 
   systems::DiagramBuilder<double> builder;
-  auto acrobot = builder.AddSystem<AcrobotPlant>();
+  auto acrobot = builder.AddSystem<AcrobotPlant>(kTimeStep);
   acrobot->set_name("acrobot");
   auto publisher = builder.AddSystem<systems::DrakeVisualizer>(*tree, &lcm);
   builder.Connect(acrobot->get_output_port(0), publisher->get_input_port(0));
@@ -52,8 +54,15 @@ int do_main(int argc, char* argv[]) {
 
   // Set an initial condition that is sufficiently far from the downright fixed
   // point.
-  AcrobotStateVector<double>* x0 = dynamic_cast<AcrobotStateVector<double>*>(
-      acrobot_context.get_mutable_continuous_state_vector());
+  AcrobotStateVector<double>* x0;
+  if (kTimeStep == 0.) {
+    x0 = dynamic_cast<AcrobotStateVector<double>*>(
+        acrobot_context.get_mutable_continuous_state_vector());
+  } else {
+    x0 = dynamic_cast<AcrobotStateVector<double>*>(
+        acrobot_context.get_mutable_discrete_state()->get_mutable_vector());
+  }
+
   DRAKE_DEMAND(x0 != nullptr);
   x0->set_theta1(1.0);
   x0->set_theta2(1.0);
