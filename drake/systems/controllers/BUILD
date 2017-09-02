@@ -50,7 +50,8 @@ drake_cc_library(
     deps = [
         "//drake/common/proto:call_matlab",
         "//drake/common/trajectories:piecewise_polynomial_trajectory",
-        "//drake/systems/framework:leaf_system",
+        "//drake/examples/acrobot:acrobot_plant",
+        "//drake/systems/framework:leaf_system",   # (for testing)..
         "//drake/systems/primitives:linear_system",
         "//drake/systems/trajectory_optimization:direct_transcription",
     ],
