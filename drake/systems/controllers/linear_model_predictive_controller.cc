@@ -6,6 +6,8 @@
 #include "drake/common/proto/call_matlab.h"
 #include "drake/systems/trajectory_optimization/direct_transcription.h"
 
+#include "drake/examples/acrobot/acrobot_plant.h"  // Testing...
+
 namespace drake {
 namespace systems {
 namespace controllers {
@@ -176,18 +178,72 @@ void LinearModelPredictiveController<T>::CalcControl(
     InputPortDescriptor<double> descriptor(nullptr, 0, kVectorValued, 0);
     const VectorX<T> input_ref =
         base_context_->EvalVectorInput(nullptr, descriptor)->CopyToVector();
+    // ^^ Sound?
 
-    std::cout << " state_ref:\n" << state_ref << std::endl;
-    std::cout << " input_ref:\n" << input_ref << std::endl;
+    // Testing to see how continuous linearization compares with the discrete.
+    /*
+    auto continuous_acrobot =
+        std::make_unique<examples::acrobot::AcrobotPlant<double>>();
+    auto continuous_base_context = continuous_acrobot->CreateDefaultContext();
+    continuous_base_context->FixInputPort(0, input_ref);
+    continuous_base_context->get_mutable_continuous_state_vector()->
+        SetFromVector(base_context_->get_discrete_state(0)->get_value());
+    auto continuous_linear_model =
+        Linearize(*continuous_acrobot, *continuous_base_context);
+    std::cout << " Ac " << continuous_linear_model->A() << std::endl;
+    std::cout << " Ad " << linear_model_->A() << std::endl;
+    std::cout << " Bc " << continuous_linear_model->B() << std::endl;
+    std::cout << " Bd " << linear_model_->B() << std::endl;
+    std::cout << " Cc " << continuous_linear_model->C() << std::endl;
+    std::cout << " Cd " << linear_model_->C() << std::endl;
+    std::cout << " Dc " << continuous_linear_model->D() << std::endl;
+    std::cout << " Dd " << linear_model_->D() << std::endl;
+    */
+
+    //std::cout << " state_ref:\n" << state_ref << std::endl;
+    //std::cout << " input_ref:\n" << input_ref << std::endl;
+    /*
     const Eigen::Ref<const MatrixX<symbolic::Expression>> state_error =
         prog.state().cast<symbolic::Expression>() - state_ref;
     const Eigen::Ref<const MatrixX<symbolic::Expression>> input_error =
         prog.input().cast<symbolic::Expression>() - input_ref;
+    */
+
+    const auto state_error = prog.state() - state_ref;
+    const auto input_error = prog.input() - input_ref;
 
     prog.AddLinearConstraint(prog.initial_state() == current_state);
 
+    // Add some bounds to the states and inputs.
+    /*
+    const int num_states = prog.state().size();
+    prog.AddConstraintToAllKnotPoints(prog.state() <=
+                                      50. * Eigen::VectorXd::Ones(num_states));
+    prog.AddConstraintToAllKnotPoints(prog.state() >=
+                                      -50. * Eigen::VectorXd::Ones(num_states));
+    const int num_inputs = prog.input().size();
+    prog.AddConstraintToAllKnotPoints(prog.input() <=
+                                      50. * Eigen::VectorXd::Ones(num_inputs));
+    prog.AddConstraintToAllKnotPoints(prog.input() >=
+                                      -50. * Eigen::VectorXd::Ones(num_inputs));
+    */
+
+    // Initial trajectory is a straight line, assuming control is zero
+    // currently.
+    prog.SetInitialTrajectory(
+        PiecewisePolynomial<double>::FirstOrderHold(
+            {0, time_horizon_}, {0. * input_ref, input_ref}),
+        PiecewisePolynomial<double>::FirstOrderHold(
+            {0, time_horizon_}, {current_state, state_ref}));
+
     prog.AddRunningCost(state_error.transpose() * Q_ * state_error +
                         input_error.transpose() * R_ * input_error);
+    // prog.AddRunningCost(prog.state().transpose() * prog.state());
+    // prog.AddQuadraticErrorCost(Q_, state_ref, prog.state());
+
+    // Runnning cost does not seem to work... so try a final cost?
+    //prog.AddFinalCost(state_error.transpose() * Q_ * state_error +
+    //                  input_error.transpose() * R_ * input_error);
 
     std::cout << " Cost: " << state_error.transpose() * Q_ * state_error +
         input_error.transpose() * R_ * input_error << std::endl;
@@ -204,6 +260,8 @@ void LinearModelPredictiveController<T>::CalcControl(
     std::cout << " time: " << context.get_time() << std::endl;
     std::cout << " states:\n" << states.col(0) << std::endl;
     std::cout << " inputs:\n" << inputs.col(0) << std::endl;
+    std::cout << " state error:\n" << states.col(0) - state_ref << std::endl;
+    std::cout << " input error:\n" << inputs.col(0) - input_ref << std::endl;
     common::CallMatlab("figure");
     common::CallMatlab("plot", times, states.row(0));
     common::CallMatlab("xlabel", "time");

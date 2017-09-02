@@ -85,7 +85,7 @@ AcrobotBalancingMpcController(std::unique_ptr<AcrobotPlant<double>> acrobot,
   Eigen::Matrix4d Q = Eigen::Matrix4d::Identity();
   Q(0, 0) = 10.;
   Q(1, 1) = 10.;
-  Vector1d R = Vector1d::Constant(1.);
+  Vector1d R = Vector1d::Constant(.000000001);
 
   return std::make_unique<LinearModelPredictiveController<double>>(
       std::move(acrobot), std::move(context), Q, R, time_step, time_horizon);
@@ -137,9 +137,9 @@ const systems::System<double>& GetSystemByName(
 //int do_main(int argc, char* argv[]) {
 //  gflags::ParseCommandLineFlags(&argc, &argv, true);
 GTEST_TEST(TestMpc, TestAcrobotSimulation) {
-  const double kTimeStep = 0.005;
-  const double kTimeHorizon = 0.5;
-  const double kActualTimeStep = 0.005;
+  const double kTimeStep = 0.01;
+  const double kTimeHorizon = 1.;
+  const double kActualTimeStep = 0.01;
 
   auto diagram = MakeControlledSystem(kTimeStep, kTimeHorizon, kActualTimeStep);
   Simulator<double> simulator(*diagram);
@@ -157,8 +157,8 @@ GTEST_TEST(TestMpc, TestAcrobotSimulation) {
         acrobot_context.get_mutable_discrete_state()->get_mutable_vector());
   }
   DRAKE_DEMAND(x0 != nullptr);
-  x0->set_theta1(M_PI + 0.001);
-  x0->set_theta2(-.001);
+  x0->set_theta1(M_PI - 0.00001);
+  x0->set_theta2(+.00001);
   x0->set_theta1dot(0.0);
   x0->set_theta2dot(0.0);
 
