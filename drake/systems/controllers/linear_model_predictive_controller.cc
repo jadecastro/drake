@@ -10,6 +10,9 @@ namespace drake {
 namespace systems {
 namespace controllers {
 
+template class TimeScheduledAffineSystem<double>;
+template class TimeScheduledAffineSystem<symbolic::Expression>;
+
 using solvers::VectorXDecisionVariable;
 using trajectory_optimization::DirectTranscription;
 
@@ -26,9 +29,11 @@ LinearModelPredictiveController<T>::LinearModelPredictiveController(
                   BasicVector<T>(R.cols()),
                   &LinearModelPredictiveController<T>::CalcControl)
               .get_index()),
-      num_states_(base_context->get_discrete_state()->get_vector()->size()),
-      num_inputs_(model->get_input_port(0).size()),
-      model_(std::move(model)), base_context_(std::move(base_context)),
+      model_(std::move(model)),
+      base_context_(std::move(base_context)),
+      num_states_(
+          model_->CreateDefaultContext()->get_discrete_state(0)->size()),
+      num_inputs_(model_->get_input_port(0).size()),
       Q_(Q),
       R_(R),
       time_period_(time_period),
@@ -38,9 +43,10 @@ LinearModelPredictiveController<T>::LinearModelPredictiveController(
 
   // Check that the model is SISO and has discrete states belonging to a single
   // group.
-  DRAKE_DEMAND(base_context_->get_num_discrete_state_groups() == 1);
-  DRAKE_DEMAND(base_context_->get_continuous_state()->size() == 0);
-  DRAKE_DEMAND(base_context_->get_num_abstract_state_groups() == 0);
+  const auto model_context = model_->CreateDefaultContext();
+  DRAKE_DEMAND(model_context->get_num_discrete_state_groups() == 1);
+  DRAKE_DEMAND(model_context->get_continuous_state()->size() == 0);
+  DRAKE_DEMAND(model_context->get_num_abstract_state_groups() == 0);
   DRAKE_DEMAND(model_->get_num_input_ports() == 1);
   DRAKE_DEMAND(model_->get_num_output_ports() == 1);
 
@@ -58,6 +64,8 @@ LinearModelPredictiveController<T>::LinearModelPredictiveController(
 
   if (base_context_ != nullptr) {
     linear_model_ = Linearize(*model_, *base_context_);
+    const auto symbolic_linear_model = linear_model_->ToSymbolic();
+    DRAKE_DEMAND(symbolic_linear_model != nullptr);
   }
 }
 
@@ -67,11 +75,12 @@ LinearModelPredictiveController<T>::LinearModelPredictiveController(
     std::unique_ptr<PiecewisePolynomialTrajectory> x0,
     std::unique_ptr<PiecewisePolynomialTrajectory> u0, const Eigen::MatrixXd& Q,
     const Eigen::MatrixXd& R, double time_period, double time_horizon)
-    : LinearModelPredictiveController(
-          std::move(model), model->CreateDefaultContext(), Q, R, time_period,
-          time_horizon) {
+    : LinearModelPredictiveController(std::move(model), nullptr, Q, R,
+                                      time_period, time_horizon) {
   scheduled_model_.reset(new TimeScheduledAffineSystem<T>(
       *model_, std::move(x0), std::move(u0), time_period_));
+  const auto symbolic_scheduled_model = scheduled_model_->ToSymbolic();
+  DRAKE_DEMAND(symbolic_scheduled_model != nullptr);
   // TODO(jadecastro): We always asssume we start at t = 0 under this
   // scheme. Implement a state-dependent scheduling scheme.
 
@@ -159,7 +168,8 @@ VectorX<T> LinearModelPredictiveController<T>::SetupAndSolveQp(
 
   // Needs to be reworked to include the base trajectory states/inputs at each
   // time step.
-  DirectTranscription prog(scheduled_model_.get(), *base_context_,
+  const auto model_context = model_->CreateDefaultContext();
+  DirectTranscription prog(scheduled_model_.get(), *model_context,
                            kNumSampleTimes);
 
   const auto state_error = prog.state();

@@ -48,6 +48,7 @@ drake_cc_library(
     hdrs = ["linear_model_predictive_controller.h"],
     testonly = 1,
     deps = [
+        "//drake/common:extract_double",
         "//drake/common/proto:call_matlab",
         "//drake/common/trajectories:piecewise_polynomial_trajectory",
         "//drake/examples/acrobot:acrobot_plant",
