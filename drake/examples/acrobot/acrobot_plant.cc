@@ -178,9 +178,12 @@ void AcrobotPlant<T>::DoCalcDiscreteVariableUpdates(
   systems::BasicVector<T>* state_updates = updates->get_mutable_vector();
   DRAKE_ASSERT(state_updates != nullptr);
 
-  // Discretize assuming a first-order hold on the inputs and state derivatives.
-  state_updates->SetFromVector(
-      time_period_ * state_derivatives->CopyToVector() + x.CopyToVector());
+  // Apply a simple Euler integration scheme assuming a first-order hold on the
+  // inputs and state derivatives.
+  auto x_dot = state_derivatives->CopyToVector();
+  auto x_curr = x.CopyToVector();  // Apply x' = x - T/2 * x_dot tranformation
+                                   // if using bilinear discretization.
+  state_updates->SetFromVector(time_period_ * x_dot + x_curr);
 }
 
 template <typename T>
@@ -233,6 +236,8 @@ AcrobotPlant<T>::AllocateDiscreteState() const {
     discrete_states[0] = std::move(default_states);
     return std::make_unique<systems::DiscreteValues<T>>(
         std::move(discrete_states));
+    // Note: Apply x' = x - T/2 * x_dot tranformation if using bilinear
+    // discretization.
   }
   return std::make_unique<systems::DiscreteValues<T>>();
 }
