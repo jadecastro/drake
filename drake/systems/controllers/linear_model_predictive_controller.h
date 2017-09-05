@@ -12,11 +12,13 @@ namespace drake {
 namespace systems {
 namespace controllers {
 
-/// A system containing a time-varying :
+/// A system containing a time-varying system of the form:
 ///
-/// @f[ xdot(t) = A(t)x(t) + B(t)u(t)  @f]
-/// @f[ y(t) = A(t)x(t) + B(t)u(t)  @f]
+/// @f[ xdot(t) = A(t)x(t) + B(t)u(t) + f0(t)  @f]
+/// @f[ y(t) = A(t)x(t) + B(t)u(t) + y0(t)  @f]
 ///
+/// where the parameters A, B, C, D, f0, and y0 are taken from a nominal
+/// state/input trajectory that is supplied to the constructor.
 template <typename T>
 class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
  public:
@@ -32,17 +34,18 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
 
     x0_ = std::move(x0);
     u0_ = std::move(u0);
+
     std::unique_ptr<Context<T>> base_context = model.CreateDefaultContext();
     auto state_vector =
         base_context->get_mutable_discrete_state()->get_mutable_vector();
     auto input_vector = std::make_unique<BasicVector<T>>(u0_->cols());
 
+    const std::vector<double> times =
+        x0_->get_piecewise_polynomial().getSegmentTimes();
     std::vector<MatrixX<double>> A_vector{};
     std::vector<MatrixX<double>> B_vector{};
     std::vector<MatrixX<double>> C_vector{};
     std::vector<MatrixX<double>> D_vector{};
-    const std::vector<double> times =
-        x0_->get_piecewise_polynomial().getSegmentTimes();
     for (auto t : times) {
       const auto state_ref = x0_->value(t);
       state_vector->SetFromVector(state_ref);
@@ -64,6 +67,8 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
       C_vector.emplace_back(linear_model->C());
       D_vector.emplace_back(linear_model->D());
     }
+
+    // Create matrices for a piecewise-linear system.
     A_.reset(new PiecewisePolynomialTrajectory(
         PiecewisePolynomial<double>::ZeroOrderHold(times, A_vector)));
     B_.reset(new PiecewisePolynomialTrajectory(
@@ -90,7 +95,9 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
     return B_->value(t);
   }
   VectorX<T> f0(const T& t) const override {
-    return Eigen::MatrixXd::Zero(A_->cols(), 0);
+    using std::max;
+    const T tprev = max(T(0.), t - T(this->time_period()));
+    return x0(t) - x0(tprev);
   }
   MatrixX<T> C(const T& t) const override {
     return C_->value(t);
@@ -99,7 +106,7 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
     return D_->value(t);
   }
   VectorX<T> y0(const T& t) const override {
-    return Eigen::MatrixXd::Zero(C_->cols(), 0);
+    return C(t) * x0(t) + D(t) * u0(t);
   }
 
  private:
@@ -113,8 +120,11 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
   std::unique_ptr<PiecewisePolynomialTrajectory> D_;
 };
 
-
-/// Implements a basic Model Predictive Controller based on a linearized model.
+/// Implements a basic Model Predictive Controller based on a discrete plant
+/// model.  By restricting to affine systems and affine constraints, the
+/// approach is appeals to a QP solver.  Note that this implementation is basic
+/// in the sense that the QP is not solved in a sequential manner, but rather
+/// solved in whole at every time step.
 ///
 /// Instantiated templates for the following kinds of T's are provided:
 /// - double
@@ -192,11 +202,11 @@ class LinearModelPredictiveController : public LeafSystem<T> {
 
   // Sets up a DirectTranscription problem and solves for the current control
   // input.
-  Eigen::VectorXd SetupAndSolveQp(const Eigen::VectorXd& current_state,
-                                  double t) const;
+  VectorX<T> SetupAndSolveQp(const VectorX<T>& current_state,
+                             const VectorX<T>& state_ref) const;
 
-  Eigen::VectorXd SetupAndSolveQp(const Context<T>& base_context,
-                                  const Eigen::VectorXd& current_state) const;
+  VectorX<T> SetupAndSolveQp(const Context<T>& base_context,
+                             const VectorX<T>& current_state) const;
 
   const int state_input_index_{-1};
   const int control_output_index_{-1};

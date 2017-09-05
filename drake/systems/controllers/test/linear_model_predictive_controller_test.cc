@@ -68,7 +68,8 @@ AcrobotBalancingMpcController(std::unique_ptr<AcrobotPlant<double>> acrobot,
   auto context = acrobot->CreateDefaultContext();
 
   // Set nominal torque to zero.
-  context->FixInputPort(0, Vector1d::Constant(0.0));
+  const Eigen::VectorXd u0 = Vector1d::Constant(0.0);
+  context->FixInputPort(0, u0);
 
   // Set nominal state to the upright fixed point.
   AcrobotStateVector<double>* x = dynamic_cast<AcrobotStateVector<double>*>(
@@ -85,10 +86,29 @@ AcrobotBalancingMpcController(std::unique_ptr<AcrobotPlant<double>> acrobot,
   Eigen::Matrix4d Q = Eigen::Matrix4d::Identity();
   Q(0, 0) = 10.;
   Q(1, 1) = 10.;
-  Vector1d R = Vector1d::Constant(1.);
+  const Vector1d R = Vector1d::Constant(1.);
 
+  //return std::make_unique<LinearModelPredictiveController<double>>(
+  //    std::move(acrobot), std::move(context), Q, R, time_step, time_horizon);
+
+  // Create trivial trajectories for the states and inputs to force construction
+  // of the time-varying MPC, as an initial spike test.
+  const int kNumSampleTimes = (int)(time_horizon / time_step + 0.5);
+  std::vector<double> times(kNumSampleTimes);
+  std::vector<MatrixX<double>> x0_vector{};
+  std::vector<MatrixX<double>> u0_vector{};
+  for (int i{0}; i < kNumSampleTimes; ++i) {
+    times[i] = i * time_step;
+    x0_vector.emplace_back(x->CopyToVector());
+    u0_vector.emplace_back(u0);
+  }
+  auto x0_traj = std::make_unique<PiecewisePolynomialTrajectory>(
+      PiecewisePolynomial<double>::ZeroOrderHold(times, x0_vector));
+  auto u0_traj = std::make_unique<PiecewisePolynomialTrajectory>(
+      PiecewisePolynomial<double>::ZeroOrderHold(times, u0_vector));
   return std::make_unique<LinearModelPredictiveController<double>>(
-      std::move(acrobot), std::move(context), Q, R, time_step, time_horizon);
+      std::move(acrobot), std::move(x0_traj), std::move(u0_traj), Q, R,
+      time_step, time_horizon);
 }
 
 std::unique_ptr<systems::Diagram<double>> MakeControlledSystem(
@@ -171,102 +191,39 @@ GTEST_TEST(TestMpc, TestAcrobotSimulation) {
   std::cout << " DONE. " << std::endl;
 }
 
-/*
-GTEST_TEST(TestMPC, TestException) {
-  Eigen::Matrix2d A = Eigen::Matrix2d::Zero();
-  Eigen::Vector2d B = Eigen::Vector2d::Zero();
+//int do_main(int argc, char* argv[]) {
+//  gflags::ParseCommandLineFlags(&argc, &argv, true);
+GTEST_TEST(TestMpc, TestTimeVaryingAcrobotSimulation) {
+  const double kTimeStep = 0.08;
+  const double kTimeHorizon = 5.;
+  const double kActualTimeStep = 0.08;
 
-  Eigen::Matrix2d Q = Eigen::Matrix2d::Identity();
-  Eigen::Matrix<double, 1, 1> R = Eigen::MatrixXd::Identity(1, 1);
+  auto diagram = MakeControlledSystem(kTimeStep, kTimeHorizon, kActualTimeStep);
+  Simulator<double> simulator(*diagram);
+  const auto& acrobot = GetSystemByName("acrobot", *diagram);
+  Context<double>& acrobot_context = diagram->GetMutableSubsystemContext(
+      acrobot, simulator.get_mutable_context());
 
-  EXPECT_NO_THROW(LinearQuadraticRegulator(A, B, Q, R, N));
-  EXPECT_NO_THROW(LinearQuadraticRegulator(A, B, Q, R));
+  // Set an initial condition near the upright fixed point.
+  AcrobotStateVector<double>* x0;
+  if (kActualTimeStep == 0.) {
+    x0 = dynamic_cast<AcrobotStateVector<double>*>(
+        acrobot_context.get_mutable_continuous_state_vector());
+  } else {
+    x0 = dynamic_cast<AcrobotStateVector<double>*>(
+        acrobot_context.get_mutable_discrete_state()->get_mutable_vector());
+  }
+  DRAKE_DEMAND(x0 != nullptr);
+  x0->set_theta1(M_PI + 0.1);
+  x0->set_theta2(-.1);
+  x0->set_theta1dot(0.0);
+  x0->set_theta2dot(0.0);
 
-  // R is not positive definite, should throw exception.
-  EXPECT_THROW(LinearQuadraticRegulator(
-        A, B, Q, Eigen::Matrix<double, 1, 1>::Zero()), std::runtime_error);
-  EXPECT_THROW(LinearQuadraticRegulator(
-        A, B, Q, Eigen::Matrix<double, 1, 1>::Zero(), N), std::runtime_error);
+  simulator.set_target_realtime_rate(1.);
+  simulator.Initialize();
+  simulator.StepTo(10.);
+  std::cout << " DONE. " << std::endl;
 }
-
-void TestLQRAgainstKnownSolution(
-    double tolerance,
-    const Eigen::Ref<const Eigen::MatrixXd>& K_known,
-    const Eigen::Ref<const Eigen::MatrixXd>& S_known,
-    const Eigen::Ref<const Eigen::MatrixXd>& A,
-    const Eigen::Ref<const Eigen::MatrixXd>& B,
-    const Eigen::Ref<const Eigen::MatrixXd>& Q,
-    const Eigen::Ref<const Eigen::MatrixXd>& R,
-    const Eigen::Ref<const Eigen::MatrixXd>& N =
-        Eigen::Matrix<double, 0, 0>::Zero()) {
-  LinearQuadraticRegulatorResult result =
-      LinearQuadraticRegulator(A, B, Q, R, N);
-  EXPECT_TRUE(CompareMatrices(K_known, result.K, tolerance,
-        MatrixCompareType::absolute));
-  EXPECT_TRUE(CompareMatrices(S_known, result.S, tolerance,
-        MatrixCompareType::absolute));
-}
-
-void TestLQRLinearSystemAgainstKnownSolution(
-    double tolerance,
-    const LinearSystem<double>& sys,
-    const Eigen::Ref<const Eigen::MatrixXd>& K_known,
-    const Eigen::Ref<const Eigen::MatrixXd>& Q,
-    const Eigen::Ref<const Eigen::MatrixXd>& R,
-    const Eigen::Ref<const Eigen::MatrixXd>& N =
-        Eigen::Matrix<double, 0, 0>::Zero()) {
-  std::unique_ptr<LinearSystem<double>> linear_lqr =
-      LinearQuadraticRegulator(sys, Q, R, N);
-
-  int n = sys.A().rows();
-  int m = sys.B().cols();
-  EXPECT_TRUE(CompareMatrices(linear_lqr->A(),
-                              Eigen::Matrix<double, 0, 0>::Zero(), tolerance,
-                              MatrixCompareType::absolute));
-  EXPECT_TRUE(CompareMatrices(linear_lqr->B(),
-                              Eigen::MatrixXd::Zero(0, n), tolerance,
-                              MatrixCompareType::absolute));
-  EXPECT_TRUE(CompareMatrices(linear_lqr->C(),
-                              Eigen::MatrixXd::Zero(m, 0), tolerance,
-                              MatrixCompareType::absolute));
-  EXPECT_TRUE(CompareMatrices(linear_lqr->D(), -K_known, tolerance,
-                              MatrixCompareType::absolute));
-}
-
-void TestLQRAffineSystemAgainstKnownSolution(
-    double tolerance,
-    const LinearSystem<double>& sys,
-    const Eigen::Ref<const Eigen::MatrixXd>& K_known,
-    const Eigen::Ref<const Eigen::MatrixXd>& Q,
-    const Eigen::Ref<const Eigen::MatrixXd>& R,
-    const Eigen::Ref<const Eigen::MatrixXd>& N =
-        Eigen::Matrix<double, 0, 0>::Zero()) {
-  int n = sys.A().rows();
-  int m = sys.B().cols();
-
-  auto context = sys.CreateDefaultContext();
-  Eigen::VectorXd x0 = Eigen::VectorXd::Zero(n);
-  Eigen::VectorXd u0 = Eigen::VectorXd::Zero(m);
-
-  context->FixInputPort(0, u0);
-  context->get_mutable_continuous_state()->SetFromVector(x0);
-  std::unique_ptr<AffineSystem<double>> lqr =
-      LinearQuadraticRegulator(sys, *context, Q, R, N);
-
-  EXPECT_TRUE(CompareMatrices(lqr->A(), Eigen::Matrix<double, 0, 0>::Zero(),
-                              tolerance, MatrixCompareType::absolute));
-  EXPECT_TRUE(CompareMatrices(lqr->B(), Eigen::MatrixXd::Zero(0, n),
-                              tolerance, MatrixCompareType::absolute));
-  EXPECT_TRUE(CompareMatrices(lqr->f0(), Eigen::Matrix<double, 0, 1>::Zero(),
-                              tolerance, MatrixCompareType::absolute));
-  EXPECT_TRUE(CompareMatrices(lqr->C(), Eigen::MatrixXd::Zero(m, 0),
-                              tolerance, MatrixCompareType::absolute));
-  EXPECT_TRUE(CompareMatrices(lqr->D(), -K_known,
-                              tolerance, MatrixCompareType::absolute));
-  EXPECT_TRUE(CompareMatrices(lqr->y0(), u0 + K_known * x0,
-                              tolerance, MatrixCompareType::absolute));
-}
-*/
 
 }  // namespace
 }  // namespace controllers
