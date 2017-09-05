@@ -26,8 +26,8 @@ LinearModelPredictiveController<T>::LinearModelPredictiveController(
                   BasicVector<T>(R.cols()),
                   &LinearModelPredictiveController<T>::CalcControl)
               .get_index()),
-      num_states_(base_context_->get_discrete_state()->get_vector()->size()),
-      num_inputs_(model_->get_input_port(0).size()),
+      num_states_(base_context->get_discrete_state()->get_vector()->size()),
+      num_inputs_(model->get_input_port(0).size()),
       model_(std::move(model)), base_context_(std::move(base_context)),
       Q_(Q),
       R_(R),
@@ -67,14 +67,16 @@ LinearModelPredictiveController<T>::LinearModelPredictiveController(
     std::unique_ptr<PiecewisePolynomialTrajectory> x0,
     std::unique_ptr<PiecewisePolynomialTrajectory> u0, const Eigen::MatrixXd& Q,
     const Eigen::MatrixXd& R, double time_period, double time_horizon)
-    : LinearModelPredictiveController(std::move(model), nullptr, Q, R,
-                                      time_period, time_horizon) {
+    : LinearModelPredictiveController(
+          std::move(model), model->CreateDefaultContext(), Q, R, time_period,
+          time_horizon) {
   scheduled_model_.reset(new TimeScheduledAffineSystem<T>(
       *model_, std::move(x0), std::move(u0), time_period_));
   // TODO(jadecastro): We always asssume we start at t = 0 under this
   // scheme. Implement a state-dependent scheduling scheme.
 
-  // Sound?
+  // The following is unneeded in DirTran, since it punts on context.
+  /*
   auto state_vector =
       base_context_->get_mutable_discrete_state()->get_mutable_vector();
   auto input_vector = std::make_unique<BasicVector<T>>(u0->cols());
@@ -86,6 +88,7 @@ LinearModelPredictiveController<T>::LinearModelPredictiveController(
       0,
       std::make_unique<FreestandingInputPortValue>(
           std::move(input_vector)));
+  */
 }
 
 template <typename T>
@@ -110,7 +113,10 @@ void LinearModelPredictiveController<T>::CalcControl(
     std::cout << " inputs:\n" << current_input + input_ref << std::endl;
 
   } else {  // Regulate the system to the current trajectory value.
-    const Eigen::VectorXd current_input = SetupAndSolveQp(current_state, t);
+    std::cout << " Time-varying case " << std::endl;
+    const VectorX<T> state_ref = scheduled_model_->x0(t);
+    const Eigen::VectorXd current_input =
+        SetupAndSolveQp(current_state, state_ref);
 
     const VectorX<T> input_ref = scheduled_model_->u0(t);
     control->SetFromVector(current_input + input_ref);
@@ -119,9 +125,8 @@ void LinearModelPredictiveController<T>::CalcControl(
 }
 
 template <typename T>
-Eigen::VectorXd
-LinearModelPredictiveController<T>::SetupAndSolveQp(
-    const Eigen::VectorXd& current_state, double t) const {
+VectorX<T> LinearModelPredictiveController<T>::SetupAndSolveQp(
+    const VectorX<T>& current_state, const VectorX<T>& state_ref) const {
   DRAKE_DEMAND(scheduled_model_ != nullptr);
 
   const int kNumSampleTimes = (int)(time_horizon_ / time_period_ + 0.5);
@@ -163,7 +168,6 @@ LinearModelPredictiveController<T>::SetupAndSolveQp(
   prog.AddRunningCost(state_error.transpose() * Q_ * state_error +
                       input_error.transpose() * R_ * input_error);
 
-  const VectorX<T> state_ref = scheduled_model_->x0(t);
   prog.AddLinearConstraint(prog.initial_state() == current_state - state_ref);
 
   DRAKE_DEMAND(prog.Solve() == solvers::SolutionResult::kSolutionFound);
@@ -191,10 +195,8 @@ LinearModelPredictiveController<T>::SetupAndSolveQp(
 }
 
 template <typename T>
-Eigen::VectorXd
-LinearModelPredictiveController<T>::SetupAndSolveQp(
-    const Context<T>& base_context, const Eigen::VectorXd& current_state)
-    const {
+VectorX<T> LinearModelPredictiveController<T>::SetupAndSolveQp(
+    const Context<T>& base_context, const VectorX<T>& current_state) const {
   DRAKE_DEMAND(linear_model_ != nullptr);
 
   const int kNumSampleTimes = (int)(time_horizon_ / time_period_ + 0.5);
