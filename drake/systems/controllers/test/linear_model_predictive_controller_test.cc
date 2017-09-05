@@ -85,7 +85,7 @@ AcrobotBalancingMpcController(std::unique_ptr<AcrobotPlant<double>> acrobot,
   Eigen::Matrix4d Q = Eigen::Matrix4d::Identity();
   Q(0, 0) = 10.;
   Q(1, 1) = 10.;
-  Vector1d R = Vector1d::Constant(.000000001);
+  Vector1d R = Vector1d::Constant(1.);
 
   return std::make_unique<LinearModelPredictiveController<double>>(
       std::move(acrobot), std::move(context), Q, R, time_step, time_horizon);
@@ -102,11 +102,14 @@ std::unique_ptr<systems::Diagram<double>> MakeControlledSystem(
   auto acrobot = builder.AddSystem<AcrobotPlant>(actual_time_step);
   acrobot->set_name("acrobot");
 
-  // TODO(jadecastro) Reinsert the publisher once we've resolved LCM segfault.
-  //drake::lcm::DrakeLcm lcm;
-  //auto publisher = builder.AddSystem<systems::DrakeVisualizer>(*tree, &lcm);
-  //publisher->set_name("publisher");
-  //builder.Connect(acrobot->get_output_port(0), publisher->get_input_port(0));
+  // TODO(jadecastro) Reinsert the publisher in the DT case once we've resolved
+  // why LCM is segfaulting.
+  if (actual_time_step == 0.) {
+    drake::lcm::DrakeLcm lcm;
+    auto publisher = builder.AddSystem<systems::DrakeVisualizer>(*tree, &lcm);
+    publisher->set_name("publisher");
+    builder.Connect(acrobot->get_output_port(0), publisher->get_input_port(0));
+  }
 
   auto controller =
       builder.AddSystem(AcrobotBalancingMpcController(
@@ -137,9 +140,9 @@ const systems::System<double>& GetSystemByName(
 //int do_main(int argc, char* argv[]) {
 //  gflags::ParseCommandLineFlags(&argc, &argv, true);
 GTEST_TEST(TestMpc, TestAcrobotSimulation) {
-  const double kTimeStep = 0.01;
-  const double kTimeHorizon = 1.;
-  const double kActualTimeStep = 0.01;
+  const double kTimeStep = 0.08;
+  const double kTimeHorizon = 5.;
+  const double kActualTimeStep = 0.08;
 
   auto diagram = MakeControlledSystem(kTimeStep, kTimeHorizon, kActualTimeStep);
   Simulator<double> simulator(*diagram);
@@ -157,8 +160,8 @@ GTEST_TEST(TestMpc, TestAcrobotSimulation) {
         acrobot_context.get_mutable_discrete_state()->get_mutable_vector());
   }
   DRAKE_DEMAND(x0 != nullptr);
-  x0->set_theta1(M_PI - 0.00001);
-  x0->set_theta2(+.00001);
+  x0->set_theta1(M_PI + 0.1);
+  x0->set_theta2(-.1);
   x0->set_theta1dot(0.0);
   x0->set_theta2dot(0.0);
 
