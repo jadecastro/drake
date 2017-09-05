@@ -100,7 +100,7 @@ DirectTranscription::DirectTranscription(const System<double>* system,
                                          int num_time_samples)
     : MultipleShooting(system->get_num_total_inputs(),
                        context.get_num_total_states(), num_time_samples,
-                       0.005),  // TODO(russt): Replace this with the actual
+                       0.05),  // TODO(russt): Replace this with the actual
                               // sample time of the discrete update (#6878).
       discrete_time_system_(true) {
   // This is the constructor for discrete-time systems.  For continuous-time
