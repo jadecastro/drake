@@ -1,7 +1,7 @@
 #pragma once
 
-
 #include "drake/common/drake_copyable.h"
+#include "drake/common/extract_double.h"
 #include "drake/common/trajectories/piecewise_polynomial.h"
 #include "drake/common/trajectories/piecewise_polynomial_trajectory.h"
 #include "drake/systems/framework/leaf_system.h"
@@ -11,6 +11,17 @@
 namespace drake {
 namespace systems {
 namespace controllers {
+
+namespace {
+
+// A helper function for cloning a PiecewisePolynomialTrajectory.
+static std::unique_ptr<PiecewisePolynomialTrajectory> ClonePpt(
+    const PiecewisePolynomialTrajectory& ppt) {
+  const PiecewisePolynomial<double>& pp = ppt.get_piecewise_polynomial();
+  return std::make_unique<PiecewisePolynomialTrajectory>(pp);
+}
+
+}  // namespace
 
 /// A system containing a time-varying system of the form:
 ///
@@ -28,17 +39,18 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
                             std::unique_ptr<PiecewisePolynomialTrajectory> x0,
                             std::unique_ptr<PiecewisePolynomialTrajectory> u0,
                             double time_period)
-  : TimeVaryingAffineSystem<T>(x0->cols(), u0->cols(),
-                               model.get_output_port(0).size(), time_period) {
+      : TimeVaryingAffineSystem<T>(x0->cols(), u0->cols(),
+                                   model.get_output_port(0).size(),
+                                   time_period) {
     // Check x0, u0 against the model.
 
     x0_ = std::move(x0);
     u0_ = std::move(u0);
 
-    std::unique_ptr<Context<T>> base_context = model.CreateDefaultContext();
+    std::unique_ptr<Context<double>> base_context =
+        model.CreateDefaultContext();
     auto state_vector =
         base_context->get_mutable_discrete_state()->get_mutable_vector();
-    auto input_vector = std::make_unique<BasicVector<T>>(u0_->cols());
 
     const std::vector<double> times =
         x0_->get_piecewise_polynomial().getSegmentTimes();
@@ -47,19 +59,20 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
     std::vector<MatrixX<double>> C_vector{};
     std::vector<MatrixX<double>> D_vector{};
     for (auto t : times) {
-      const auto state_ref = x0_->value(t);
-      state_vector->SetFromVector(state_ref);
-      const auto input_ref = u0_->value(t);
-      input_vector->SetFromVector(input_ref);
+      const VectorX<double> state_ref = x0_->value(t);
+      state_vector->set_value(state_ref);
+
+      const VectorX<double> input_ref = u0_->value(t);
+      auto input_vector = std::make_unique<BasicVector<double>>(u0_->cols());
+      input_vector->set_value(input_ref);
       base_context->SetInputPortValue(
-          0,
-          std::make_unique<FreestandingInputPortValue>(
-              std::move(input_vector)));
+          0, std::make_unique<FreestandingInputPortValue>(
+                 std::move(input_vector)));
 
       // Also perhaps need to set parameters to obtain a linearization about a
       // non-equilibrium condition.
 
-      const std::unique_ptr<LinearSystem<T>> linear_model =
+      const std::unique_ptr<LinearSystem<double>> linear_model =
           Linearize(model, *base_context);
 
       A_vector.emplace_back(linear_model->A());
@@ -79,6 +92,23 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
         PiecewisePolynomial<double>::ZeroOrderHold(times, D_vector)));
   }
 
+  TimeScheduledAffineSystem(std::unique_ptr<PiecewisePolynomialTrajectory> A,
+                            std::unique_ptr<PiecewisePolynomialTrajectory> B,
+                            std::unique_ptr<PiecewisePolynomialTrajectory> C,
+                            std::unique_ptr<PiecewisePolynomialTrajectory> D,
+                            std::unique_ptr<PiecewisePolynomialTrajectory> x0,
+                            std::unique_ptr<PiecewisePolynomialTrajectory> u0,
+                            double time_period)
+      : TimeVaryingAffineSystem<T>(A->cols(), B->cols(), C->rows(),
+                                   time_period) {
+    A_ = std::move(A);
+    B_ = std::move(B);
+    C_ = std::move(C);
+    D_ = std::move(D);
+    x0_ = std::move(x0);
+    u0_ = std::move(u0);
+  }
+
   ~TimeScheduledAffineSystem() override {}
 
   VectorX<T> x0(const T& t) const {
@@ -92,11 +122,11 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
     return A_->value(t);
   }
   MatrixX<T> B(const T& t) const override {
-    return B_->value(t);
+    return B_->value(ExtractDoubleOrThrow(t));
   }
   VectorX<T> f0(const T& t) const override {
     using std::max;
-    const T tprev = max(T(0.), t - T(this->time_period()));
+    const T tprev = max(0., t - this->time_period());
     return x0(t) - x0(tprev);
   }
   MatrixX<T> C(const T& t) const override {
@@ -110,14 +140,27 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
   }
 
  private:
-  // Nominal (reference) trajectories.
-  std::unique_ptr<PiecewisePolynomialTrajectory> x0_;
-  std::unique_ptr<PiecewisePolynomialTrajectory> u0_;
+  // System<T> overrides.
+  TimeScheduledAffineSystem<AutoDiffXd>* DoToAutoDiffXd() const final {
+    return new TimeScheduledAffineSystem<AutoDiffXd>(
+        ClonePpt(*A_), ClonePpt(*B_), ClonePpt(*C_), ClonePpt(*D_),
+        ClonePpt(*x0_), ClonePpt(*u0_), this->time_period());
+  }
 
+  TimeScheduledAffineSystem<symbolic::Expression>* DoToSymbolic() const final {
+    return new TimeScheduledAffineSystem<symbolic::Expression>(
+        ClonePpt(*A_), ClonePpt(*B_), ClonePpt(*C_), ClonePpt(*D_),
+        ClonePpt(*x0_), ClonePpt(*u0_), this->time_period());
+  }
+
+  // Nominal (reference) trajectories.
   std::unique_ptr<PiecewisePolynomialTrajectory> A_;
   std::unique_ptr<PiecewisePolynomialTrajectory> B_;
   std::unique_ptr<PiecewisePolynomialTrajectory> C_;
   std::unique_ptr<PiecewisePolynomialTrajectory> D_;
+
+  std::unique_ptr<PiecewisePolynomialTrajectory> x0_;
+  std::unique_ptr<PiecewisePolynomialTrajectory> u0_;
 };
 
 /// Implements a basic Model Predictive Controller based on a discrete plant
@@ -160,9 +203,7 @@ class LinearModelPredictiveController : public LeafSystem<T> {
   LinearModelPredictiveController(
       std::unique_ptr<systems::System<double>> model,
       std::unique_ptr<systems::Context<double>> base_context,
-      const Eigen::MatrixXd& Q,
-      const Eigen::MatrixXd& R,
-      double time_period,
+      const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R, double time_period,
       double time_horizon);
 
   /// Constructor an unconstrained, trajectory-regulating MPC formulation with
@@ -185,9 +226,7 @@ class LinearModelPredictiveController : public LeafSystem<T> {
       std::unique_ptr<systems::System<double>> model,
       std::unique_ptr<PiecewisePolynomialTrajectory> x0,
       std::unique_ptr<PiecewisePolynomialTrajectory> u0,
-      const Eigen::MatrixXd& Q,
-      const Eigen::MatrixXd& R,
-      double time_period,
+      const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R, double time_period,
       double time_horizon);
 
   const InputPortDescriptor<T>& get_state_port() const {
@@ -211,12 +250,12 @@ class LinearModelPredictiveController : public LeafSystem<T> {
   const int state_input_index_{-1};
   const int control_output_index_{-1};
 
-  const int num_states_{};
-  const int num_inputs_{};
-
   const std::unique_ptr<systems::System<double>> model_;
   // The base context is the reference point to regulate.
   const std::unique_ptr<systems::Context<double>> base_context_;
+
+  const int num_states_{};
+  const int num_inputs_{};
 
   const Eigen::MatrixXd Q_;
   const Eigen::MatrixXd R_;
