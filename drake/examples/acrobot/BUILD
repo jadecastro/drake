@@ -10,8 +10,6 @@ load(
 load("//tools:install_data.bzl", "install_data")
 load("//tools:lint.bzl", "add_lint_tests")
 
-package(default_visibility = ["//visibility:public"])
-
 drake_cc_library(
     name = "acrobot_state_vector",
     srcs = ["gen/acrobot_state_vector.cc"],
@@ -74,6 +72,26 @@ drake_cc_binary(
         "//drake/multibody/rigid_body_plant:drake_visualizer",
         "//drake/systems/analysis:simulator",
         "@com_github_gflags_gflags//:gflags",
+    ],
+)
+
+drake_cc_binary(
+    name = "acrobot_run_mpc",
+    srcs = ["acrobot_run_mpc.cc"],
+    add_test_rule = 1,
+    data = [":models"],
+    test_rule_args = ["-realtime_factor=0.0"],
+    deps = [
+        ":acrobot_plant",
+        ":acrobot_state_vector",
+        "//drake/common:eigen_matrix_compare",
+        "//drake/common:find_resource",
+        "//drake/lcm",
+        "//drake/multibody:rigid_body_tree",
+        "//drake/multibody/parsers",
+        "//drake/multibody/rigid_body_plant:drake_visualizer",
+        "//drake/systems/analysis:simulator",
+        "//drake/systems/controllers:linear_model_predictive_controller",
     ],
 )
 

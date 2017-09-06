@@ -112,14 +112,14 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
   ~TimeScheduledAffineSystem() override {}
 
   VectorX<T> x0(const T& t) const {
-    return x0_->value(t);
+    return x0_->value(ExtractDoubleOrThrow(t));
   }
   VectorX<T> u0(const T& t) const {
-    return u0_->value(t);
+    return u0_->value(ExtractDoubleOrThrow(t));
   }
 
   MatrixX<T> A(const T& t) const override {
-    return A_->value(t);
+    return A_->value(ExtractDoubleOrThrow(t));
   }
   MatrixX<T> B(const T& t) const override {
     return B_->value(ExtractDoubleOrThrow(t));
@@ -130,16 +130,18 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
     return x0(t) - x0(tprev);
   }
   MatrixX<T> C(const T& t) const override {
-    return C_->value(t);
+    return C_->value(ExtractDoubleOrThrow(t));
   }
   MatrixX<T> D(const T& t) const override {
-    return D_->value(t);
+    return D_->value(ExtractDoubleOrThrow(t));
   }
   VectorX<T> y0(const T& t) const override {
     return C(t) * x0(t) + D(t) * u0(t);
   }
 
  private:
+
+
   // System<T> overrides.
   TimeScheduledAffineSystem<AutoDiffXd>* DoToAutoDiffXd() const final {
     return new TimeScheduledAffineSystem<AutoDiffXd>(
@@ -147,11 +149,13 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
         ClonePpt(*x0_), ClonePpt(*u0_), this->time_period());
   }
 
+  /*
   TimeScheduledAffineSystem<symbolic::Expression>* DoToSymbolic() const final {
     return new TimeScheduledAffineSystem<symbolic::Expression>(
         ClonePpt(*A_), ClonePpt(*B_), ClonePpt(*C_), ClonePpt(*D_),
         ClonePpt(*x0_), ClonePpt(*u0_), this->time_period());
   }
+  */
 
   // Nominal (reference) trajectories.
   std::unique_ptr<PiecewisePolynomialTrajectory> A_;
