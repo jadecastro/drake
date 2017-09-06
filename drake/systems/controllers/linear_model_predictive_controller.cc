@@ -79,7 +79,7 @@ LinearModelPredictiveController<T>::LinearModelPredictiveController(
                                       time_period, time_horizon) {
   scheduled_model_.reset(new TimeScheduledAffineSystem<T>(
       *model_, std::move(x0), std::move(u0), time_period_));
-  const auto symbolic_scheduled_model = scheduled_model_->ToSymbolic();
+  const auto symbolic_scheduled_model = scheduled_model_->ToAutoDiffXd();
   DRAKE_DEMAND(symbolic_scheduled_model != nullptr);
   // TODO(jadecastro): We always asssume we start at t = 0 under this
   // scheme. Implement a state-dependent scheduling scheme.
@@ -180,7 +180,9 @@ VectorX<T> LinearModelPredictiveController<T>::SetupAndSolveQp(
 
   prog.AddLinearConstraint(prog.initial_state() == current_state - state_ref);
 
-  DRAKE_DEMAND(prog.Solve() == solvers::SolutionResult::kSolutionFound);
+  // Don't restrict to solve to optimality.
+  const auto result = prog.Solve();
+  std::cout << " Solution Result: " << result << std::endl;
 
   // Plot time histories for two of the states of the solution
   // Note: see call_matlab.h for instructions on viewing the plot.

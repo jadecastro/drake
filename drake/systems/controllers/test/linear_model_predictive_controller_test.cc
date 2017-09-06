@@ -5,8 +5,6 @@
 
 //#include "drake/common/eigen_matrix_compare.h"
 #include "drake/common/find_resource.h"
-#include "drake/examples/acrobot/acrobot_plant.h"
-#include "drake/examples/acrobot/gen/acrobot_state_vector.h"
 #include "drake/lcm/drake_lcm.h"
 #include "drake/multibody/joints/floating_base_types.h"
 #include "drake/multibody/parsers/urdf_parser.h"
@@ -58,34 +56,61 @@ GTEST_TEST(TestMpc, DiscreteDoubleIntegrator) {
 
 }
 
+namespace {
+
+template <typename T>
+class CubicPolynomialSystem final : public systems::LeafSystem<T> {
+ public:
+  explicit CubicPolynomialSystem(double time_step)
+      : time_step_(time_step) {
+    this->DeclareDiscreteState(1);
+    this->DeclarePeriodicDiscreteUpdate(time_step);
+  }
+
+  // Scalar-converting copy constructor.
+  template <typename U>
+  explicit CubicPolynomialSystem(const CubicPolynomialSystem<U>& system)
+      : CubicPolynomialSystem(system.timestep()) {}
+
+  double time_step() const { return time_step_; }
+
+ private:
+  // x(k+1) = x³(k) + u(k)
+  void DoCalcDiscreteVariableUpdates(
+      const Context<T>& context,
+      const std::vector<const DiscreteUpdateEvent<T>*>&,
+      DiscreteValues<T>* discrete_state) const final {
+    using std::pow;
+    const T& x = context.get_discrete_state(0)->get_value()[0];
+    const T& u = this->EvalVectorInput(context, 0)->get_value()[0];
+    discrete_state->get_mutable_vector(0)->SetAtIndex(0, pow(x, 3.) + u);
+  }
+
+  const double time_step_{0.};
+};
+
+}  // namespace
+
 // TODO(jadecastro) This is errantly using the acrobot dev model. Move this code
 // into an executable within //drake/examples/acrobot/ and turn off global
 // visibility in that BUILD file.
 
 std::unique_ptr<LinearModelPredictiveController<double>>
-AcrobotBalancingMpcController(std::unique_ptr<AcrobotPlant<double>> acrobot,
-                              double time_step, double time_horizon) {
-  auto context = acrobot->CreateDefaultContext();
+MpcController(std::unique_ptr<CubicPolynomialSystem<double>> system,
+              double time_step, double time_horizon) {
+  auto context = system->CreateDefaultContext();
 
-  // Set nominal torque to zero.
-  const Eigen::VectorXd u0 = Vector1d::Constant(0.0);
+  // Set nominal input to zero.
+  const Eigen::VectorXd u0 = Vector1d::Constant(0.);
   context->FixInputPort(0, u0);
 
-  // Set nominal state to the upright fixed point.
-  AcrobotStateVector<double>* x = dynamic_cast<AcrobotStateVector<double>*>(
-      context->get_mutable_discrete_state()->get_mutable_vector());
-  DRAKE_ASSERT(x != nullptr);
+  // Set the nominal state.
+  BasicVector<double>* x =
+      context->get_mutable_discrete_state()->get_mutable_vector();
   x->set_theta1(M_PI);
-  x->set_theta2(0.0);
-  x->set_theta1dot(0.0);
-  x->set_theta2dot(0.0);
 
-  // Setup quadratic cost matrices (penalize position error 10x more than
-  // velocity to roughly address difference in units, using sqrt(g/l) as the
-  // time constant.
-  Eigen::Matrix4d Q = Eigen::Matrix4d::Identity();
-  Q(0, 0) = 10.;
-  Q(1, 1) = 10.;
+  // Set up the quadratic cost matrices.
+  const Vector1d Q = Vector1d::Constant(10.);
   const Vector1d R = Vector1d::Constant(1.);
 
   //return std::make_unique<LinearModelPredictiveController<double>>(
