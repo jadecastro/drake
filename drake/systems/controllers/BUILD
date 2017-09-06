@@ -264,6 +264,7 @@ drake_cc_googletest(
 
 drake_cc_googletest(
     name = "linear_model_predictive_controller_test",
+    data = ["//drake/examples/acrobot:models"],
     deps = [
         ":linear_model_predictive_controller",
         "//drake/common/test_utilities:eigen_matrix_compare",

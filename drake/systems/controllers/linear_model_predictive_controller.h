@@ -140,8 +140,6 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
   }
 
  private:
-
-
   // System<T> overrides.
   TimeScheduledAffineSystem<AutoDiffXd>* DoToAutoDiffXd() const final {
     return new TimeScheduledAffineSystem<AutoDiffXd>(
@@ -166,6 +164,8 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
   std::unique_ptr<PiecewisePolynomialTrajectory> x0_;
   std::unique_ptr<PiecewisePolynomialTrajectory> u0_;
 };
+
+// TODO(jadecastro) Throw if output doesn't match states.
 
 /// Implements a basic Model Predictive Controller based on a discrete plant
 /// model.  By restricting to affine systems and affine constraints, the
