@@ -116,7 +116,6 @@ void LinearModelPredictiveController<T>::CalcControl(
     InputPortDescriptor<double> descriptor(nullptr, 0, kVectorValued, 0);
     const VectorX<T> input_ref =
         base_context_->EvalVectorInput(nullptr, descriptor)->CopyToVector();
-    // ^^ Is this sound??
 
     control->SetFromVector(current_input + input_ref);
     std::cout << " inputs:\n" << current_input + input_ref << std::endl;
