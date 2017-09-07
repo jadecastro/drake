@@ -266,11 +266,7 @@ drake_cc_googletest(
     deps = [
         ":linear_model_predictive_controller",
         "//drake/common:eigen_matrix_compare",
-        "//drake/common:find_resource",
-        "//drake/lcm",
-        "//drake/multibody:rigid_body_tree",
-        "//drake/multibody/parsers",
-        "//drake/multibody/rigid_body_plant:drake_visualizer",
+        "//drake/math:discrete_algebraic_riccati_equation",
         "//drake/systems/analysis:simulator",
     ],
 )

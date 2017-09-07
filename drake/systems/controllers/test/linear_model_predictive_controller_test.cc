@@ -3,10 +3,7 @@
 #include <gtest/gtest.h>
 
 #include "drake/common/eigen_matrix_compare.h"
-#include "drake/common/find_resource.h"
-#include "drake/lcm/drake_lcm.h"
-#include "drake/multibody/joints/floating_base_types.h"
-#include "drake/multibody/parsers/urdf_parser.h"
+#include "drake/math/discrete_algebraic_riccati_equation.h"
 #include "drake/systems/analysis/simulator.h"
 #include "drake/systems/framework/diagram.h"
 #include "drake/systems/framework/diagram_builder.h"
@@ -16,6 +13,8 @@ namespace drake {
 namespace systems {
 namespace controllers {
 namespace {
+
+using math::DiscreteAlgebraicRiccatiEquation;
 
 class TestMpcWithDoubleIntegrator : public ::testing::Test {
  protected:
@@ -28,43 +27,58 @@ class TestMpcWithDoubleIntegrator : public ::testing::Test {
     Eigen::Vector2d B;
     A << 1, 0.1, 0, 1;
     B << 0.005, 0.1;
-    system_.reset(new LinearSystem<double>(
-        A, B, Eigen::Matrix<double, 2, 2>::Identity(),
-        Eigen::Matrix<double, 2, 1>::Zero(), kTimeStep));
+    const auto C = Eigen::Matrix<double, 2, 2>::Identity();
+    const auto D = Eigen::Matrix<double, 2, 1>::Zero();
 
-    const int n = system_->A().rows();
-    const int m = system_->B().cols();
+    std::unique_ptr<LinearSystem<double>> system =
+        std::make_unique<LinearSystem<double>>(A, B, C, D, kTimeStep);
 
     // Nominal, fixed reference condition.
-    const Eigen::VectorXd x0 = Eigen::VectorXd::Zero(n);
-    const Eigen::VectorXd u0 = Eigen::VectorXd::Zero(m);
+    const Eigen::Vector2d x0 = Eigen::Vector2d::Zero();
+    const Vector1d u0 = Vector1d::Zero();
 
-    system_context_ = system_->CreateDefaultContext();
-    system_context_->FixInputPort(0, u0);
-    system_context_->get_mutable_discrete_state(0)->SetFromVector(x0);
-
-    // Cost matrices.
-    const Eigen::Matrix2d Q = Eigen::Matrix2d::Identity();
-    const Vector1d R = Vector1d::Constant(1.);
+    std::unique_ptr<Context<double>> system_context =
+         system->CreateDefaultContext();
+    system_context->FixInputPort(0, u0);
+    system_context->get_mutable_discrete_state(0)->SetFromVector(x0);
 
     dut_.reset(new LinearModelPredictiveController<double>(
-        std::move(system_), std::move(system_context_), Q, R, kTimeStep,
+        std::move(system), std::move(system_context), Q_, R_, kTimeStep,
         kTimeHorizon));
+
+    // Store another copy of the linear plant model.
+    system_.reset(new LinearSystem<double>(A, B, C, D, kTimeStep));
   }
+
+  // Cost matrices.
+  const Eigen::Matrix2d Q_ = Eigen::Matrix2d::Identity();
+  const Vector1d R_ = Vector1d::Constant(1.);
 
   std::unique_ptr<LinearModelPredictiveController<double>> dut_;
   std::unique_ptr<LinearSystem<double>> system_;
-  std::unique_ptr<Context<double>> system_context_;
 };
 
-TEST_F(TestMpcWithDoubleIntegrator, Topology) {
-  //dut_;
-}
+TEST_F(TestMpcWithDoubleIntegrator, TestAgainstInfiniteHorizonSolution) {
+  const double kTolerance = 1e-5;
 
-TEST_F(TestMpcWithDoubleIntegrator, Output) {
-  //dut_;
-  //EXPECT_TRUE(CompareMatrices(K_known, result.K, tolerance,
-  //                            MatrixCompareType::absolute));
+  const Eigen::Matrix2d A = system_->A();
+  const Eigen::Matrix<double, 2, 1> B = system_->B();
+
+  // Analytical solution to the LQR problem.
+  const Eigen::Matrix2d S = DiscreteAlgebraicRiccatiEquation(A, B, Q_, R_);
+  const Eigen::Matrix<double, 1, 2> K =
+      -(R_ + B.transpose() * S * B).inverse() * (B.transpose() * S * A);
+
+  const Eigen::Matrix<double, 2, 1> x0 = Eigen::Vector2d::Ones();
+
+  auto context = dut_->CreateDefaultContext();
+  context->FixInputPort(0, BasicVector<double>::Make(x0(0), x0(1)));
+  std::unique_ptr<SystemOutput<double>> output = dut_->AllocateOutput(*context);
+
+  dut_->CalcOutput(*context, output.get());
+
+  EXPECT_TRUE(CompareMatrices(K * x0, output->get_vector_data(0)->get_value(),
+                              kTolerance));
 }
 
 namespace {
@@ -222,7 +236,6 @@ class TestMpcWithCubicSystem : public ::testing::Test {
     simulator_->set_target_realtime_rate(1.);
     simulator_->Initialize();
     simulator_->StepTo(time_horizon_);
-    std::cout << " DONE. " << std::endl;
   }
 
   const double time_step_ = 0.1;
@@ -232,11 +245,13 @@ class TestMpcWithCubicSystem : public ::testing::Test {
   const Eigen::Matrix2d Q_ = Eigen::Matrix2d::Identity();
   const Vector1d R_ = Vector1d::Constant(1.);
 
+  std::unique_ptr<Simulator<double>> simulator_;
+
+ private:
   std::unique_ptr<LinearModelPredictiveController<double>> dut_;  // <--make
                                                                   // local.
   std::unique_ptr<CubicPolynomialSystem<double>> system_;
   std::unique_ptr<Diagram<double>> diagram_;
-  std::unique_ptr<Simulator<double>> simulator_;
 };
 
 TEST_F(TestMpcWithCubicSystem, TimeInvariantCase) {
@@ -244,8 +259,8 @@ TEST_F(TestMpcWithCubicSystem, TimeInvariantCase) {
   MakeControlledSystem(false /* is NOT time-varying */);
   Simulate();
 
-  // Result should be deadbeat; expect convergence to a tiny tolerance in one
-  // step.
+  // Result should be deadbeat; expect convergence to within a tiny tolerance in
+  // one step.
   Eigen::Vector2d result =
       simulator_->get_mutable_context()->get_discrete_state(0)->get_value();
   EXPECT_TRUE(CompareMatrices(result, Eigen::Vector2d::Zero(), kTolerance));
@@ -256,8 +271,8 @@ TEST_F(TestMpcWithCubicSystem, TimeVaryingCase) {
   MakeControlledSystem(true /* is time varying */);
   Simulate();
 
-  // Result should be deadbeat; expect convergence to a tiny tolerance in one
-  // step.
+  // Result should be deadbeat; expect convergence to within a tiny tolerance in
+  // one step.
   Eigen::Vector2d result =
       simulator_->get_mutable_context()->get_discrete_state(0)->get_value();
   EXPECT_TRUE(CompareMatrices(result, Eigen::Vector2d::Zero(), kTolerance));
