@@ -3,7 +3,7 @@
 #include <string>
 
 #include "drake/common/eigen_types.h"
-#include "drake/common/proto/call_matlab.h"
+// #include "drake/common/proto/call_matlab.h"
 #include "drake/systems/trajectory_optimization/direct_transcription.h"
 
 namespace drake {
@@ -213,6 +213,7 @@ VectorX<T> LinearModelPredictiveController<T>::SetupAndSolveQp(
     inputs(0,i) = inputs(0,i) + scheduled_model_->u0(times(i) + time)(0);
   }
 
+/*
   common::CallMatlab("figure");
   common::CallMatlab("plot", times, states.row(0));
   common::CallMatlab("xlabel", "time");
@@ -225,6 +226,7 @@ VectorX<T> LinearModelPredictiveController<T>::SetupAndSolveQp(
   common::CallMatlab("plot", times, inputs.row(0));
   common::CallMatlab("xlabel", "time");
   common::CallMatlab("ylabel", "u0");
+*/
 
   return prog.GetInputSamples().col(0);
 }
