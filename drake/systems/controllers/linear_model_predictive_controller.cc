@@ -75,8 +75,9 @@ LinearModelPredictiveController<T>::LinearModelPredictiveController(
     std::unique_ptr<PiecewisePolynomialTrajectory> x0,
     std::unique_ptr<PiecewisePolynomialTrajectory> u0, const Eigen::MatrixXd& Q,
     const Eigen::MatrixXd& R, double time_period, double time_horizon)
-    : LinearModelPredictiveController(std::move(model), nullptr, Q, R,
-                                      time_period, time_horizon) {
+    : LinearModelPredictiveController(
+          std::move(model), nullptr, Q, R,
+          time_period, time_horizon) {
   scheduled_model_.reset(new TimeScheduledAffineSystem<T>(
       *model_, std::move(x0), std::move(u0), time_period_));
   const auto symbolic_scheduled_model = scheduled_model_->ToAutoDiffXd();
