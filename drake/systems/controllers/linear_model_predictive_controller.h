@@ -12,6 +12,75 @@ namespace drake {
 namespace systems {
 namespace controllers {
 
+/// A system wrapper that adjusts derivatives of a System such that it reaches
+/// pseudo-equilibrium at a state that is not a fixed point of that System.
+/// In particular:
+///
+///   @f[ \dot{x(t)} = f(t, x(t), u(t)) + base_vecto(t)r @f]
+///
+/// if the system is continuous-time, or
+///
+///   @f[ x(k+1) = f(k, x(k), u(k)) + base_vector(k) @f]
+///
+/// if the system is continuous-time.  The base_vector is a parameter vector
+/// that is understood as either a modifier on the derivatives (for CT systems)
+/// or a modifier on the updates (for DT systems).
+///
+/// When simulated, this system behaves just as the original underlying
+/// System. However, each time base_vector is updated, the system will behave as
+/// if the system is in equilibrium at base_vector.  When base_vector is
+/// obtained from a call to S<T>::CalcTimeDerivatives() at a particular context,
+/// the EquilibriumSystem may be used to linearize about that (non-equilibrium)
+/// context.
+template <typename T, template <typename Scalar> class S, typename... Args>
+class EquilibriumSystem : public S<T> {
+ public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(EquilibriumSystem)
+
+  EquilibriumSystem(Args&&... args) : S<T>(args...) {
+    static_assert(std::is_base_of<System<T>, S<T>>::value,
+                  "S must inherit from System.");
+    const int num_xc =
+        this->CreateDefaultContext()->get_continuous_state_vector().size();
+    const int num_xd = this->CreateDefaultContext()
+                           ->get_discrete_state(0)
+                           ->get_vector()
+                           .size();
+    DRAKE_DEMAND(!num_xc || !num_xd);
+    base_vector_index_ =
+        this->DeclareNumericParameter(BasicVector<T>(std::max(num_xc, num_xd)));
+  }
+
+  BasicVector<T>* get_mutable_base_vector(Context<T>* context) {
+    return GetMutableNumericParameter(context, base_vector_index_);
+  }
+
+ private:
+  void DoCalcTimeVector(const Context<T>& context,
+                             ContinuousState<T>* vector) const override {
+    const BasicVector<T>& base_derivatives =
+        this->template GetNumericParameter<BasicVector>(
+            context, base_vector_index_);
+    this->DoCalcTimeVector(context, vector);
+    vector->SetFromVector(vector->CopyToVector() +
+                          base_derivatives->get_value());
+  }
+
+  void DoCalcDiscreteVariableUpdates(
+      const drake::systems::Context<T>& context,
+      const std::vector<const drake::systems::DiscreteUpdateEvent<T>*>& events,
+      drake::systems::DiscreteValues<T>* updates) const override {
+    const BasicVector<T>& base_states =
+        this->template GetNumericParameter<BasicVector>(
+            context, base_vector_index_);
+    this->DoCalcTimeVector(context, events, updates);
+    updates->get_mutable_vector()->SetFromVector(
+        updates->get_vector()->CopyToVector() + base_states->get_value());
+  }
+
+  int base_vector_index_{-1};
+};
+
 namespace {
 
 // A helper function for cloning a PiecewisePolynomialTrajectory.
@@ -67,7 +136,7 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
       input_vector->set_value(input_ref);
       base_context->SetInputPortValue(
           0, std::make_unique<FreestandingInputPortValue>(
-                 std::move(input_vector)));
+              std::move(input_vector)));
 
       // Also perhaps need to set parameters to obtain a linearization about a
       // non-equilibrium condition.
