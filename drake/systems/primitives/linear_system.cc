@@ -169,7 +169,6 @@ std::unique_ptr<LinearSystem<double>> Linearize(
   // Create an autodiff version of the system.
   std::unique_ptr<System<AutoDiffXd>> autodiff_system =
       drake::systems::System<double>::ToAutoDiffXd(system);
-  DRAKE_DEMAND(autodiff_system != nullptr);
 
   // Initialize autodiff.
   std::unique_ptr<Context<AutoDiffXd>> autodiff_context =
