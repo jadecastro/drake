@@ -18,11 +18,11 @@ namespace controllers {
 ///
 ///   @f[ \dot{x(t)} = f(t, x(t), u(t)) + base_vecto(t)r @f]
 ///
-/// if the system is continuous-time, or
+/// if the system is continuous time, or
 ///
 ///   @f[ x(k+1) = f(k, x(k), u(k)) + base_vector(k) @f]
 ///
-/// if the system is continuous-time.  The base_vector is a parameter vector
+/// if the system is discrete time.  The base_vector is a parameter vector
 /// that is understood as either a modifier on the derivatives (for CT systems)
 /// or a modifier on the updates (for DT systems).
 ///
@@ -32,51 +32,108 @@ namespace controllers {
 /// obtained from a call to S<T>::CalcTimeDerivatives() at a particular context,
 /// the EquilibriumSystem may be used to linearize about that (non-equilibrium)
 /// context.
-template <typename T, template <typename Scalar> class S, typename... Args>
-class EquilibriumSystem : public S<T> {
+template <typename T>
+class EquilibriumSystem : public LeafSystem<T> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(EquilibriumSystem)
 
-  EquilibriumSystem(Args&&... args) : S<T>(args...) {
-    static_assert(std::is_base_of<System<T>, S<T>>::value,
-                  "S must inherit from System.");
-    const int num_xc =
-        this->CreateDefaultContext()->get_continuous_state_vector().size();
-    const int num_xd = this->CreateDefaultContext()
-                           ->get_discrete_state(0)
-                           ->get_vector()
-                           .size();
+  EquilibriumSystem(std::unique_ptr<System<T>> subsystem, double time_period)
+  : subsystem_(std::move(subsystem)),
+    subcontext_(subsystem_->CreateDefaultContext()),
+    time_period_(time_period) {
+    const int num_xc = subcontext_->get_continuous_state_vector().size();
+    DRAKE_DEMAND(subcontext_->get_num_discrete_state_groups() == 1);
+    const int num_xd = subcontext_->get_discrete_state(0)->size();
     DRAKE_DEMAND(!num_xc || !num_xd);
-    base_vector_index_ =
-        this->DeclareNumericParameter(BasicVector<T>(std::max(num_xc, num_xd)));
+
+    // System is assumed SISO.
+    DRAKE_DEMAND(subsystem_->get_num_input_ports() == 1);
+    DRAKE_DEMAND(subsystem_->get_num_output_ports() == 1);
+
+    const int input_size = subsystem_->get_input_port(0).size();
+    this->DeclareVectorInputPort(BasicVector<T>(input_size));
+    BasicVector<T> model_vector(subsystem_->get_output_port(0).size());
+    this->DeclareVectorOutputPort(model_vector, &EquilibriumSystem::CalcState);
+
+    if (time_period_ != 0.) this->DeclarePeriodicDiscreteUpdate(time_period_);
+
+    // We are appending an additional parameter to the existing vector.
+    base_vector_index_ = subcontext_->num_numeric_parameters();
   }
 
-  BasicVector<T>* get_mutable_base_vector(Context<T>* context) {
-    return GetMutableNumericParameter(context, base_vector_index_);
+  BasicVector<T>* get_mutable_base_vector(Context<T>* context) const {
+    return this->GetMutableNumericParameter(context, base_vector_index_);
+  }
+
+ protected:
+  void CalcState(const Context<T>& context, BasicVector<T>* output) const {
+    if (time_period_ == 0.) {
+      const VectorBase<T>& context_state =
+          context.get_continuous_state_vector();
+      const BasicVector<T>* const state =
+          dynamic_cast<const BasicVector<T>*>(&context_state);
+      DRAKE_DEMAND(state != nullptr);
+      output->set_value(state->get_value());
+    } else {
+      output->set_value(context.get_discrete_state(0)->get_value());
+    }
   }
 
  private:
-  void DoCalcTimeVector(const Context<T>& context,
-                             ContinuousState<T>* vector) const override {
+  void DoCalcTimeDerivatives(const Context<T>& context,
+                             ContinuousState<T>* derivatives) const override {
+    subsystem_->CalcTimeDerivatives(context, derivatives);
+
     const BasicVector<T>& base_derivatives =
         this->template GetNumericParameter<BasicVector>(
             context, base_vector_index_);
-    this->DoCalcTimeVector(context, vector);
-    vector->SetFromVector(vector->CopyToVector() +
-                          base_derivatives->get_value());
+    derivatives->SetFromVector(derivatives->CopyToVector() -
+                               base_derivatives.get_value());
   }
 
   void DoCalcDiscreteVariableUpdates(
-      const drake::systems::Context<T>& context,
-      const std::vector<const drake::systems::DiscreteUpdateEvent<T>*>& events,
-      drake::systems::DiscreteValues<T>* updates) const override {
+      const Context<T>& context,
+      const std::vector<const DiscreteUpdateEvent<T>*>&,
+      DiscreteValues<T>* updates) const override {
+    subsystem_->CalcDiscreteVariableUpdates(context, updates);
+
     const BasicVector<T>& base_states =
         this->template GetNumericParameter<BasicVector>(
             context, base_vector_index_);
-    this->DoCalcTimeVector(context, events, updates);
     updates->get_mutable_vector()->SetFromVector(
-        updates->get_vector()->CopyToVector() + base_states->get_value());
+        updates->get_vector()->get_value() - base_states.get_value());
   }
+
+  std::unique_ptr<ContinuousState<T>> AllocateContinuousState() const override {
+    auto vector = std::make_unique<BasicVector<T>>(
+        subcontext_->get_continuous_state_vector().CopyToVector());
+    return std::make_unique<ContinuousState<T>>(std::move(vector));
+  }
+
+  std::unique_ptr<DiscreteValues<T>> AllocateDiscreteState() const override {
+    auto vector = std::make_unique<BasicVector<T>>(
+        subcontext_->get_discrete_state(0)->CopyToVector());
+    return std::make_unique<DiscreteValues<T>>(std::move(vector));
+  }
+
+  std::unique_ptr<Parameters<T>> AllocateParameters() const override {
+    std::vector<std::unique_ptr<BasicVector<T>>> params;
+    params.reserve(subcontext_->num_numeric_parameters() + 1);
+    for (int i = 0; i < subcontext_->num_numeric_parameters(); ++i) {
+      auto param = subcontext_->get_numeric_parameter(i)->Clone();
+      params.emplace_back(std::move(param));
+    }
+    // Append an additional set of parameters for the base derivatives/updates.
+    params.emplace_back(std::make_unique<BasicVector<T>>(std::max(
+        subcontext_->get_continuous_state_vector().size(),
+        subcontext_->get_discrete_state(0)->size())));
+
+    return std::make_unique<Parameters<T>>(std::move(params));
+  }
+
+  const std::unique_ptr<System<T>> subsystem_;
+  const std::unique_ptr<Context<T>> subcontext_;
+  const double time_period_{0.};
 
   int base_vector_index_{-1};
 };
@@ -98,13 +155,14 @@ static std::unique_ptr<PiecewisePolynomialTrajectory> ClonePpt(
 /// @f[ y(t) = A(t)x(t) + B(t)u(t) + y0(t)  @f]
 ///
 /// where the parameters A, B, C, D, f0, and y0 are taken from a nominal
-/// state/input trajectory that is supplied to the constructor.
+/// state/input trajectory that is supplied to the constructor.  In particular,
+/// f0 = x(k) - x(k-1);
 template <typename T>
 class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(TimeScheduledAffineSystem)
 
-  TimeScheduledAffineSystem(const systems::System<double>& model,
+  TimeScheduledAffineSystem(const EquilibriumSystem<double>& model,
                             std::unique_ptr<PiecewisePolynomialTrajectory> x0,
                             std::unique_ptr<PiecewisePolynomialTrajectory> u0,
                             double time_period)
@@ -138,8 +196,9 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
           0, std::make_unique<FreestandingInputPortValue>(
               std::move(input_vector)));
 
-      // Also perhaps need to set parameters to obtain a linearization about a
-      // non-equilibrium condition.
+      // Set parameters to obtain a linearization about a non-equilibrium
+      // condition.
+      SetBaseDerivativesAt(model, base_context.get());
 
       const std::unique_ptr<LinearSystem<double>> linear_model =
           Linearize(model, *base_context);
@@ -224,6 +283,31 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
   }
   */
 
+  void SetBaseDerivativesAt(const EquilibriumSystem<double>& model,
+                            Context<double>* base_context) const {
+    // Set the time derivatives at the base-point in order to linearize the
+    // system about non-equilibrium.  Note that these derivatives are brought in
+    // as parameters.
+    BasicVector<double>* base_vector =
+        model.get_mutable_base_vector(base_context);
+    if (this->time_period() == 0.) {
+      auto derivatives = model.AllocateTimeDerivatives();
+
+      model.CalcTimeDerivatives(*base_context, derivatives.get());
+
+      base_vector->SetFrom(derivatives->get_vector());
+    } else {
+      auto updates = model.AllocateDiscreteVariables();
+
+      model.CalcDiscreteVariableUpdates(*base_context, updates.get());
+
+      Eigen::VectorXd current_state =
+          base_context->get_discrete_state(0)->get_value();
+      base_vector->SetFromVector(updates->get_vector()->get_value() -
+                                 current_state);
+    }
+}
+
   // Nominal (reference) trajectories.
   std::unique_ptr<PiecewisePolynomialTrajectory> A_;
   std::unique_ptr<PiecewisePolynomialTrajectory> B_;
@@ -274,8 +358,8 @@ class LinearModelPredictiveController : public LeafSystem<T> {
 
   // TODO(jadecastro) Get time_period directly from the plant model.
   LinearModelPredictiveController(
-      std::unique_ptr<systems::System<double>> model,
-      std::unique_ptr<systems::Context<double>> base_context,
+      std::unique_ptr<System<double>> model,
+      std::unique_ptr<Context<double>> base_context,
       const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R, double time_period,
       double time_horizon);
 
@@ -296,7 +380,7 @@ class LinearModelPredictiveController : public LeafSystem<T> {
   /// @pre model must have discrete states of dimension num_states and inputs
   /// of dimension num_inputs.
   LinearModelPredictiveController(
-      std::unique_ptr<systems::System<double>> model,
+      std::unique_ptr<System<double>> model,
       std::unique_ptr<PiecewisePolynomialTrajectory> x0,
       std::unique_ptr<PiecewisePolynomialTrajectory> u0,
       const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R, double time_period,
@@ -323,9 +407,9 @@ class LinearModelPredictiveController : public LeafSystem<T> {
   const int state_input_index_{-1};
   const int control_output_index_{-1};
 
-  const std::unique_ptr<systems::System<double>> model_;
+  const std::unique_ptr<System<double>> model_;
   // The base context is the reference point to regulate.
-  const std::unique_ptr<systems::Context<double>> base_context_;
+  const std::unique_ptr<Context<double>> base_context_;
 
   const int num_states_{};
   const int num_inputs_{};

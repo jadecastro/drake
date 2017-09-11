@@ -167,6 +167,10 @@ class TestMpcWithCubicSystem : public ::testing::Test {
 
   void MakeTimeVaryingMpcController() {
     EXPECT_NE(nullptr, system_);
+
+    system_.reset(new EquilibriumSystem<double>(std::move(system_),
+                                                time_step_));
+
     auto context = system_->CreateDefaultContext();
 
     // Create trajectories for the states and inputs to force construction of
@@ -250,7 +254,7 @@ class TestMpcWithCubicSystem : public ::testing::Test {
  private:
   std::unique_ptr<LinearModelPredictiveController<double>> dut_;  // <--make
                                                                   // local.
-  std::unique_ptr<CubicPolynomialSystem<double>> system_;
+  std::unique_ptr<System<double>> system_;
   std::unique_ptr<Diagram<double>> diagram_;
 };
 
