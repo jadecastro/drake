@@ -18,8 +18,8 @@ using trajectory_optimization::DirectTranscription;
 
 template <typename T>
 LinearModelPredictiveController<T>::LinearModelPredictiveController(
-    std::unique_ptr<systems::System<double>> model,
-    std::unique_ptr<systems::Context<double>> base_context,
+    std::unique_ptr<System<double>> model,
+    std::unique_ptr<Context<double>> base_context,
     const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R, double time_period,
     double time_horizon)
     : state_input_index_(
@@ -71,15 +71,16 @@ LinearModelPredictiveController<T>::LinearModelPredictiveController(
 
 template <typename T>
 LinearModelPredictiveController<T>::LinearModelPredictiveController(
-    std::unique_ptr<systems::System<double>> model,
+    std::unique_ptr<System<double>> model,
     std::unique_ptr<PiecewisePolynomialTrajectory> x0,
     std::unique_ptr<PiecewisePolynomialTrajectory> u0, const Eigen::MatrixXd& Q,
     const Eigen::MatrixXd& R, double time_period, double time_horizon)
     : LinearModelPredictiveController(
           std::move(model), nullptr, Q, R,
           time_period, time_horizon) {
+  const auto& eq_model = dynamic_cast<const EquilibriumSystem<T>&>(*model_);
   scheduled_model_.reset(new TimeScheduledAffineSystem<T>(
-      *model_, std::move(x0), std::move(u0), time_period_));
+      eq_model, std::move(x0), std::move(u0), time_period_));
   const auto symbolic_scheduled_model = scheduled_model_->ToAutoDiffXd();
   DRAKE_DEMAND(symbolic_scheduled_model != nullptr);
   // TODO(jadecastro): We always asssume we start at t = 0 under this
