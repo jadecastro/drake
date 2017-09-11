@@ -97,8 +97,8 @@ class CubicPolynomialSystem final : public LeafSystem<T> {
   }
 
  private:
-  // x1(k+1) = u(k)
-  // x2(k+1) = -x1³(k)
+  // x1(k+1) = x1(k) + u(k)
+  // x2(k+1) = x1(k) + x1³(k)
   void DoCalcDiscreteVariableUpdates(
       const Context<T>& context,
       const std::vector<const DiscreteUpdateEvent<T>*>&,
@@ -106,8 +106,8 @@ class CubicPolynomialSystem final : public LeafSystem<T> {
     using std::pow;
     const T& x1 = context.get_discrete_state(0)->get_value()[0];
     const T& u = this->EvalVectorInput(context, 0)->get_value()[0];
-    next_state->get_mutable_vector(0)->SetAtIndex(0, u);
-    next_state->get_mutable_vector(0)->SetAtIndex(1, pow(x1, 3.));
+    next_state->get_mutable_vector(0)->SetAtIndex(0, x1 + u);
+    next_state->get_mutable_vector(0)->SetAtIndex(1, x1 + pow(x1, 3.));
   }
 
   void OutputState(const systems::Context<T>& context, BasicVector<T>* output)
@@ -152,7 +152,7 @@ class TestMpcWithCubicSystem : public ::testing::Test {
     EXPECT_NE(nullptr, system_);
     auto context = system_->CreateDefaultContext();
 
-    // Set nominal input to zero.
+    // Set nominal input to zero => equilibrium at zero state.
     context->FixInputPort(0, Vector1d::Constant(0.));
 
     // Set the nominal state.
@@ -168,9 +168,6 @@ class TestMpcWithCubicSystem : public ::testing::Test {
   void MakeTimeVaryingMpcController() {
     EXPECT_NE(nullptr, system_);
 
-    system_.reset(new EquilibriumSystem<double>(std::move(system_),
-                                                time_step_));
-
     auto context = system_->CreateDefaultContext();
 
     // Create trajectories for the states and inputs to force construction of
@@ -179,15 +176,28 @@ class TestMpcWithCubicSystem : public ::testing::Test {
     std::vector<double> times(kNumSampleTimes);
     std::vector<MatrixX<double>> x0_vector{};
     std::vector<MatrixX<double>> u0_vector{};
+
+    Eigen::Vector2d x0_next_values;
+    x0_next_values << 0., 0.;
     for (int i{0}; i < kNumSampleTimes; ++i) {
       times[i] = i * time_step_;
-      x0_vector.emplace_back(Eigen::Vector2d::Zero());
-      u0_vector.emplace_back(Vector1d::Constant(0.));
+      const double u0_value = std::sin(times[i]);
+      Eigen::Vector2d x0_values;
+      x0_values << x0_next_values;
+
+      x0_next_values << x0_values(0) + u0_value,
+          x0_values(0) + std::pow(x0_values(0), 3.);
+      // TODO Use update eqn?
+
+      std::cout << " time " << times[i] << std::endl;
+      std::cout << " x0 values " << x0_values << std::endl;
+      x0_vector.emplace_back(x0_values);
+      u0_vector.emplace_back(Vector1d(u0_value));
     }
     auto x0_traj = std::make_unique<PiecewisePolynomialTrajectory>(
-        PiecewisePolynomial<double>::ZeroOrderHold(times, x0_vector));
+        PiecewisePolynomial<double>::FirstOrderHold(times, x0_vector));
     auto u0_traj = std::make_unique<PiecewisePolynomialTrajectory>(
-        PiecewisePolynomial<double>::ZeroOrderHold(times, u0_vector));
+        PiecewisePolynomial<double>::FirstOrderHold(times, u0_vector));
     dut_.reset(new LinearModelPredictiveController<double>(
         std::move(system_), std::move(x0_traj), std::move(u0_traj), Q_, R_,
         time_step_, time_horizon_));
@@ -221,7 +231,7 @@ class TestMpcWithCubicSystem : public ::testing::Test {
     diagram_ = builder.Build();
   }
 
-  void Simulate() {
+  void Simulate(double sim_time) {
     EXPECT_NE(nullptr, diagram_);
     EXPECT_EQ(nullptr, simulator_);
 
@@ -235,15 +245,17 @@ class TestMpcWithCubicSystem : public ::testing::Test {
         cubic_system_context.get_mutable_discrete_state()->get_mutable_vector();
 
     // Set an initial condition near the fixed point.
-    x0->SetFromVector(10. * Eigen::Vector2d::Ones());
+    x0->SetFromVector(x_init_);
 
     simulator_->set_target_realtime_rate(1.);
     simulator_->Initialize();
-    simulator_->StepTo(time_horizon_);
+    simulator_->StepTo(sim_time);
   }
 
-  const double time_step_ = 0.1;
-  const double time_horizon_ = 0.2;
+  const double time_step_ = 0.05;
+  const double time_horizon_ = 3.;
+
+  const Eigen::Vector2d x_init_ = 10. * Eigen::Vector2d::Ones();
 
   // Set up the quadratic cost matrices.
   const Eigen::Matrix2d Q_ = Eigen::Matrix2d::Identity();
@@ -260,8 +272,8 @@ class TestMpcWithCubicSystem : public ::testing::Test {
 
 TEST_F(TestMpcWithCubicSystem, TimeInvariantCase) {
   const double kTolerance = 1e-10;
-  MakeControlledSystem(false /* is NOT time-varying */);
-  Simulate();
+  MakeControlledSystem(false /*is NOT time-varying */);
+  Simulate(1.);
 
   // Result should be deadbeat; expect convergence to within a tiny tolerance in
   // one step.
@@ -273,7 +285,7 @@ TEST_F(TestMpcWithCubicSystem, TimeInvariantCase) {
 TEST_F(TestMpcWithCubicSystem, TimeVaryingCase) {
   const double kTolerance = 1e-10;
   MakeControlledSystem(true /* is time varying */);
-  Simulate();
+  Simulate(5 * time_step_);
 
   // Result should be deadbeat; expect convergence to within a tiny tolerance in
   // one step.
