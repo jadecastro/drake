@@ -10,6 +10,9 @@ namespace drake {
 namespace systems {
 namespace controllers {
 
+template class EquilibriumSystem<double>;
+template class EquilibriumSystem<AutoDiffXd>;
+
 template class TimeScheduledAffineSystem<double>;
 template class TimeScheduledAffineSystem<symbolic::Expression>;
 
@@ -19,9 +22,8 @@ using trajectory_optimization::DirectTranscription;
 template <typename T>
 LinearModelPredictiveController<T>::LinearModelPredictiveController(
     std::unique_ptr<System<double>> model,
-    std::unique_ptr<Context<double>> base_context,
-    const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R, double time_period,
-    double time_horizon)
+    std::unique_ptr<Context<double>> base_context, const Eigen::MatrixXd& Q,
+    const Eigen::MatrixXd& R, double time_period, double time_horizon)
     : state_input_index_(
           this->DeclareInputPort(kVectorValued, Q.cols()).get_index()),
       control_output_index_(
@@ -75,12 +77,13 @@ LinearModelPredictiveController<T>::LinearModelPredictiveController(
     std::unique_ptr<PiecewisePolynomialTrajectory> x0,
     std::unique_ptr<PiecewisePolynomialTrajectory> u0, const Eigen::MatrixXd& Q,
     const Eigen::MatrixXd& R, double time_period, double time_horizon)
-    : LinearModelPredictiveController(
-          std::move(model), nullptr, Q, R,
-          time_period, time_horizon) {
-  const auto& eq_model = dynamic_cast<const EquilibriumSystem<T>&>(*model_);
+    : LinearModelPredictiveController(std::move(model), nullptr, Q, R,
+                                      time_period, time_horizon) {
+  const auto eq_model =
+      std::make_unique<EquilibriumSystem<double>>(std::move(model_),
+                                                  time_period_);
   scheduled_model_.reset(new TimeScheduledAffineSystem<T>(
-      eq_model, std::move(x0), std::move(u0), time_period_));
+      *eq_model, std::move(x0), std::move(u0), time_period_));
   const auto symbolic_scheduled_model = scheduled_model_->ToAutoDiffXd();
   DRAKE_DEMAND(symbolic_scheduled_model != nullptr);
   // TODO(jadecastro): We always asssume we start at t = 0 under this
@@ -100,6 +103,8 @@ LinearModelPredictiveController<T>::LinearModelPredictiveController(
       std::make_unique<FreestandingInputPortValue>(
           std::move(input_vector)));
   */
+
+  
 }
 
 template <typename T>
@@ -125,10 +130,12 @@ void LinearModelPredictiveController<T>::CalcControl(
   } else {  // Regulate the system to the current trajectory value.
     std::cout << " Time-varying case " << std::endl;
     const VectorX<T> state_ref = scheduled_model_->x0(t);
+    std::cout << " state ref:\n" << state_ref << std::endl;
     const Eigen::VectorXd current_input =
-        SetupAndSolveQp(current_state, state_ref);
+        SetupAndSolveQp(current_state, state_ref, t);
 
     const VectorX<T> input_ref = scheduled_model_->u0(t);
+    std::cout << " input ref:\n" << input_ref << std::endl;
     control->SetFromVector(current_input + input_ref);
     std::cout << " inputs:\n" << current_input + input_ref << std::endl;
   }
@@ -136,7 +143,8 @@ void LinearModelPredictiveController<T>::CalcControl(
 
 template <typename T>
 VectorX<T> LinearModelPredictiveController<T>::SetupAndSolveQp(
-    const VectorX<T>& current_state, const VectorX<T>& state_ref) const {
+    const VectorX<T>& current_state, const VectorX<T>& state_ref, const T& time)
+    const {
   DRAKE_DEMAND(scheduled_model_ != nullptr);
 
   const int kNumSampleTimes = (int)(time_horizon_ / time_period_ + 0.5);
@@ -169,19 +177,22 @@ VectorX<T> LinearModelPredictiveController<T>::SetupAndSolveQp(
 
   // Needs to be reworked to include the base trajectory states/inputs at each
   // time step.
-  const auto model_context = model_->CreateDefaultContext();
+  const auto model_context = scheduled_model_->CreateDefaultContext();
+  model_context->set_time(time);
   DirectTranscription prog(scheduled_model_.get(), *model_context,
-                           kNumSampleTimes);
+                           kNumSampleTimes - time / time_period_);
+  // TODO Desire a tighter coupling between model_context's time and number of
+  // samples.
 
   const auto state_error = prog.state();
   const auto input_error = prog.input();
 
   prog.AddRunningCost(state_error.transpose() * Q_ * state_error +
-                      input_error.transpose() * R_ * input_error);
+                      1e2 * input_error.transpose() * R_ * input_error);
 
   prog.AddLinearConstraint(prog.initial_state() == current_state - state_ref);
 
-  // Don't restrict to solve to optimality.
+  // Don't demand optimality.
   const auto result = prog.Solve();
   std::cout << " Solution Result: " << result << std::endl;
 
@@ -195,14 +206,25 @@ VectorX<T> LinearModelPredictiveController<T>::SetupAndSolveQp(
   std::cout << " input error:\n" << inputs.col(0) << std::endl;
   std::cout << " states:\n" << states.col(0) + state_ref << std::endl;
 
+
+  for (int i{0}; i < times.size(); ++i) {
+    states(0,i) = states(0,i) + scheduled_model_->x0(times(i) + time)(0);
+    states(1,i) = states(1,i) + scheduled_model_->x0(times(i) + time)(1);
+    inputs(0,i) = inputs(0,i) + scheduled_model_->u0(times(i) + time)(0);
+  }
+
   common::CallMatlab("figure");
   common::CallMatlab("plot", times, states.row(0));
   common::CallMatlab("xlabel", "time");
   common::CallMatlab("ylabel", "x0");
+  //common::CallMatlab("figure");
+  //common::CallMatlab("plot", times, states.row(1));
+  //common::CallMatlab("xlabel", "time");
+  //common::CallMatlab("ylabel", "x1");
   common::CallMatlab("figure");
-  common::CallMatlab("plot", times, states.row(1));
+  common::CallMatlab("plot", times, inputs.row(0));
   common::CallMatlab("xlabel", "time");
-  common::CallMatlab("ylabel", "x1");
+  common::CallMatlab("ylabel", "u0");
 
   return prog.GetInputSamples().col(0);
 }
@@ -232,6 +254,7 @@ VectorX<T> LinearModelPredictiveController<T>::SetupAndSolveQp(
 
   // Plot time histories for two of the states of the solution
   // Note: see call_matlab.h for instructions on viewing the plot.
+  /*
   Eigen::VectorXd times = prog.GetSampleTimes();
   Eigen::MatrixXd inputs = prog.GetInputSamples();
   Eigen::MatrixXd states = prog.GetStateSamples();
@@ -248,6 +271,7 @@ VectorX<T> LinearModelPredictiveController<T>::SetupAndSolveQp(
   common::CallMatlab("plot", times, states.row(1));
   common::CallMatlab("xlabel", "time");
   common::CallMatlab("ylabel", "x1");
+  */
 
   return prog.GetInputSamples().col(0);
 }
