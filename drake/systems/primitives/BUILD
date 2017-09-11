@@ -123,7 +123,6 @@ drake_cc_library(
     hdrs = ["linear_system.h"],
     deps = [
         ":affine_system",
-        "//drake/common:is_approx_equal_abstol",
         "//drake/common:symbolic",
         "//drake/common:symbolic_decompose",
         "//drake/math:autodiff",
@@ -322,6 +321,7 @@ drake_cc_googletest(
         ":affine_linear_test",
         ":linear_system",
         "//drake/common:eigen_matrix_compare",
+        "//drake/examples/pendulum:pendulum_plant",
         "//drake/systems/framework",
         "//drake/systems/framework/test_utilities",
     ],
