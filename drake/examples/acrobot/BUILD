@@ -84,7 +84,6 @@ drake_cc_binary(
     deps = [
         ":acrobot_plant",
         ":acrobot_state_vector",
-        "//drake/common:eigen_matrix_compare",
         "//drake/common:find_resource",
         "//drake/lcm",
         "//drake/multibody:rigid_body_tree",

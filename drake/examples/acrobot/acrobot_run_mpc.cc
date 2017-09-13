@@ -120,29 +120,28 @@ const System<double>& GetSystemByName(
   return *result;
 }
 
-//int do_main(int argc, char* argv[]) {
-//  gflags::ParseCommandLineFlags(&argc, &argv, true);
-GTEST_TEST(TestMpc, TestAcrobotSimulation) {
+int do_main(int, char**) {
   const double kTimeStep = 0.08;
   const double kTimeHorizon = 5.;
   const double kActualTimeStep = 0.08;
 
-  const Diagram<double> diagram =
+  const auto diagram =
       MakeControlledSystem(kTimeStep, kTimeHorizon, kActualTimeStep);
-  Simulator<double> simulator(*diagram);
+  systems::Simulator<double> simulator(*diagram);
   const auto& acrobot = GetSystemByName("acrobot", *diagram);
-  Context<double>& acrobot_context = diagram->GetMutableSubsystemContext(
-      acrobot, simulator.get_mutable_context());
+  systems::Context<double>& acrobot_context =
+      diagram->GetMutableSubsystemContext(acrobot,
+                                          simulator.get_mutable_context());
 
   // Set an initial condition near the upright fixed point.
-  const AcrobotStateVector<double>* x0 = (kActualTimeStep == 0.) ?
+  AcrobotStateVector<double>* x0 = (kActualTimeStep == 0.) ?
       dynamic_cast<AcrobotStateVector<double>*>(
           acrobot_context.get_mutable_continuous_state_vector()) :
       dynamic_cast<AcrobotStateVector<double>*>(
           acrobot_context.get_mutable_discrete_state()->get_mutable_vector());
   DRAKE_DEMAND(x0 != nullptr);
-  x0->set_theta1(M_PI + 0.1);
-  x0->set_theta2(-.1);
+  x0->set_theta1(M_PI + 0.01);
+  x0->set_theta2(-0.01);
   x0->set_theta1dot(0.0);
   x0->set_theta2dot(0.0);
 
@@ -150,38 +149,8 @@ GTEST_TEST(TestMpc, TestAcrobotSimulation) {
   simulator.Initialize();
   simulator.StepTo(10.);
   std::cout << " DONE. " << std::endl;
-}
 
-int do_main(int, char*) {
-  const double kTimeStep = 0.08;
-  const double kTimeHorizon = 5.;
-  const double kActualTimeStep = 0.08;
-
-  auto diagram = MakeControlledSystem(kTimeStep, kTimeHorizon, kActualTimeStep);
-  Simulator<double> simulator(*diagram);
-  const auto& acrobot = GetSystemByName("acrobot", *diagram);
-  Context<double>& acrobot_context = diagram->GetMutableSubsystemContext(
-      acrobot, simulator.get_mutable_context());
-
-  // Set an initial condition near the upright fixed point.
-  AcrobotStateVector<double>* x0;
-  if (kActualTimeStep == 0.) {
-    x0 = dynamic_cast<AcrobotStateVector<double>*>(
-        acrobot_context.get_mutable_continuous_state_vector());
-  } else {
-    x0 = dynamic_cast<AcrobotStateVector<double>*>(
-        acrobot_context.get_mutable_discrete_state()->get_mutable_vector());
-  }
-  DRAKE_DEMAND(x0 != nullptr);
-  x0->set_theta1(M_PI + 0.1);
-  x0->set_theta2(-.1);
-  x0->set_theta1dot(0.0);
-  x0->set_theta2dot(0.0);
-
-  simulator.set_target_realtime_rate(1.);
-  simulator.Initialize();
-  simulator.StepTo(10.);
-  std::cout << " DONE. " << std::endl;
+  return false;
 }
 
 }  // namespace
@@ -189,6 +158,6 @@ int do_main(int, char*) {
 }  // namespace examples
 }  // namespace drake
 
-int main(int argc, char* argv[]) {
+int main(int argc, char** argv) {
   return drake::examples::acrobot::do_main(argc, argv);
 }
