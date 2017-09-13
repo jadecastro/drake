@@ -189,8 +189,6 @@ class TestMpcWithCubicSystem : public ::testing::Test {
           x0_values(0) + std::pow(x0_values(0), 3.);
       // TODO Use update eqn?
 
-      std::cout << " time " << times[i] << std::endl;
-      std::cout << " x0 values " << x0_values << std::endl;
       x0_vector.emplace_back(x0_values);
       u0_vector.emplace_back(Vector1d(u0_value));
     }
@@ -198,6 +196,7 @@ class TestMpcWithCubicSystem : public ::testing::Test {
         PiecewisePolynomial<double>::FirstOrderHold(times, x0_vector));
     auto u0_traj = std::make_unique<PiecewisePolynomialTrajectory>(
         PiecewisePolynomial<double>::FirstOrderHold(times, u0_vector));
+    x0_traj_ = x0_traj.get();
     dut_.reset(new LinearModelPredictiveController<double>(
         std::move(system_), std::move(x0_traj), std::move(u0_traj), Q_, R_,
         time_step_, time_horizon_));
@@ -261,6 +260,8 @@ class TestMpcWithCubicSystem : public ::testing::Test {
   const Eigen::Matrix2d Q_ = Eigen::Matrix2d::Identity();
   const Vector1d R_ = Vector1d::Constant(1.);
 
+  PiecewisePolynomialTrajectory* x0_traj_{nullptr};
+
   std::unique_ptr<Simulator<double>> simulator_;
 
  private:
@@ -284,14 +285,17 @@ TEST_F(TestMpcWithCubicSystem, TimeInvariantCase) {
 
 TEST_F(TestMpcWithCubicSystem, TimeVaryingCase) {
   const double kTolerance = 1e-10;
+  const double kSimTime = 20 * time_step_;
+
   MakeControlledSystem(true /* is time varying */);
-  Simulate(5 * time_step_);
+  Simulate(kSimTime);
 
   // Result should be deadbeat; expect convergence to within a tiny tolerance in
   // one step.
   Eigen::Vector2d result =
       simulator_->get_mutable_context()->get_discrete_state(0)->get_value();
-  EXPECT_TRUE(CompareMatrices(result, Eigen::Vector2d::Zero(), kTolerance));
+  EXPECT_TRUE(CompareMatrices(result, x0_traj_->value(kSimTime + time_step_),
+                              kTolerance));
 }
 
 }  // namespace

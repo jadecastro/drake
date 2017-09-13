@@ -128,9 +128,9 @@ void LinearModelPredictiveController<T>::CalcControl(
     std::cout << " inputs:\n" << current_input + input_ref << std::endl;
 
   } else {  // Regulate the system to the current trajectory value.
-    std::cout << " Time-varying case " << std::endl;
     const VectorX<T> state_ref = scheduled_model_->x0(t);
     std::cout << " state ref:\n" << state_ref << std::endl;
+    std::cout << " current state:\n" << current_state << std::endl;
     const Eigen::VectorXd current_input =
         SetupAndSolveQp(current_state, state_ref, t);
 
