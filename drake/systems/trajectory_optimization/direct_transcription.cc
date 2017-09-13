@@ -250,7 +250,7 @@ void DirectTranscription::AddAutodiffDynamicConstraints(
     // Add the dynamic constraints.
     auto constraint = std::make_shared<DiscreteTimeSystemConstraint>(
         *system_, context_.get(), discrete_state_.get(), input_port_value_,
-        num_states(), num_inputs(), i * fixed_timestep());
+        num_states(), num_inputs(), i * fixed_timestep() + context.get_time());
 
     AddConstraint(constraint, {input(i), state(i), state(i + 1)});
   }
