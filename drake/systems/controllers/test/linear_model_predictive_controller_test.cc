@@ -122,7 +122,7 @@ class CubicPolynomialSystem final : public LeafSystem<T> {
   // TODO(jadecastro) We know a discrete system of this format does not have
   // direct feedthrough, even though sparsity reports the opposite.  This is a
   // hack to patch in the correct result.
-  bool DoHasDirectFeedthrough(const SystemSymbolicInspector*, int, int) const
+  optional<bool> DoHasDirectFeedthrough(int, int) const
       override {
     return false;
   }
