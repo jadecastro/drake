@@ -288,8 +288,8 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
   }
   VectorX<T> f0(const T& t) const override {
     using std::max;
-    //    const T tprev = max(0., t - this->time_period());
-    return x0(t) - x0(t);
+    //const T tprev = max(0., t - this->time_period());
+    return VectorX<T>::Zero(C(t).rows()); //x0(t) - x0(tprev);
   }
   MatrixX<T> C(const T& t) const override {
     return C_->value(ExtractDoubleOrThrow(t));
@@ -298,7 +298,7 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
     return D_->value(ExtractDoubleOrThrow(t));
   }
   VectorX<T> y0(const T& t) const override {
-    return C(t) * x0(t) + D(t) * u0(t);
+    return VectorX<T>::Zero(C(t).rows()); //C(t) * x0(t) + D(t) * u0(t);
   }
 
  private:
