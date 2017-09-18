@@ -224,7 +224,7 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
       state_vector->set_value(state_ref);
 
       const VectorX<double> input_ref = u0_->value(t);
-      auto input_vector = std::make_unique<BasicVector<double>>(u0_->cols());
+      auto input_vector = std::make_unique<BasicVector<double>>(u0_->rows());
       input_vector->set_value(input_ref);
       base_context->SetInputPortValue(
           0, std::make_unique<FreestandingInputPortValue>(
@@ -300,6 +300,9 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
   VectorX<T> y0(const T& t) const override {
     return VectorX<T>::Zero(C(t).rows()); //C(t) * x0(t) + D(t) * u0(t);
   }
+
+  double start_time() const { return x0_->get_start_time(); }
+  double end_time() const { return x0_->get_end_time(); }
 
  private:
   // System<T> overrides.
