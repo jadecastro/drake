@@ -179,8 +179,10 @@ VectorX<T> LinearModelPredictiveController<T>::SetupAndSolveQp(
   // time step.
   const auto model_context = scheduled_model_->CreateDefaultContext();
   model_context->set_time(time);
+  const int trajectory_length =
+      (scheduled_model_->end_time() - time) / time_period_;
   DirectTranscription prog(scheduled_model_.get(), *model_context,
-                           kNumSampleTimes - time / time_period_);
+                           std::min(trajectory_length, kNumSampleTimes));
   // TODO Desire a tighter coupling between model_context's time and number of
   // samples.
 

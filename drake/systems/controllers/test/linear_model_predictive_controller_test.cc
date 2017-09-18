@@ -168,8 +168,6 @@ class TestMpcWithCubicSystem : public ::testing::Test {
   void MakeTimeVaryingMpcController() {
     EXPECT_NE(nullptr, system_);
 
-    auto context = system_->CreateDefaultContext();
-
     // Create trajectories for the states and inputs to force construction of
     // the time-varying MPC.
     const int kNumSampleTimes = (int)(time_horizon_ / time_step_ + 0.5);
