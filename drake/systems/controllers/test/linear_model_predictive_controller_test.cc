@@ -270,7 +270,7 @@ class TestMpcWithCubicSystem : public ::testing::Test {
 };
 
 TEST_F(TestMpcWithCubicSystem, TimeInvariantCase) {
-  const double kTolerance = 1e-10;
+  const double kTolerance = 1e-9;
   MakeControlledSystem(false /*is NOT time-varying */);
   Simulate(1.);
 
@@ -282,7 +282,7 @@ TEST_F(TestMpcWithCubicSystem, TimeInvariantCase) {
 }
 
 TEST_F(TestMpcWithCubicSystem, TimeVaryingCase) {
-  const double kTolerance = 1e-10;
+  const double kTolerance = 1e-9;
   const double kSimTime = 20 * time_step_;
 
   MakeControlledSystem(true /* is time varying */);

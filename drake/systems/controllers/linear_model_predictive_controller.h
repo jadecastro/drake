@@ -287,9 +287,7 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
     return B_->value(ExtractDoubleOrThrow(t));
   }
   VectorX<T> f0(const T& t) const override {
-    using std::max;
-    //const T tprev = max(0., t - this->time_period());
-    return VectorX<T>::Zero(C(t).rows()); //x0(t) - x0(tprev);
+    return VectorX<T>::Zero(C(t).rows());
   }
   MatrixX<T> C(const T& t) const override {
     return C_->value(ExtractDoubleOrThrow(t));
@@ -313,6 +311,7 @@ class TimeScheduledAffineSystem : public TimeVaryingAffineSystem<T> {
   }
 
   /*
+  // TODO(jadecastro) Enable:
   TimeScheduledAffineSystem<symbolic::Expression>* DoToSymbolic() const final {
     return new TimeScheduledAffineSystem<symbolic::Expression>(
         ClonePpt(*A_), ClonePpt(*B_), ClonePpt(*C_), ClonePpt(*D_),
