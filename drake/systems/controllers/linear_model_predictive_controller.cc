@@ -3,7 +3,6 @@
 #include <string>
 
 #include "drake/common/eigen_types.h"
-// #include "drake/common/proto/call_matlab.h"
 #include "drake/systems/trajectory_optimization/direct_transcription.h"
 
 namespace drake {
@@ -88,23 +87,6 @@ LinearModelPredictiveController<T>::LinearModelPredictiveController(
   DRAKE_DEMAND(symbolic_scheduled_model != nullptr);
   // TODO(jadecastro): We always asssume we start at t = 0 under this
   // scheme. Implement a state-dependent scheduling scheme.
-
-  // The following is unneeded in DirTran, since it punts on context.
-  /*
-  auto state_vector =
-      base_context_->get_mutable_discrete_state()->get_mutable_vector();
-  auto input_vector = std::make_unique<BasicVector<T>>(u0->cols());
-  const auto state_ref = x0->value(0);
-  state_vector->SetFromVector(state_ref);
-  const auto input_ref = u0->value(0);
-  input_vector->SetFromVector(input_ref);
-  base_context_->SetInputPortValue(
-      0,
-      std::make_unique<FreestandingInputPortValue>(
-          std::move(input_vector)));
-  */
-
-  
 }
 
 template <typename T>
@@ -113,8 +95,6 @@ void LinearModelPredictiveController<T>::CalcControl(
   const double t = context.get_time();
   const Eigen::VectorBlock<const VectorX<T>> current_state =
       this->EvalEigenVectorInput(context, state_input_index_);
-
-  std::cout << " time: " << context.get_time() << std::endl;
 
   if (base_context_ != nullptr) {  // Regulate to a fixed equilibrium.
     const Eigen::VectorXd current_input =
@@ -125,19 +105,14 @@ void LinearModelPredictiveController<T>::CalcControl(
         base_context_->EvalVectorInput(nullptr, descriptor)->CopyToVector();
 
     control->SetFromVector(current_input + input_ref);
-    std::cout << " inputs:\n" << current_input + input_ref << std::endl;
 
   } else {  // Regulate the system to the current trajectory value.
     const VectorX<T> state_ref = scheduled_model_->x0(t);
-    std::cout << " state ref:\n" << state_ref << std::endl;
-    std::cout << " current state:\n" << current_state << std::endl;
     const Eigen::VectorXd current_input =
         SetupAndSolveQp(current_state, state_ref, t);
 
     const VectorX<T> input_ref = scheduled_model_->u0(t);
-    std::cout << " input ref:\n" << input_ref << std::endl;
     control->SetFromVector(current_input + input_ref);
-    std::cout << " inputs:\n" << current_input + input_ref << std::endl;
   }
 }
 
@@ -148,35 +123,7 @@ VectorX<T> LinearModelPredictiveController<T>::SetupAndSolveQp(
   DRAKE_DEMAND(scheduled_model_ != nullptr);
 
   const int kNumSampleTimes = (int)(time_horizon_ / time_period_ + 0.5);
-  std::cout << " Num time samples: " << kNumSampleTimes << std::endl;
 
-  /*
-  MultipleShooting prog(
-      num_inputs_, num_states_, kNumSampleTimes, time_period_);
-
-  // Add dynamic constraint for the time-varying affine system.
-  const auto symbolic_model = linear_model->ToSymbolic();
-  DRAKE_DEMAND(symbolic_model != nullptr);
-  for (int i = 0; i < kNumSampleTimes - 1; i++) {
-    VectorX<symbolic::Expression> update = symbolic_model->discrete_update(0);
-    symbolic::Substitution sub;
-    sub.emplace(symbolic_model->time(), i * time_period_);
-    for (int j = 0; j < num_states_; j++) {
-      sub.emplace(symbolic_model->discrete_state(0)[j], prog.state(i)[j]);
-    }
-    for (int j = 0; j < num_inputs_; j++) {
-      sub.emplace(symbolic_model->input(0)[j], prog.input(i)[j]);
-    }
-    for (int j = 0; j < num_states_; j++) {
-      update(j) = update(j).Substitute(sub);
-    }
-    prog.AddLinearConstraint(prog.state(i + 1) == update);
-    prog.AddRunningCost();
-  }
-  */
-
-  // Needs to be reworked to include the base trajectory states/inputs at each
-  // time step.
   const auto model_context = scheduled_model_->CreateDefaultContext();
   model_context->set_time(time);
   const int trajectory_length =
@@ -194,41 +141,7 @@ VectorX<T> LinearModelPredictiveController<T>::SetupAndSolveQp(
 
   prog.AddLinearConstraint(prog.initial_state() == current_state - state_ref);
 
-  // Don't demand optimality.
-  const auto result = prog.Solve();
-  std::cout << " Solution Result: " << result << std::endl;
-
-  // Plot time histories for two of the states of the solution
-  // Note: see call_matlab.h for instructions on viewing the plot.
-  Eigen::VectorXd times = prog.GetSampleTimes();
-  Eigen::MatrixXd inputs = prog.GetInputSamples();
-  Eigen::MatrixXd states = prog.GetStateSamples();
-
-  std::cout << " state error:\n" << states.col(0) << std::endl;
-  std::cout << " input error:\n" << inputs.col(0) << std::endl;
-  std::cout << " states:\n" << states.col(0) + state_ref << std::endl;
-
-
-  for (int i{0}; i < times.size(); ++i) {
-    states(0,i) = states(0,i) + scheduled_model_->x0(times(i) + time)(0);
-    states(1,i) = states(1,i) + scheduled_model_->x0(times(i) + time)(1);
-    inputs(0,i) = inputs(0,i) + scheduled_model_->u0(times(i) + time)(0);
-  }
-
-/*
-  common::CallMatlab("figure");
-  common::CallMatlab("plot", times, states.row(0));
-  common::CallMatlab("xlabel", "time");
-  common::CallMatlab("ylabel", "x0");
-  //common::CallMatlab("figure");
-  //common::CallMatlab("plot", times, states.row(1));
-  //common::CallMatlab("xlabel", "time");
-  //common::CallMatlab("ylabel", "x1");
-  common::CallMatlab("figure");
-  common::CallMatlab("plot", times, inputs.row(0));
-  common::CallMatlab("xlabel", "time");
-  common::CallMatlab("ylabel", "u0");
-*/
+  DRAKE_DEMAND(prog.Solve() == solvers::SolutionResult::kSolutionFound);
 
   return prog.GetInputSamples().col(0);
 }
@@ -239,7 +152,6 @@ VectorX<T> LinearModelPredictiveController<T>::SetupAndSolveQp(
   DRAKE_DEMAND(linear_model_ != nullptr);
 
   const int kNumSampleTimes = (int)(time_horizon_ / time_period_ + 0.5);
-  std::cout << " Num time samples: " << kNumSampleTimes << std::endl;
 
   DirectTranscription prog(linear_model_.get(), *base_context_,
                            kNumSampleTimes);
@@ -255,27 +167,6 @@ VectorX<T> LinearModelPredictiveController<T>::SetupAndSolveQp(
   prog.AddLinearConstraint(prog.initial_state() == current_state - state_ref);
 
   DRAKE_DEMAND(prog.Solve() == solvers::SolutionResult::kSolutionFound);
-
-  // Plot time histories for two of the states of the solution
-  // Note: see call_matlab.h for instructions on viewing the plot.
-  /*
-  Eigen::VectorXd times = prog.GetSampleTimes();
-  Eigen::MatrixXd inputs = prog.GetInputSamples();
-  Eigen::MatrixXd states = prog.GetStateSamples();
-
-  std::cout << " state error:\n" << states.col(0) << std::endl;
-  std::cout << " input error:\n" << inputs.col(0) << std::endl;
-  std::cout << " states:\n" << states.col(0) + state_ref << std::endl;
-
-  common::CallMatlab("figure");
-  common::CallMatlab("plot", times, states.row(0));
-  common::CallMatlab("xlabel", "time");
-  common::CallMatlab("ylabel", "x0");
-  common::CallMatlab("figure");
-  common::CallMatlab("plot", times, states.row(1));
-  common::CallMatlab("xlabel", "time");
-  common::CallMatlab("ylabel", "x1");
-  */
 
   return prog.GetInputSamples().col(0);
 }
