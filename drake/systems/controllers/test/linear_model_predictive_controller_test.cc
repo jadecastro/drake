@@ -2,11 +2,12 @@
 
 #include <gtest/gtest.h>
 
-#include "drake/common/eigen_matrix_compare.h"
+#include "drake/common/test_utilities/eigen_matrix_compare.h"
 #include "drake/math/discrete_algebraic_riccati_equation.h"
 #include "drake/systems/analysis/simulator.h"
 #include "drake/systems/framework/diagram.h"
 #include "drake/systems/framework/diagram_builder.h"
+#include "drake/systems/framework/test_utilities/scalar_conversion.h"
 #include "drake/systems/primitives/linear_system.h"
 
 namespace drake {
@@ -15,6 +16,38 @@ namespace controllers {
 namespace {
 
 using math::DiscreteAlgebraicRiccatiEquation;
+
+GTEST_TEST(TestTimeScheduledPiecewiseAffine, ToAutoDiff) {
+  const double kTimeStep = 0.1;
+
+  const std::vector<Eigen::Vector2d> x0(10, Eigen::Vector2d::Zero());
+  auto x0 = std::make_unique<PiecewisePolynomialTrajectory>(
+      PiecewisePolynomial<double>::FirstOrderHold(times, x0_vector));
+  const std::vector<Eigen::Vector1d> u0(10, Eigen::Vector1d::Zero());
+  auto u0 = std::make_unique<PiecewisePolynomialTrajectory>(
+      PiecewisePolynomial<double>::FirstOrderHold(times, u0_vector));
+
+  Eigen::Matrix2d A;
+  Eigen::Vector2d B;
+  A << 1, 0.1, 0, 1;
+  B << 0.005, 0.1;
+  const auto C = Eigen::Matrix<double, 2, 2>::Identity();
+  const auto D = Eigen::Matrix<double, 2, 1>::Zero();
+
+  std::unique_ptr<LinearSystem<double>> system =
+      std::make_unique<LinearSystem<double>>(A, B, C, D, kTimeStep);
+
+  const auto dut = std::make_unique<TimeScheduledAffineSystem<double>>(
+      *system, std::move(x0), std::move(u0), kTimeStep);
+  EXPECT_TRUE(is_autodiffxd_convertible(*dut, [&](const auto& converted) {
+        EXPECT_EQ(converted.A(), A_);
+        EXPECT_EQ(converted.B(), B_);
+        EXPECT_EQ(converted.f0(), f0_);
+        EXPECT_EQ(converted.C(), C_);
+        EXPECT_EQ(converted.D(), D_);
+        EXPECT_EQ(converted.y0(), y0_);
+      }));
+}
 
 class TestMpcWithDoubleIntegrator : public ::testing::Test {
  protected:
@@ -83,12 +116,15 @@ TEST_F(TestMpcWithDoubleIntegrator, TestAgainstInfiniteHorizonSolution) {
 
 namespace {
 
+
 // A discrete-time cubic polynomial system.
 template <typename T>
 class CubicPolynomialSystem final : public LeafSystem<T> {
  public:
   explicit CubicPolynomialSystem(double time_step)
-      : time_step_(time_step) {
+      : LeafSystem<T>(
+            SystemTypeTag<systems::controllers::CubicPolynomialSystem>{}),
+        time_step_(time_step) {
     this->DeclareInputPort(systems::kVectorValued, 1);
     this->DeclareVectorOutputPort(BasicVector<T>(2),
                                   &CubicPolynomialSystem::OutputState);
@@ -96,9 +132,15 @@ class CubicPolynomialSystem final : public LeafSystem<T> {
     this->DeclarePeriodicDiscreteUpdate(time_step);
   }
 
+  template <typename U>
+  CubicPolynomialSystem(const CubicPolynomialSystem<U>& other)
+      : CubicPolynomialSystem(other.time_step_) {}
+
  private:
-  // x1(k+1) = x1(k) + u(k)
-  // x2(k+1) = x1(k) + x1³(k)
+  template <typename> friend class CubicPolynomialSystem;
+
+  // x1(k+1) = u(k)
+  // x2(k+1) = -x1³(k)
   void DoCalcDiscreteVariableUpdates(
       const Context<T>& context,
       const std::vector<const DiscreteUpdateEvent<T>*>&,
@@ -106,24 +148,19 @@ class CubicPolynomialSystem final : public LeafSystem<T> {
     using std::pow;
     const T& x1 = context.get_discrete_state(0)->get_value()[0];
     const T& u = this->EvalVectorInput(context, 0)->get_value()[0];
-    next_state->get_mutable_vector(0)->SetAtIndex(0, x1 + u);
-    next_state->get_mutable_vector(0)->SetAtIndex(1, x1 + pow(x1, 3.));
+    next_state->get_mutable_vector(0)->SetAtIndex(0, u);
+    next_state->get_mutable_vector(0)->SetAtIndex(1, pow(x1, 3.));
   }
 
-  void OutputState(const systems::Context<T>& context, BasicVector<T>* output)
-      const {
+  void OutputState(const systems::Context<T>& context,
+                   BasicVector<T>* output) const {
     output->set_value(context.get_discrete_state(0)->get_value());
-  }
-
-  CubicPolynomialSystem<AutoDiffXd>* DoToAutoDiffXd() const override {
-    return new CubicPolynomialSystem<AutoDiffXd>(time_step_);
   }
 
   // TODO(jadecastro) We know a discrete system of this format does not have
   // direct feedthrough, even though sparsity reports the opposite.  This is a
   // hack to patch in the correct result.
-  optional<bool> DoHasDirectFeedthrough(int, int) const
-      override {
+  optional<bool> DoHasDirectFeedthrough(int, int) const override {
     return false;
   }
 

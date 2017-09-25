@@ -79,8 +79,7 @@ LinearModelPredictiveController<T>::LinearModelPredictiveController(
     : LinearModelPredictiveController(std::move(model), nullptr, Q, R,
                                       time_period, time_horizon) {
   const auto eq_model =
-      std::make_unique<EquilibriumSystem<double>>(std::move(model_),
-                                                  time_period_);
+      std::make_unique<EquilibriumSystem<double>>(*model_, time_period_);
   scheduled_model_.reset(new TimeScheduledAffineSystem<T>(
       *eq_model, std::move(x0), std::move(u0), time_period_));
   const auto symbolic_scheduled_model = scheduled_model_->ToAutoDiffXd();
@@ -100,9 +99,8 @@ void LinearModelPredictiveController<T>::CalcControl(
     const Eigen::VectorXd current_input =
         SetupAndSolveQp(*base_context_, current_state);
 
-    InputPortDescriptor<double> descriptor(nullptr, 0, kVectorValued, 0);
     const VectorX<T> input_ref =
-        base_context_->EvalVectorInput(nullptr, descriptor)->CopyToVector();
+        model_->EvalEigenVectorInput(*base_context_, 0);
 
     control->SetFromVector(current_input + input_ref);
 
@@ -128,6 +126,9 @@ VectorX<T> LinearModelPredictiveController<T>::SetupAndSolveQp(
   model_context->set_time(time);
   const int trajectory_length =
       (scheduled_model_->end_time() - time) / time_period_;
+
+  // CreateBinding(std::make_shared<LinearEqualityConstraint>(A, beq), vars);
+
   DirectTranscription prog(scheduled_model_.get(), *model_context,
                            std::min(trajectory_length, kNumSampleTimes));
   // TODO Desire a tighter coupling between model_context's time and number of
