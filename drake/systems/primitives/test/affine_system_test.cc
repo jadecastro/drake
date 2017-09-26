@@ -213,42 +213,53 @@ GTEST_TEST(DiscreteAffineSystemTest, DiscreteTime) {
 }
 
 // xdot = rotmat(t)*x, y = x;
-class SimpleTimeVaryingAffineSystem : public TimeVaryingAffineSystem<double> {
+template <typename T>
+class SimpleTimeVaryingAffineSystem : public TimeVaryingAffineSystem<T> {
  public:
   static constexpr int kNumStates = 2;
   static constexpr int kNumInputs = 1;
   static constexpr int kNumOutputs = 2;
 
   explicit SimpleTimeVaryingAffineSystem(double time_period)
-      : TimeVaryingAffineSystem(
-            SystemScalarConverter{},  // BR
+      : TimeVaryingAffineSystem<T>(
+            SystemTypeTag<systems::SimpleTimeVaryingAffineSystem>{},
             kNumStates, kNumInputs, kNumOutputs, time_period) {}
   ~SimpleTimeVaryingAffineSystem() override {}
 
-  Eigen::MatrixXd A(const double& t) const override {
-    Eigen::Matrix<double, kNumOutputs, kNumStates> mat;
-    mat << std::cos(t), -std::sin(t), std::sin(t), std::cos(t);
+  /// Scalar-converting copy constructor.  See @ref system_scalar_conversion.
+  template <typename U>
+  explicit SimpleTimeVaryingAffineSystem(
+      const SimpleTimeVaryingAffineSystem<U>& other)
+      : SimpleTimeVaryingAffineSystem(other.time_period()) {}
+
+  MatrixX<T> A(const T& t) const override {
+    using std::cos;
+    using std::sin;
+
+    Eigen::Matrix<T, kNumOutputs, kNumStates> mat;
+    mat << cos(t), -sin(t), sin(t), cos(t);
     return mat;
   }
-  Eigen::MatrixXd B(const double& t) const override {
-    return Eigen::Matrix<double, kNumOutputs, kNumInputs>::Ones();
+  MatrixX<T> B(const T& t) const override {
+    return Eigen::Matrix<T, kNumStates, kNumInputs>::Ones();
   }
-  Eigen::VectorXd f0(const double& t) const override {
-    return Eigen::Matrix<double, kNumOutputs, 1>::Zero();
+  VectorX<T> f0(const T& t) const override {
+    return Eigen::Matrix<T, kNumStates, 1>::Zero();
   }
-  Eigen::MatrixXd C(const double& t) const override {
-    return Eigen::Matrix2d::Identity();
+  MatrixX<T> C(const T& t) const override {
+    return Eigen::Matrix<T, kNumOutputs, kNumStates>::Identity();
   }
-  Eigen::MatrixXd D(const double& t) const override {
-    return Eigen::Matrix<double, kNumOutputs, kNumInputs>::Ones();
+  MatrixX<T> D(const T& t) const override {
+    return Eigen::Matrix<T, kNumOutputs, kNumInputs>::Ones();
   }
-  Eigen::VectorXd y0(const double& t) const override {
-    return Eigen::Matrix<double, kNumOutputs, 1>::Ones();
+  VectorX<T> y0(const T& t) const override {
+    return Eigen::Matrix<T, kNumOutputs, 1>::Ones();
   }
 };
 
 GTEST_TEST(SimpleTimeVaryingAffineSystemTest, EvalTest) {
-  SimpleTimeVaryingAffineSystem sys(0.0);  // A continuous-time system.
+  const SimpleTimeVaryingAffineSystem<double> sys(0.0);  // A continuous-time
+                                                         // system.
   const double t = 2.5;
   Eigen::Vector2d x(1, 2);
 
@@ -269,7 +280,8 @@ GTEST_TEST(SimpleTimeVaryingAffineSystemTest, EvalTest) {
 }
 
 GTEST_TEST(SimpleTimeVaryingAffineSystemTest, DiscreteEvalTest) {
-  SimpleTimeVaryingAffineSystem sys(1.0);  // A discrete-time system.
+  const SimpleTimeVaryingAffineSystem<double> sys(1.0);  // A discrete-time
+                                                         // system.
   const double t = 2.5;
   Eigen::Vector2d x(1, 2);
 
@@ -289,11 +301,34 @@ GTEST_TEST(SimpleTimeVaryingAffineSystemTest, DiscreteEvalTest) {
                               output->get_vector_data(0)->CopyToVector()));
 }
 
+// Tests converting to different scalar types.
+GTEST_TEST(SimpleTimeVaryingAffineSystemTest, ConvertScalarType) {
+  const SimpleTimeVaryingAffineSystem<double> sys(1.0);
+  EXPECT_TRUE(is_autodiffxd_convertible(sys, [&](const auto& converted) {
+        EXPECT_EQ(converted.A(0.), sys.A(0.));
+        EXPECT_EQ(converted.B(0.), sys.B(0.));
+        EXPECT_EQ(converted.f0(0.), sys.f0(0.));
+        EXPECT_EQ(converted.C(0.), sys.C(0.));
+        EXPECT_EQ(converted.D(0.), sys.D(0.));
+        EXPECT_EQ(converted.y0(0.), sys.y0(0.));
+      }));
+  EXPECT_TRUE(is_symbolic_convertible(sys, [&](const auto& converted) {
+        EXPECT_EQ(converted.A(0.), sys.A(0.));
+        EXPECT_EQ(converted.B(0.), sys.B(0.));
+        EXPECT_EQ(converted.f0(0.), sys.f0(0.));
+        EXPECT_EQ(converted.C(0.), sys.C(0.));
+        EXPECT_EQ(converted.D(0.), sys.D(0.));
+        EXPECT_EQ(converted.y0(0.), sys.y0(0.));
+      }));
+}
+
 // Checks that a time-varying affine system will fail if the matrices do not
 // match the specified number of states.
-class IllegalTimeVaryingAffineSystem : public SimpleTimeVaryingAffineSystem {
+class IllegalTimeVaryingAffineSystem
+    : public SimpleTimeVaryingAffineSystem<double> {
  public:
-  IllegalTimeVaryingAffineSystem() : SimpleTimeVaryingAffineSystem(0.0) {}
+  IllegalTimeVaryingAffineSystem()
+      : SimpleTimeVaryingAffineSystem<double>(0.0) {}
   ~IllegalTimeVaryingAffineSystem() override {}
 
   Eigen::MatrixXd A(const double& t) const override {
