@@ -18,12 +18,21 @@ namespace {
 using math::DiscreteAlgebraicRiccatiEquation;
 
 GTEST_TEST(TestTimeScheduledPiecewiseAffine, ToAutoDiff) {
+
+  //TODO Test fixture!!
+
+  const int kNumSampleTimes = 10;
   const double kTimeStep = 0.1;
 
-  const std::vector<Eigen::Vector2d> x0(10, Eigen::Vector2d::Zero());
+  std::vector<double> times(kNumSampleTimes);
+  std::iota(std::begin(times), std::end(times), 0);  // Monitonically-increasing
+                                                     // vector.
+  const std::vector<Eigen::Matrix<double, -1, -1>> x0_vector(
+      kNumSampleTimes, Eigen::Vector2d::Zero());
   auto x0 = std::make_unique<PiecewisePolynomialTrajectory>(
       PiecewisePolynomial<double>::FirstOrderHold(times, x0_vector));
-  const std::vector<Eigen::Vector1d> u0(10, Eigen::Vector1d::Zero());
+  const std::vector<Eigen::Matrix<double, -1, -1>> u0_vector(
+      kNumSampleTimes, Vector1d::Zero());
   auto u0 = std::make_unique<PiecewisePolynomialTrajectory>(
       PiecewisePolynomial<double>::FirstOrderHold(times, u0_vector));
 
@@ -36,16 +45,21 @@ GTEST_TEST(TestTimeScheduledPiecewiseAffine, ToAutoDiff) {
 
   std::unique_ptr<LinearSystem<double>> system =
       std::make_unique<LinearSystem<double>>(A, B, C, D, kTimeStep);
+  const auto eq_model =
+      std::make_unique<EquilibriumSystem<double>>(*system, kTimeStep);
 
   const auto dut = std::make_unique<TimeScheduledAffineSystem<double>>(
-      *system, std::move(x0), std::move(u0), kTimeStep);
+      *eq_model, std::move(x0), std::move(u0), kTimeStep);
+
   EXPECT_TRUE(is_autodiffxd_convertible(*dut, [&](const auto& converted) {
-        EXPECT_EQ(converted.A(), A_);
-        EXPECT_EQ(converted.B(), B_);
-        EXPECT_EQ(converted.f0(), f0_);
-        EXPECT_EQ(converted.C(), C_);
-        EXPECT_EQ(converted.D(), D_);
-        EXPECT_EQ(converted.y0(), y0_);
+        EXPECT_EQ(converted.x0(0.), x0->value(0.));
+        EXPECT_EQ(converted.u0(0.), u0->value(0.));
+        EXPECT_EQ(converted.A(0.), A);
+        EXPECT_EQ(converted.B(0.), B);
+        EXPECT_EQ(converted.f0(0.), VectorX<double>::Zero(C.rows()));
+        EXPECT_EQ(converted.C(0.), C);
+        EXPECT_EQ(converted.D(0.), D);
+        EXPECT_EQ(converted.y0(0.), VectorX<double>::Zero(C.rows()));
       }));
 }
 

@@ -205,12 +205,28 @@ class EquilibriumSystem final : public LeafSystem<T> {
 
 namespace {
 
-// A helper for making deepcopies of a PiecewisePolynomialTrajectory.
-inline std::unique_ptr<PiecewisePolynomialTrajectory> ClonePpt(
-    const PiecewisePolynomialTrajectory& ppt) {
-  const PiecewisePolynomial<double>& pp = ppt.get_piecewise_polynomial();
-  return std::make_unique<PiecewisePolynomialTrajectory>(pp);
-}
+struct TimeVaryingData {
+  /// Default constructor.
+  TimeVaryingData() = default;
+  /// Fully-parameterized constructor.
+  TimeVaryingData(const PiecewisePolynomialTrajectory& Ain,
+                  const PiecewisePolynomialTrajectory& Bin,
+                  const PiecewisePolynomialTrajectory& Cin,
+                  const PiecewisePolynomialTrajectory& Din,
+                  const PiecewisePolynomialTrajectory& x0_in,
+                  const PiecewisePolynomialTrajectory& u0_in)
+      : A(Ain), B(Bin), C(Cin), D(Din), x0(x0_in), u0(u0_in) {}
+
+  //  TimeVaryingData(const TimeVaryingData& data)
+  //    : A(data.A), B(data.B), C(data.C), D(data.D), x0(data.x0), u0(data.u0) {}
+
+  PiecewisePolynomialTrajectory A{PiecewisePolynomial<double>()};
+  PiecewisePolynomialTrajectory B{PiecewisePolynomial<double>()};
+  PiecewisePolynomialTrajectory C{PiecewisePolynomial<double>()};
+  PiecewisePolynomialTrajectory D{PiecewisePolynomial<double>()};
+  PiecewisePolynomialTrajectory x0{PiecewisePolynomial<double>()};
+  PiecewisePolynomialTrajectory u0{PiecewisePolynomial<double>()};
+};
 
 }  // namespace
 
@@ -233,115 +249,60 @@ class TimeScheduledAffineSystem final : public TimeVaryingAffineSystem<T> {
                             std::unique_ptr<PiecewisePolynomialTrajectory> x0,
                             std::unique_ptr<PiecewisePolynomialTrajectory> u0,
                             double time_period)
-      : TimeVaryingAffineSystem<T>(SystemScalarConverter{}, x0->rows(),
-                                   u0->rows(), model.get_output_port(0).size(),
-                                   time_period) {
-    // Check x0, u0 against the model.
-
-    x0_ = std::move(x0);
-    u0_ = std::move(u0);
-
-    const std::vector<double> times =
-        x0_->get_piecewise_polynomial().getSegmentTimes();
-    std::vector<MatrixX<double>> A_vector{};
-    std::vector<MatrixX<double>> B_vector{};
-    std::vector<MatrixX<double>> C_vector{};
-    std::vector<MatrixX<double>> D_vector{};
-    for (auto t : times) {
-      std::unique_ptr<Context<double>> base_context =
-          model.CreateDefaultContext();
-      auto state_vector =
-          base_context->get_mutable_discrete_state()->get_mutable_vector();
-
-      const VectorX<double> state_ref = x0_->value(t);
-      state_vector->set_value(state_ref);
-
-      const VectorX<double> input_ref = u0_->value(t);
-      auto input_vector = std::make_unique<BasicVector<double>>(u0_->rows());
-      input_vector->set_value(input_ref);
-      base_context->SetInputPortValue(
-          0, std::make_unique<FreestandingInputPortValue>(
-                 std::move(input_vector)));
-
-      // Set parameters to obtain a linearization about a non-equilibrium
-      // condition.
-      SetBaseDerivativesAt(model, base_context.get());
-
-      const std::unique_ptr<LinearSystem<double>> linear_model =
-          Linearize(model, *base_context);
-
-      A_vector.emplace_back(linear_model->A());
-      B_vector.emplace_back(linear_model->B());
-      C_vector.emplace_back(linear_model->C());
-      D_vector.emplace_back(linear_model->D());
-    }
-
-    // Create matrices for a piecewise-linear system.
-    A_.reset(new PiecewisePolynomialTrajectory(
-        PiecewisePolynomial<double>::FirstOrderHold(times, A_vector)));
-    B_.reset(new PiecewisePolynomialTrajectory(
-        PiecewisePolynomial<double>::FirstOrderHold(times, B_vector)));
-    C_.reset(new PiecewisePolynomialTrajectory(
-        PiecewisePolynomial<double>::FirstOrderHold(times, C_vector)));
-    D_.reset(new PiecewisePolynomialTrajectory(
-        PiecewisePolynomial<double>::FirstOrderHold(times, D_vector)));
-  }
-
-  TimeScheduledAffineSystem(std::unique_ptr<PiecewisePolynomialTrajectory> A,
-                            std::unique_ptr<PiecewisePolynomialTrajectory> B,
-                            std::unique_ptr<PiecewisePolynomialTrajectory> C,
-                            std::unique_ptr<PiecewisePolynomialTrajectory> D,
-                            std::unique_ptr<PiecewisePolynomialTrajectory> x0,
-                            std::unique_ptr<PiecewisePolynomialTrajectory> u0,
-                            double time_period)
-      : TimeVaryingAffineSystem<T>(
+      : TimeScheduledAffineSystem<T>(
             SystemTypeTag<systems::controllers::TimeScheduledAffineSystem>{},
-            A->rows(), B->cols(), C->rows(), time_period) {
-    A_ = std::move(A);
-    B_ = std::move(B);
-    C_ = std::move(C);
-    D_ = std::move(D);
-    x0_ = std::move(x0);
-    u0_ = std::move(u0);
-  }
+            data_(MakeTimeVaryingData(model, *x0, *u0)), time_period) {}
+
+  TimeScheduledAffineSystem(const TimeVaryingData& data, double time_period)
+      : TimeScheduledAffineSystem<T>(
+            SystemTypeTag<systems::controllers::TimeScheduledAffineSystem>{},
+            data_(data),
+            //data_(data.A, data.B, data.C, data.D, data.x0, data.u0),
+            time_period) {}
 
   ~TimeScheduledAffineSystem() override {}
 
   template <typename U>
   TimeScheduledAffineSystem(const TimeScheduledAffineSystem<U>& other)
-      : TimeScheduledAffineSystem(ClonePpt(*other.A_), ClonePpt(*other.B_),
-                                  ClonePpt(*other.C_), ClonePpt(*other.D_),
-                                  ClonePpt(*other.x0_), ClonePpt(*other.u0_),
-                                  other.time_period()) {}
+      : TimeScheduledAffineSystem(other.data_, other.time_period()) {}
 
   VectorX<T> x0(const T& t) const {
-    return x0_->value(ExtractDoubleOrThrow(t));
+    return data_.x0.value(ExtractDoubleOrThrow(t));
   }
   VectorX<T> u0(const T& t) const {
-    return u0_->value(ExtractDoubleOrThrow(t));
+    return data_.u0.value(ExtractDoubleOrThrow(t));
   }
 
   MatrixX<T> A(const T& t) const override {
-    return A_->value(ExtractDoubleOrThrow(t));
+    return data_.A.value(ExtractDoubleOrThrow(t));
   }
   MatrixX<T> B(const T& t) const override {
-    return B_->value(ExtractDoubleOrThrow(t));
+    return data_.B.value(ExtractDoubleOrThrow(t));
   }
   VectorX<T> f0(const T& t) const override {
-    return VectorX<T>::Zero(C(t).rows());
+    return VectorX<T>::Zero(C(t).rows());  // <-- Replace with num_outputs.
   }
   MatrixX<T> C(const T& t) const override {
-    return C_->value(ExtractDoubleOrThrow(t));
+    return data_.C.value(ExtractDoubleOrThrow(t));
   }
   MatrixX<T> D(const T& t) const override {
-    return D_->value(ExtractDoubleOrThrow(t));
+    return data_.D.value(ExtractDoubleOrThrow(t));
   }
   VectorX<T> y0(const T& t) const override {
     return VectorX<T>::Zero(C(t).rows());  // C(t) * x0(t) + D(t) * u0(t);
   }
 
-  double start_time() const { return x0_->get_start_time(); }
-  double end_time() const { return x0_->get_end_time(); }
+  double start_time() const { return data_.x0.get_start_time(); }
+  double end_time() const { return data_.x0.get_end_time(); }
+
+ protected:
+  TimeScheduledAffineSystem(SystemScalarConverter converter,
+                            const TimeVaryingData& data,
+                            double time_period)
+      : TimeVaryingAffineSystem<T>(
+            std::move(converter), data.A.rows(), data.B.cols(), data.C.rows(),
+            time_period),
+        data_(data) {}
 
  private:
   template <typename>
@@ -372,14 +333,67 @@ class TimeScheduledAffineSystem final : public TimeVaryingAffineSystem<T> {
     }
   }
 
-  // Nominal (reference) trajectories.
-  std::unique_ptr<PiecewisePolynomialTrajectory> A_;
-  std::unique_ptr<PiecewisePolynomialTrajectory> B_;
-  std::unique_ptr<PiecewisePolynomialTrajectory> C_;
-  std::unique_ptr<PiecewisePolynomialTrajectory> D_;
+  const TimeVaryingData MakeTimeVaryingData(
+      const EquilibriumSystem<double>& model,
+      const PiecewisePolynomialTrajectory& x0,
+      const PiecewisePolynomialTrajectory& u0) {
+    // TODO(jadecastro) Check x0, u0 against the model.
 
-  std::unique_ptr<PiecewisePolynomialTrajectory> x0_;
-  std::unique_ptr<PiecewisePolynomialTrajectory> u0_;
+    TimeVaryingData result;
+    result.x0 = x0;
+    result.u0 = u0;
+
+    const std::vector<double> times =
+        result.x0.get_piecewise_polynomial().getSegmentTimes();
+    std::vector<MatrixX<double>> A_vector{};
+    std::vector<MatrixX<double>> B_vector{};
+    std::vector<MatrixX<double>> C_vector{};
+    std::vector<MatrixX<double>> D_vector{};
+    for (auto t : times) {
+      std::unique_ptr<Context<double>> base_context =
+          model.CreateDefaultContext();
+      auto state_vector =
+          base_context->get_mutable_discrete_state()->get_mutable_vector();
+
+      const VectorX<double> state_ref = result.x0.value(t);
+      state_vector->set_value(state_ref);
+
+      const VectorX<double> input_ref = result.u0.value(t);
+      auto input_vector =
+          std::make_unique<BasicVector<double>>(result.u0.rows());
+      input_vector->set_value(input_ref);
+      base_context->SetInputPortValue(
+          0, std::make_unique<FreestandingInputPortValue>(
+              std::move(input_vector)));
+
+      // Set parameters to obtain a linearization about a non-equilibrium
+      // condition.
+      SetBaseDerivativesAt(model, base_context.get());
+
+      const std::unique_ptr<LinearSystem<double>> linear_model =
+          Linearize(model, *base_context);
+
+      A_vector.emplace_back(linear_model->A());
+      B_vector.emplace_back(linear_model->B());
+      C_vector.emplace_back(linear_model->C());
+      D_vector.emplace_back(linear_model->D());
+    }
+
+    // Create matrices for a piecewise-linear system.
+    result.A = PiecewisePolynomialTrajectory(
+        PiecewisePolynomial<double>::FirstOrderHold(times, A_vector));
+    result.B = PiecewisePolynomialTrajectory(
+        PiecewisePolynomial<double>::FirstOrderHold(times, B_vector));
+    result.C = PiecewisePolynomialTrajectory(
+        PiecewisePolynomial<double>::FirstOrderHold(times, C_vector));
+    result.D = PiecewisePolynomialTrajectory(
+        PiecewisePolynomial<double>::FirstOrderHold(times, D_vector));
+
+    return result;
+  }
+
+  // Nominal (reference) trajectories.
+  const TimeVaryingData data_;
 };
 
 // TODO(jadecastro) Throw if output doesn't match states.

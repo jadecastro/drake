@@ -222,6 +222,7 @@ drake_cc_googletest(
         "//drake/common/test_utilities:eigen_matrix_compare",
         "//drake/math:discrete_algebraic_riccati_equation",
         "//drake/systems/analysis:simulator",
+        "//drake/systems/framework/test_utilities",
     ],
 )
 

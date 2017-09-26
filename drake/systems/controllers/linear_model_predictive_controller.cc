@@ -78,6 +78,8 @@ LinearModelPredictiveController<T>::LinearModelPredictiveController(
     const Eigen::MatrixXd& R, double time_period, double time_horizon)
     : LinearModelPredictiveController(std::move(model), nullptr, Q, R,
                                       time_period, time_horizon) {
+  // TODO Collapse these two operations into one, possibly in a class that
+  // limits visibility of the two Systems.
   const auto eq_model =
       std::make_unique<EquilibriumSystem<double>>(*model_, time_period_);
   scheduled_model_.reset(new TimeScheduledAffineSystem<T>(
