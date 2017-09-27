@@ -118,8 +118,8 @@ void LinearModelPredictiveController<T>::CalcControl(
 
 template <typename T>
 VectorX<T> LinearModelPredictiveController<T>::SetupAndSolveQp(
-    const VectorX<T>& current_state, const VectorX<T>& state_ref, const T& time)
-    const {
+    const VectorX<T>& current_state, const VectorX<T>& state_ref,
+    const T& time) const {
   DRAKE_DEMAND(scheduled_model_ != nullptr);
 
   const int kNumSampleTimes = (int)(time_horizon_ / time_period_ + 0.5);

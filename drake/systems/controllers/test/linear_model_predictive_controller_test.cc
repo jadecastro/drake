@@ -17,9 +17,8 @@ namespace {
 
 using math::DiscreteAlgebraicRiccatiEquation;
 
-GTEST_TEST(TestTimeScheduledPiecewiseAffine, ToAutoDiff) {
-
-  //TODO Test fixture!!
+GTEST_TEST(TestTimeScheduledPiecewiseAffine, EquilibriumSystem) {
+  // TODO Test fixture!!
 
   const int kNumSampleTimes = 10;
   const double kTimeStep = 0.1;
@@ -31,8 +30,8 @@ GTEST_TEST(TestTimeScheduledPiecewiseAffine, ToAutoDiff) {
       kNumSampleTimes, Eigen::Vector2d::Zero());
   auto x0 = std::make_unique<PiecewisePolynomialTrajectory>(
       PiecewisePolynomial<double>::FirstOrderHold(times, x0_vector));
-  const std::vector<Eigen::Matrix<double, -1, -1>> u0_vector(
-      kNumSampleTimes, Vector1d::Zero());
+  const std::vector<Eigen::Matrix<double, -1, -1>> u0_vector(kNumSampleTimes,
+                                                             Vector1d::Zero());
   auto u0 = std::make_unique<PiecewisePolynomialTrajectory>(
       PiecewisePolynomial<double>::FirstOrderHold(times, u0_vector));
 
@@ -47,45 +46,22 @@ GTEST_TEST(TestTimeScheduledPiecewiseAffine, ToAutoDiff) {
       std::make_unique<LinearSystem<double>>(A, B, C, D, kTimeStep);
   const auto eq_system =
       std::make_unique<EquilibriumSystem<double>>(*system, kTimeStep);
-  std::cout << " Test: TimeScheduledAffineSystem " << std::endl;
 
-  std::cout << " Test: states " << system->CreateDefaultContext()->get_continuous_state()->CopyToVector() << std::endl;
   const auto eq_context = eq_system->CreateDefaultContext();
   eq_context->FixInputPort(0, u0->value(0.));
-  std::cout << " Test: SetFromVector " << eq_context->get_continuous_state()->CopyToVector() << std::endl;
-  eq_context->get_mutable_continuous_state()->SetFromVector(
-      x0->value(0.));
-  std::cout << " Test: AllocateTimeDerivatives " << std::endl;
-  auto derivatives = eq_system->AllocateTimeDerivatives();
-  eq_system->CalcTimeDerivatives(*eq_context, derivatives.get());
-  EXPECT_TRUE(CompareMatrices(derivatives->CopyToVector(),
+  eq_context->get_mutable_discrete_state(0)->SetFromVector(x0->value(0.));
+  auto updates = eq_context->get_mutable_discrete_state();
+  eq_system->CalcDiscreteVariableUpdates(*eq_context, updates);
+  EXPECT_TRUE(CompareMatrices(updates->get_vector()->CopyToVector(),
                               A * x0->value(0.) + B * u0->value(0.)));
-
-  std::cout << " Test: Is AutoDiff Convertible " << std::endl;
-  EXPECT_TRUE(is_autodiffxd_convertible(*eq_system,
-                                        [&](const auto& converted) {}));
-
-  const auto scheduled_model =
-      std::make_unique<TimeScheduledAffineSystem<double>>(
-          *eq_system, std::move(x0), std::move(u0), kTimeStep);
-
-  EXPECT_TRUE(is_autodiffxd_convertible(
-      *scheduled_model, [&](const auto& converted) {
-        EXPECT_EQ(converted.x0(0.), x0->value(0.));
-        EXPECT_EQ(converted.u0(0.), u0->value(0.));
-        EXPECT_EQ(converted.A(0.), A);
-        EXPECT_EQ(converted.B(0.), B);
-        EXPECT_EQ(converted.f0(0.), VectorX<double>::Zero(C.rows()));
-        EXPECT_EQ(converted.C(0.), C);
-        EXPECT_EQ(converted.D(0.), D);
-        EXPECT_EQ(converted.y0(0.), VectorX<double>::Zero(C.rows()));
-      }));
+  EXPECT_TRUE(
+      is_autodiffxd_convertible(*eq_system, [&](const auto& converted) {}));
 }
 
 class TestMpcWithDoubleIntegrator : public ::testing::Test {
  protected:
   void SetUp() override {
-    const double kTimeStep = 0.1;  // discrete time step.
+    const double kTimeStep = 0.1;     // discrete time step.
     const double kTimeHorizon = 10.;  // Time horizon.
 
     // A discrete approximation of a double integrator.
@@ -104,7 +80,7 @@ class TestMpcWithDoubleIntegrator : public ::testing::Test {
     const Vector1d u0 = Vector1d::Zero();
 
     std::unique_ptr<Context<double>> system_context =
-         system->CreateDefaultContext();
+        system->CreateDefaultContext();
     system_context->FixInputPort(0, u0);
     system_context->get_mutable_discrete_state(0)->SetFromVector(x0);
 
@@ -149,7 +125,6 @@ TEST_F(TestMpcWithDoubleIntegrator, TestAgainstInfiniteHorizonSolution) {
 
 namespace {
 
-
 // A discrete-time cubic polynomial system.
 template <typename T>
 class CubicPolynomialSystem final : public LeafSystem<T> {
@@ -170,7 +145,8 @@ class CubicPolynomialSystem final : public LeafSystem<T> {
       : CubicPolynomialSystem(other.time_step_) {}
 
  private:
-  template <typename> friend class CubicPolynomialSystem;
+  template <typename>
+  friend class CubicPolynomialSystem;
 
   // x1(k+1) = u(k)
   // x2(k+1) = -x1³(k)
@@ -209,8 +185,8 @@ class TestMpcWithCubicSystem : public ::testing::Test {
  protected:
   // TODO(jadecastro): Incorporate into Diagram -- I find myself using this
   // frequently.
-  const System<double>& GetSystemByName(
-      std::string name, const Diagram<double>& diagram) {
+  const System<double>& GetSystemByName(std::string name,
+                                        const Diagram<double>& diagram) {
     const System<double>* result{nullptr};
     for (const System<double>* system : diagram.GetSystems()) {
       if (system->get_name() == name) result = system;
@@ -277,8 +253,7 @@ class TestMpcWithCubicSystem : public ::testing::Test {
     EXPECT_FALSE(system_->HasAnyDirectFeedthrough());
 
     DiagramBuilder<double> builder;
-    auto cubic_system =
-        builder.AddSystem<CubicPolynomialSystem>(time_step_);
+    auto cubic_system = builder.AddSystem<CubicPolynomialSystem>(time_step_);
     cubic_system->set_name("cubic_system");
 
     if (is_time_varying) {
