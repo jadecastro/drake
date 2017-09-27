@@ -69,6 +69,9 @@ class EquilibriumSystem final : public LeafSystem<T> {
 
     // We are appending an additional parameter to the existing vector.
     base_vector_index_ = subcontext_->num_numeric_parameters();
+    std::cout << " states in subcontext " <<
+        subcontext_->get_continuous_state()->CopyToVector()
+              << std::endl;
   }
 
   template <typename U>
@@ -217,9 +220,6 @@ struct TimeVaryingData {
                   const PiecewisePolynomialTrajectory& u0_in)
       : A(Ain), B(Bin), C(Cin), D(Din), x0(x0_in), u0(u0_in) {}
 
-  //  TimeVaryingData(const TimeVaryingData& data)
-  //    : A(data.A), B(data.B), C(data.C), D(data.D), x0(data.x0), u0(data.u0) {}
-
   PiecewisePolynomialTrajectory A{PiecewisePolynomial<double>()};
   PiecewisePolynomialTrajectory B{PiecewisePolynomial<double>()};
   PiecewisePolynomialTrajectory C{PiecewisePolynomial<double>()};
@@ -251,14 +251,12 @@ class TimeScheduledAffineSystem final : public TimeVaryingAffineSystem<T> {
                             double time_period)
       : TimeScheduledAffineSystem<T>(
             SystemTypeTag<systems::controllers::TimeScheduledAffineSystem>{},
-            data_(MakeTimeVaryingData(model, *x0, *u0)), time_period) {}
+            MakeTimeVaryingData(model, *x0, *u0), time_period) {}
 
   TimeScheduledAffineSystem(const TimeVaryingData& data, double time_period)
       : TimeScheduledAffineSystem<T>(
             SystemTypeTag<systems::controllers::TimeScheduledAffineSystem>{},
-            data_(data),
-            //data_(data.A, data.B, data.C, data.D, data.x0, data.u0),
-            time_period) {}
+            data, time_period) {}
 
   ~TimeScheduledAffineSystem() override {}
 
@@ -302,7 +300,10 @@ class TimeScheduledAffineSystem final : public TimeVaryingAffineSystem<T> {
       : TimeVaryingAffineSystem<T>(
             std::move(converter), data.A.rows(), data.B.cols(), data.C.rows(),
             time_period),
-        data_(data) {}
+        data_(data) {
+    std::cout << " TimeScheduledAffineSystem " << std::endl;
+
+        }
 
  private:
   template <typename>
@@ -333,7 +334,7 @@ class TimeScheduledAffineSystem final : public TimeVaryingAffineSystem<T> {
     }
   }
 
-  const TimeVaryingData MakeTimeVaryingData(
+  TimeVaryingData MakeTimeVaryingData(
       const EquilibriumSystem<double>& model,
       const PiecewisePolynomialTrajectory& x0,
       const PiecewisePolynomialTrajectory& u0) {
@@ -393,7 +394,7 @@ class TimeScheduledAffineSystem final : public TimeVaryingAffineSystem<T> {
   }
 
   // Nominal (reference) trajectories.
-  const TimeVaryingData data_;
+  TimeVaryingData data_;
 };
 
 // TODO(jadecastro) Throw if output doesn't match states.

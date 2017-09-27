@@ -45,13 +45,32 @@ GTEST_TEST(TestTimeScheduledPiecewiseAffine, ToAutoDiff) {
 
   std::unique_ptr<LinearSystem<double>> system =
       std::make_unique<LinearSystem<double>>(A, B, C, D, kTimeStep);
-  const auto eq_model =
+  const auto eq_system =
       std::make_unique<EquilibriumSystem<double>>(*system, kTimeStep);
+  std::cout << " Test: TimeScheduledAffineSystem " << std::endl;
 
-  const auto dut = std::make_unique<TimeScheduledAffineSystem<double>>(
-      *eq_model, std::move(x0), std::move(u0), kTimeStep);
+  std::cout << " Test: states " << system->CreateDefaultContext()->get_continuous_state()->CopyToVector() << std::endl;
+  const auto eq_context = eq_system->CreateDefaultContext();
+  eq_context->FixInputPort(0, u0->value(0.));
+  std::cout << " Test: SetFromVector " << eq_context->get_continuous_state()->CopyToVector() << std::endl;
+  eq_context->get_mutable_continuous_state()->SetFromVector(
+      x0->value(0.));
+  std::cout << " Test: AllocateTimeDerivatives " << std::endl;
+  auto derivatives = eq_system->AllocateTimeDerivatives();
+  eq_system->CalcTimeDerivatives(*eq_context, derivatives.get());
+  EXPECT_TRUE(CompareMatrices(derivatives->CopyToVector(),
+                              A * x0->value(0.) + B * u0->value(0.)));
 
-  EXPECT_TRUE(is_autodiffxd_convertible(*dut, [&](const auto& converted) {
+  std::cout << " Test: Is AutoDiff Convertible " << std::endl;
+  EXPECT_TRUE(is_autodiffxd_convertible(*eq_system,
+                                        [&](const auto& converted) {}));
+
+  const auto scheduled_model =
+      std::make_unique<TimeScheduledAffineSystem<double>>(
+          *eq_system, std::move(x0), std::move(u0), kTimeStep);
+
+  EXPECT_TRUE(is_autodiffxd_convertible(
+      *scheduled_model, [&](const auto& converted) {
         EXPECT_EQ(converted.x0(0.), x0->value(0.));
         EXPECT_EQ(converted.u0(0.), u0->value(0.));
         EXPECT_EQ(converted.A(0.), A);
