@@ -9,6 +9,8 @@
 namespace drake {
 namespace systems {
 
+// TODO(jadecastro) Update this documentation.......
+
 /// A discrete OR continuous linear system.
 ///
 /// If time_period>0.0, then the linear system will have the following discrete-
@@ -90,6 +92,21 @@ class LinearSystem : public AffineSystem<T> {
                double time_period);
 };
 
+enum WhichAction { Linearize, Throw };
+
+struct LinearizationData {
+  // Default constructor.
+  LinearizationData() = default;
+
+  // Fully-parameterized constructor.
+  LinearizationData(std::unique_ptr<LinearSystem<double>> linear_system_in,
+                    Eigen::VectorXd f0_in)
+      : linear_system(std::move(linear_system_in)), f0(f0_in) {}
+
+  std::unique_ptr<LinearSystem<double>> linear_system;
+  Eigen::VectorXd f0;
+};
+
 /// Takes the first-order Taylor expansion of a System around a nominal
 /// operating point (defined by the Context).
 ///
@@ -98,6 +115,9 @@ class LinearSystem : public AffineSystem<T> {
 /// should be linearized.  See note below.
 /// @param equilibrium_check_tolerance Specifies the tolerance on ensuring that
 /// the derivative vector isZero at the nominal operating point.  @default 1e-6.
+/// @param which_action tells the function how to handle non-equilibrium context
+/// The function may either throw a runtime error or else attempt to linearize
+/// about that non-equilibrium condition.
 /// @returns A LinearSystem that approximates the original system in the
 /// vicinity of the operating point.  See note below.
 /// @throws std::runtime_error if the system the operating point is not an
@@ -117,6 +137,12 @@ class LinearSystem : public AffineSystem<T> {
 /// @ingroup primitive_systems
 ///
 std::unique_ptr<LinearSystem<double>> Linearize(
+    const System<double>& system, const Context<double>& context,
+    double equilibrium_check_tolerance = 1e-6);
+
+///
+///
+LinearizationData LinearizeAboutNonequilibrium(
     const System<double>& system, const Context<double>& context,
     double equilibrium_check_tolerance = 1e-6);
 
