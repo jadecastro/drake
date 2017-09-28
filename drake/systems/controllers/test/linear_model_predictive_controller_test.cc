@@ -243,6 +243,8 @@ class TestMpcWithCubicSystem : public ::testing::Test {
     auto u0_traj = std::make_unique<PiecewisePolynomialTrajectory>(
         PiecewisePolynomial<double>::FirstOrderHold(times, u0_vector));
     x0_traj_ = x0_traj.get();
+    x0_dumb_ = x0_traj->value(50 * time_step_);   // Matches sim time from
+                                                  // below.
     dut_.reset(new LinearModelPredictiveController<double>(
         std::move(system_), std::move(x0_traj), std::move(u0_traj), Q_, R_,
         time_step_, time_horizon_));
@@ -306,19 +308,20 @@ class TestMpcWithCubicSystem : public ::testing::Test {
   const Vector1d R_ = Vector1d::Constant(1.);
 
   PiecewisePolynomialTrajectory* x0_traj_{nullptr};
+  Eigen::Vector2d x0_dumb_;
 
   std::unique_ptr<Simulator<double>> simulator_;
 
- private:
   std::unique_ptr<LinearModelPredictiveController<double>> dut_;  // <--make
                                                                   // local.
+ private:
   std::unique_ptr<System<double>> system_;
   std::unique_ptr<Diagram<double>> diagram_;
 };
 
 TEST_F(TestMpcWithCubicSystem, TimeInvariantCase) {
   const double kTolerance = 1e-9;
-  MakeControlledSystem(false /*is NOT time-varying */);
+  MakeControlledSystem(false /* is NOT time-varying */);
   Simulate(1.);
 
   // Result should be deadbeat; expect convergence to within a tiny tolerance in
@@ -330,7 +333,7 @@ TEST_F(TestMpcWithCubicSystem, TimeInvariantCase) {
 
 TEST_F(TestMpcWithCubicSystem, TimeVaryingCase) {
   const double kTolerance = 1e-9;
-  const double kSimTime = 20 * time_step_;
+  const double kSimTime = 50 * time_step_;
 
   MakeControlledSystem(true /* is time varying */);
   Simulate(kSimTime);
@@ -339,8 +342,16 @@ TEST_F(TestMpcWithCubicSystem, TimeVaryingCase) {
   // one step.
   Eigen::Vector2d result =
       simulator_->get_mutable_context()->get_discrete_state(0)->get_value();
-  EXPECT_TRUE(CompareMatrices(result, x0_traj_->value(kSimTime + time_step_),
-                              kTolerance));
+
+  EXPECT_NE(nullptr, x0_traj_);
+  std::cout << " Result @ sim time " << result << std::endl;
+  std::cout << " Trajectory @ sim time "
+            << x0_dumb_
+            << std::endl;
+  EXPECT_TRUE(CompareMatrices(
+      result,
+      x0_dumb_,
+      kTolerance));
 }
 
 }  // namespace

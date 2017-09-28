@@ -94,17 +94,21 @@ class LinearSystem : public AffineSystem<T> {
 
 enum WhichAction { DoLinearize, DoThrow };
 
+
+/// Returns generic data from linearization, including affine data.  that is
+/// normally zero when .
 struct LinearizationData {
   // Default constructor.
   LinearizationData() = default;
 
   // Fully-parameterized constructor.
   LinearizationData(std::unique_ptr<LinearSystem<double>> linear_system_in,
-                    Eigen::VectorXd f0_in)
-      : linear_system(std::move(linear_system_in)), f0(f0_in) {}
+                    Eigen::VectorXd f0_in, Eigen::VectorXd y0_in)
+      : linear_system(std::move(linear_system_in)), f0(f0_in), y0(y0_in) {}
 
   std::unique_ptr<LinearSystem<double>> linear_system;
   Eigen::VectorXd f0;
+  Eigen::VectorXd y0;
 };
 
 /// Takes the first-order Taylor expansion of a System around a nominal

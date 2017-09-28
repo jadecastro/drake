@@ -52,13 +52,13 @@ class TimeScheduledAffineSystem final : public TimeVaryingAffineSystem<T> {
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(TimeScheduledAffineSystem)
 
       TimeScheduledAffineSystem(
-          std::unique_ptr<System<double>> model,
+          const System<double>& model,
           std::unique_ptr<PiecewisePolynomialTrajectory> x0,
           std::unique_ptr<PiecewisePolynomialTrajectory> u0,
           double time_period)
       : TimeScheduledAffineSystem<T>(
             SystemTypeTag<systems::controllers::TimeScheduledAffineSystem>{},
-            MakeTimeVaryingData(std::move(model), *x0, *u0), time_period) {}
+            MakeTimeVaryingData(model, *x0, *u0), time_period) {}
 
   TimeScheduledAffineSystem(const TimeVaryingData& data, double time_period)
       : TimeScheduledAffineSystem<T>(
@@ -112,12 +112,10 @@ class TimeScheduledAffineSystem final : public TimeVaryingAffineSystem<T> {
   friend class TimeScheduledAffineSystem;
 
   TimeVaryingData MakeTimeVaryingData(
-      std::unique_ptr<System<double>> model,
+      const System<double>& model,
       const PiecewisePolynomialTrajectory& x0,
       const PiecewisePolynomialTrajectory& u0) {
     // TODO(jadecastro) Basic checks of x0, u0 against the model.
-
-    model_ = std::move(model);
 
     TimeVaryingData result;
     result.x0 = x0;
@@ -135,11 +133,10 @@ class TimeScheduledAffineSystem final : public TimeVaryingAffineSystem<T> {
     std::vector<MatrixX<double>> B_vector{};
     std::vector<MatrixX<double>> C_vector{};
     std::vector<MatrixX<double>> D_vector{};
-    std::cout << " MakeTimeVaryingData " << std::endl;
     for (auto t : times) {
       // Make a base_context that contains this time index's trajectory data.
       std::unique_ptr<Context<double>> base_context =
-          model_->CreateDefaultContext();
+          model.CreateDefaultContext();
       auto state_vector =
           base_context->get_mutable_discrete_state()->get_mutable_vector();
 
@@ -154,16 +151,14 @@ class TimeScheduledAffineSystem final : public TimeVaryingAffineSystem<T> {
           0, std::make_unique<FreestandingInputPortValue>(
                  std::move(input_vector)));
 
-      std::cout << " Linearize " << std::endl;
-      const std::unique_ptr<LinearSystem<double>> linear_model =
-          Linearize(*model_, *base_context);
+      LinearizationData linearization =
+          LinearizeAtNonequilibrium(model, *base_context);
 
-      A_vector.emplace_back(linear_model->A());
-      B_vector.emplace_back(linear_model->B());
-      C_vector.emplace_back(linear_model->C());
-      D_vector.emplace_back(linear_model->D());
+      A_vector.emplace_back(linearization.linear_system->A());
+      B_vector.emplace_back(linearization.linear_system->B());
+      C_vector.emplace_back(linearization.linear_system->C());
+      D_vector.emplace_back(linearization.linear_system->D());
     }
-    std::cout << " MakeTimeVaryingData " << std::endl;
 
     // Create matrices for a piecewise-linear system.
     result.A = PiecewisePolynomialTrajectory(
@@ -178,7 +173,6 @@ class TimeScheduledAffineSystem final : public TimeVaryingAffineSystem<T> {
     return result;
   }
 
-  std::unique_ptr<System<double>> model_;
   // Nominal (reference) trajectories.
   TimeVaryingData data_;
 };
@@ -257,6 +251,10 @@ class LinearModelPredictiveController : public LeafSystem<T> {
   }
   const OutputPort<T>& get_control_port() const {
     return this->get_output_port(control_output_index_);
+  }
+
+  const TimeScheduledAffineSystem<double>& get_scheduled_model() const {
+    return *scheduled_model_;
   }
 
  private:

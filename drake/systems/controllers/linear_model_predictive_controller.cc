@@ -77,9 +77,9 @@ LinearModelPredictiveController<T>::LinearModelPredictiveController(
                                       time_period, time_horizon) {
   // TODO Collapse these two operations into one, possibly in a class that
   // limits visibility of the two Systems.
-  std::cout << " LinearModelPredictiveController " << std::endl;
   scheduled_model_.reset(new TimeScheduledAffineSystem<T>(
-      std::move(model), std::move(x0), std::move(u0), time_period_));
+      *model_, std::move(x0), std::move(u0), time_period_));
+  std::cout << " LinearModelPredictiveController " << std::endl;
   const auto symbolic_scheduled_model = scheduled_model_->ToAutoDiffXd();
   DRAKE_DEMAND(symbolic_scheduled_model != nullptr);
   // TODO(jadecastro): We always asssume we start at t = 0 under this

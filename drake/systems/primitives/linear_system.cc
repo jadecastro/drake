@@ -122,7 +122,7 @@ void ThrowNonEquilibrium() {
 }
 
 // Builds the A and B matrices of the system's discrete/continuous state
-// equation.
+// equation, along with the affine term f0.
 std::pair<Eigen::MatrixXd, Eigen::VectorXd>
 MakeStateAndInputMatrices(
     const VectorX<AutoDiffXd>& autodiff_x0_vec,
@@ -137,15 +137,16 @@ MakeStateAndInputMatrices(
     autodiff_system.CalcTimeDerivatives(*autodiff_context, autodiff_xdot.get());
     auto autodiff_xdot_vec = autodiff_xdot->CopyToVector();
 
-    // Ensure that xdot0 = f(x0,u0) == 0.
     if (!math::autoDiffToValueMatrix(autodiff_xdot_vec)
              .isZero(equilibrium_check_tolerance)) {
       if (which_action == WhichAction::DoThrow) {
+        // Ensure that xdot0 = f(x0,u0) == 0.
         ThrowNonEquilibrium();
       }
     }
-    return std::make_pair(math::autoDiffToGradientMatrix(autodiff_xdot_vec),
-                          math::autoDiffToValueMatrix(autodiff_xdot_vec));
+    return std::make_pair(
+        math::autoDiffToGradientMatrix(autodiff_xdot_vec),
+        math::autoDiffToValueMatrix(autodiff_xdot_vec));
   }
   auto autodiff_x0 =
       autodiff_context->get_mutable_discrete_state()->get_mutable_vector();
@@ -156,16 +157,17 @@ MakeStateAndInputMatrices(
                                               autodiff_x1.get());
   auto autodiff_x1_vec = autodiff_x1->get_vector()->CopyToVector();
 
-  // Ensure that x1 = f(x0,u0) == x0.
   if (!(math::autoDiffToValueMatrix(autodiff_x1_vec) -
         math::autoDiffToValueMatrix(autodiff_x0_vec))
            .isZero(equilibrium_check_tolerance)) {
     if (which_action == WhichAction::DoThrow) {
+      // Ensure that x1 = f(x0,u0) == x0.
       ThrowNonEquilibrium();
     }
   }
   return std::make_pair(math::autoDiffToGradientMatrix(autodiff_x1_vec),
-                        math::autoDiffToValueMatrix(autodiff_x1_vec));
+                        math::autoDiffToValueMatrix(autodiff_x1_vec -
+                                                    autodiff_x0_vec));
 }
 
 LinearizationData Linearize(const System<double>& system,
@@ -220,7 +222,7 @@ LinearizationData Linearize(const System<double>& system,
   }
 
   Eigen::MatrixXd AB;
-  Eigen::VectorXd f0;
+  Eigen::VectorXd f0 = Eigen::VectorXd::Zero(num_states);
   std::tie(AB, f0) = MakeStateAndInputMatrices(
       std::get<0>(autodiff_args), equilibrium_check_tolerance, *autodiff_system,
       autodiff_context.get(), which_action);
@@ -230,6 +232,7 @@ LinearizationData Linearize(const System<double>& system,
   Eigen::MatrixXd C = Eigen::MatrixXd::Zero(num_outputs, num_states);
   Eigen::MatrixXd D = Eigen::MatrixXd::Zero(num_outputs, num_inputs);
 
+  Eigen::VectorXd y0 = Eigen::VectorXd::Zero(num_outputs);
   if (num_outputs > 0) {
     std::unique_ptr<SystemOutput<AutoDiffXd>> autodiff_y0 =
         autodiff_system->AllocateOutput(*autodiff_context);
@@ -239,12 +242,15 @@ LinearizationData Linearize(const System<double>& system,
     Eigen::MatrixXd CD = math::autoDiffToGradientMatrix(autodiff_y0_vec);
     C = CD.leftCols(num_states);
     D = CD.rightCols(num_inputs);
+
+    y0 = math::autoDiffToValueMatrix(autodiff_y0_vec);
   }
 
   const double time_period =
       GetTimePeriodIfDiscreteUpdatesArePeriodic(system, context);
 
-  return {std::make_unique<LinearSystem<double>>(A, B, C, D, time_period), f0};
+  return {std::make_unique<LinearSystem<double>>(A, B, C, D, time_period), f0,
+        y0};
 }
 
 }  // namespace
