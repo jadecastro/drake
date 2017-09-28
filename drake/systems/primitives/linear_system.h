@@ -92,7 +92,7 @@ class LinearSystem : public AffineSystem<T> {
                double time_period);
 };
 
-enum WhichAction { Linearize, Throw };
+enum WhichAction { DoLinearize, DoThrow };
 
 struct LinearizationData {
   // Default constructor.
@@ -142,7 +142,7 @@ std::unique_ptr<LinearSystem<double>> Linearize(
 
 ///
 ///
-LinearizationData LinearizeAboutNonequilibrium(
+LinearizationData LinearizeAtNonequilibrium(
     const System<double>& system, const Context<double>& context,
     double equilibrium_check_tolerance = 1e-6);
 

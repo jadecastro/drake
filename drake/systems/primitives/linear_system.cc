@@ -28,15 +28,14 @@ LinearSystem<T>::LinearSystem(const Eigen::Ref<const Eigen::MatrixXd>& A,
                               const Eigen::Ref<const Eigen::MatrixXd>& C,
                               const Eigen::Ref<const Eigen::MatrixXd>& D,
                               double time_period)
-    : LinearSystem<T>(
-          SystemTypeTag<systems::LinearSystem>{},
-          A, B, C, D, time_period) {}
+    : LinearSystem<T>(SystemTypeTag<systems::LinearSystem>{}, A, B, C, D,
+                      time_period) {}
 
 template <typename T>
 template <typename U>
 LinearSystem<T>::LinearSystem(const LinearSystem<U>& other)
-    : LinearSystem<T>(
-          other.A(), other.B(), other.C(), other.D(), other.time_period()) {}
+    : LinearSystem<T>(other.A(), other.B(), other.C(), other.D(),
+                      other.time_period()) {}
 
 template <typename T>
 LinearSystem<T>::LinearSystem(SystemScalarConverter converter,
@@ -45,10 +44,9 @@ LinearSystem<T>::LinearSystem(SystemScalarConverter converter,
                               const Eigen::Ref<const Eigen::MatrixXd>& C,
                               const Eigen::Ref<const Eigen::MatrixXd>& D,
                               double time_period)
-    : AffineSystem<T>(
-          std::move(converter),
-          A, B, Eigen::VectorXd::Zero(A.rows()), C, D,
-          Eigen::VectorXd::Zero(C.rows()), time_period) {}
+    : AffineSystem<T>(std::move(converter), A, B,
+                      Eigen::VectorXd::Zero(A.rows()), C, D,
+                      Eigen::VectorXd::Zero(C.rows()), time_period) {}
 
 template <typename T>
 unique_ptr<LinearSystem<T>> LinearSystem<T>::MakeLinearSystem(
@@ -125,25 +123,24 @@ void ThrowNonEquilibrium() {
 
 // Builds the A and B matrices of the system's discrete/continuous state
 // equation.
-std::pair<Eigen::MatrixXd, Eigen::VectorXd> MakeStateAndInputMatrices(
+std::pair<Eigen::MatrixXd, Eigen::VectorXd>
+MakeStateAndInputMatrices(
     const VectorX<AutoDiffXd>& autodiff_x0_vec,
     double equilibrium_check_tolerance,
     const System<AutoDiffXd>& autodiff_system,
-    Context<AutoDiffXd>* autodiff_context,
-    WhichAction which_action) {
+    Context<AutoDiffXd>* autodiff_context, WhichAction which_action) {
   if (autodiff_context->has_only_continuous_state()) {
     autodiff_context->get_mutable_continuous_state_vector()->SetFromVector(
         autodiff_x0_vec);
     std::unique_ptr<ContinuousState<AutoDiffXd>> autodiff_xdot =
         autodiff_system.AllocateTimeDerivatives();
-    autodiff_system.CalcTimeDerivatives(*autodiff_context,
-                                        autodiff_xdot.get());
+    autodiff_system.CalcTimeDerivatives(*autodiff_context, autodiff_xdot.get());
     auto autodiff_xdot_vec = autodiff_xdot->CopyToVector();
 
     // Ensure that xdot0 = f(x0,u0) == 0.
     if (!math::autoDiffToValueMatrix(autodiff_xdot_vec)
-        .isZero(equilibrium_check_tolerance)) {
-      if (which_action == WhichAction::Throw) {
+             .isZero(equilibrium_check_tolerance)) {
+      if (which_action == WhichAction::DoThrow) {
         ThrowNonEquilibrium();
       }
     }
@@ -161,21 +158,20 @@ std::pair<Eigen::MatrixXd, Eigen::VectorXd> MakeStateAndInputMatrices(
 
   // Ensure that x1 = f(x0,u0) == x0.
   if (!(math::autoDiffToValueMatrix(autodiff_x1_vec) -
-        math::autoDiffToValueMatrix(autodiff_x0_vec)).isZero(
-            equilibrium_check_tolerance)) {
-      if (which_action == WhichAction::Throw) {
-        ThrowNonEquilibrium();
-      }
+        math::autoDiffToValueMatrix(autodiff_x0_vec))
+           .isZero(equilibrium_check_tolerance)) {
+    if (which_action == WhichAction::DoThrow) {
+      ThrowNonEquilibrium();
+    }
   }
   return std::make_pair(math::autoDiffToGradientMatrix(autodiff_x1_vec),
                         math::autoDiffToValueMatrix(autodiff_x1_vec));
 }
 
-}  // namespace
-
-LinearizationData Linearize(
-    const System<double>& system, const Context<double>& context,
-    double equilibrium_check_tolerance) {
+LinearizationData Linearize(const System<double>& system,
+                            const Context<double>& context,
+                            double equilibrium_check_tolerance,
+                            WhichAction which_action) {
   DRAKE_ASSERT_VOID(system.CheckValidContext(context));
 
   const bool has_only_discrete_states_contained_in_one_group =
@@ -203,9 +199,10 @@ LinearizationData Linearize(
       autodiff_system->CreateDefaultContext();
   autodiff_context->SetTimeStateAndParametersFrom(context);
 
-  const Eigen::VectorXd x0 = (context.has_only_continuous_state())
-      ? context.get_continuous_state_vector().CopyToVector()
-      : context.get_discrete_state(0)->get_value();
+  const Eigen::VectorXd x0 =
+      (context.has_only_continuous_state())
+          ? context.get_continuous_state_vector().CopyToVector()
+          : context.get_discrete_state(0)->get_value();
   const int num_states = x0.size();
 
   Eigen::VectorXd u0 = Eigen::VectorXd::Zero(num_inputs);
@@ -222,12 +219,11 @@ LinearizationData Linearize(
         std::make_unique<FreestandingInputPortValue>(std::move(input_vector)));
   }
 
-  const Eigen::MatrixXd AB;
-  const Eigen::VectorXd f0;
-  std::pair<const Eigen::MatrixXd, const Eigen::VectorXd> std::tie(AB, f0) =
-      MakeStateAndInputMatrices(std::get<0>(autodiff_args),
-                                equilibrium_check_tolerance,
-                                *autodiff_system, autodiff_context.get());
+  Eigen::MatrixXd AB;
+  Eigen::VectorXd f0;
+  std::tie(AB, f0) = MakeStateAndInputMatrices(
+      std::get<0>(autodiff_args), equilibrium_check_tolerance, *autodiff_system,
+      autodiff_context.get(), which_action);
   const Eigen::MatrixXd A = AB.leftCols(num_states);
   const Eigen::MatrixXd B = AB.rightCols(num_inputs);
 
@@ -248,23 +244,24 @@ LinearizationData Linearize(
   const double time_period =
       GetTimePeriodIfDiscreteUpdatesArePeriodic(system, context);
 
-  return {std::make_unique<LinearSystem<double>>(A, B, C, D, time_period)), f0};
+  return {std::make_unique<LinearSystem<double>>(A, B, C, D, time_period), f0};
 }
+
+}  // namespace
 
 std::unique_ptr<LinearSystem<double>> Linearize(
     const System<double>& system, const Context<double>& context,
     double equilibrium_check_tolerance) {
-  LinearizationData result =
-      Linearize(system, context, equilibrium_check_tolerance,
-                WhichAction::Throw);
-  return result.first;
+  LinearizationData result = Linearize(
+      system, context, equilibrium_check_tolerance, WhichAction::DoThrow);
+  return std::move(result.linear_system);
 }
 
-LinearizationData LinearizeAboutNonequilibrium(
+LinearizationData LinearizeAtNonequilibrium(
     const System<double>& system, const Context<double>& context,
     double equilibrium_check_tolerance) {
   return Linearize(system, context, equilibrium_check_tolerance,
-                   WhichAction::Linearize);
+                   WhichAction::DoLinearize);
 }
 
 /// Returns the controllability matrix:  R = [B, AB, ..., A^{n-1}B].
