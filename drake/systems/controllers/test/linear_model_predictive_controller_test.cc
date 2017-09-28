@@ -17,6 +17,7 @@ namespace {
 
 using math::DiscreteAlgebraicRiccatiEquation;
 
+/*
 GTEST_TEST(TestTimeScheduledPiecewiseAffine, EquilibriumSystem) {
   // TODO Test fixture!!
 
@@ -57,6 +58,7 @@ GTEST_TEST(TestTimeScheduledPiecewiseAffine, EquilibriumSystem) {
   EXPECT_TRUE(
       is_autodiffxd_convertible(*eq_system, [&](const auto& converted) {}));
 }
+*/
 
 class TestMpcWithDoubleIntegrator : public ::testing::Test {
  protected:
