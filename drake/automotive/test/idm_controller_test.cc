@@ -5,6 +5,7 @@
 #include "drake/automotive/maliput/dragway/road_geometry.h"
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/multibody_tree/math/spatial_velocity.h"
+#include "drake/systems/framework/test_utilities/scalar_conversion.h"
 
 namespace drake {
 namespace automotive {
@@ -120,6 +121,25 @@ TEST_F(IdmControllerTest, Topology) {
       dut_->get_output_port(acceleration_output_index_);
   EXPECT_EQ(systems::kVectorValued, output_port.get_data_type());
   EXPECT_EQ(1 /* accleration output */, output_port.size());
+}
+
+TEST_F(IdmControllerTest, ToAutoDiff) {
+  SetDefaultPoses(10. /* ego_speed */, 6. /* s_offset */, -5. /* rel_sdot */);
+  EXPECT_TRUE(is_autodiffxd_convertible(*dut_, [&](const auto& other_dut) {
+    auto other_context = other_dut.CreateDefaultContext();
+    auto other_output = other_dut.AllocateOutput(*other_context);
+
+    auto ego_pose = std::make_unique<PoseVector<AutoDiffXd>>();
+    other_context->FixInputPort(ego_pose_input_index_, std::move(ego_pose));
+    auto ego_velocity = std::make_unique<FrameVelocity<AutoDiffXd>>();
+    other_context->FixInputPort(ego_velocity_input_index_,
+                                std::move(ego_velocity));
+    systems::rendering::PoseBundle<AutoDiffXd> traffic_poses(1);
+    other_context->FixInputPort(traffic_input_index_,
+                                systems::AbstractValue::Make(traffic_poses));
+
+    other_dut.CalcOutput(*other_context, other_output.get());
+  }));
 }
 
 TEST_F(IdmControllerTest, Output) {

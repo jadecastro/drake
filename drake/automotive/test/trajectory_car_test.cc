@@ -33,10 +33,16 @@ GTEST_TEST(TrajectoryCarTest, StationaryTest) {
   EXPECT_THROW((TrajectoryCar<double>{empty_curve}), std::exception);
 }
 
+template <typename T>
+class TrajectoryCarTest : public ::testing::Test {};
+
+typedef ::testing::Types<double, AutoDiffXd> Implementations;
+TYPED_TEST_CASE(TrajectoryCarTest, Implementations);
+
 // Check the car's progress along some simple paths.  We just want to test our
 // ImplCalcFoo() methods.  We can assume that Curve2 is correct, because it has
 // its own unit test.
-GTEST_TEST(TrajectoryCarTest, ConstantSpeedTest) {
+TYPED_TEST(TrajectoryCarTest, ConstantSpeedTest) {
   struct Case {
     double heading;
     double distance;

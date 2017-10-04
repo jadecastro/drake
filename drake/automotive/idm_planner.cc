@@ -2,8 +2,10 @@
 
 #include <cmath>
 
+#include "drake/common/autodiff.h"
 #include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
+#include "drake/common/extract_double.h"
 
 namespace drake {
 namespace automotive {
@@ -36,7 +38,8 @@ const T IdmPlanner<T>::Evaluate(const IdmPlannerParameters<T>& params,
       pow((closing_term + too_close_term) / target_distance, 2.);
 
   // Compute the free-road acceleration term.
-  const T& accel_free_road = pow(ego_velocity / v_ref, delta);
+  const T& accel_free_road = pow(ego_velocity / v_ref,
+                                 ExtractDoubleOrThrow(delta));
 
   // Compute the resultant acceleration (IDM equation).
   return a * (1. - accel_free_road - accel_interaction);
