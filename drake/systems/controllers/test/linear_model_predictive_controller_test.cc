@@ -163,6 +163,43 @@ class TestMpcWithCubicSystem : public ::testing::Test {
         time_horizon_));
   }
 
+  void MakeTimeVaryingMpcController() {
+    EXPECT_NE(nullptr, system_);
+
+    auto context = system_->CreateDefaultContext();
+
+    // Create trajectories for the states and inputs to force construction of
+    // the time-varying MPC.
+    const int kNumSampleTimes = (int)(time_horizon_ / time_step_ + 0.5);
+    std::vector<double> times(kNumSampleTimes);
+    std::vector<MatrixX<double>> x0_vector{};
+    std::vector<MatrixX<double>> u0_vector{};
+
+    Eigen::Vector2d x0_next_values;
+    x0_next_values << 0., 0.;
+    for (int i{0}; i < kNumSampleTimes; ++i) {
+      times[i] = i * time_step_;
+      const double u0_value = std::sin(times[i]);
+      Eigen::Vector2d x0_values;
+      x0_values << x0_next_values;
+
+      x0_next_values << x0_values(0) + u0_value,
+          x0_values(0) + std::pow(x0_values(0), 3.);
+      // TODO Use update eqn?
+
+      x0_vector.emplace_back(x0_values);
+      u0_vector.emplace_back(Vector1d(u0_value));
+    }
+    auto x0_traj = std::make_unique<PiecewisePolynomialTrajectory>(
+        PiecewisePolynomial<double>::FirstOrderHold(times, x0_vector));
+    auto u0_traj = std::make_unique<PiecewisePolynomialTrajectory>(
+        PiecewisePolynomial<double>::FirstOrderHold(times, u0_vector));
+    x0_traj_ = x0_traj.get();
+    dut_.reset(new LinearModelPredictiveController<double>(
+        std::move(system_), std::move(x0_traj), std::move(u0_traj), Q_, R_,
+        time_step_, time_horizon_));
+  }
+
   void MakeControlledSystem(bool is_time_varying) {
     EXPECT_FALSE(is_time_varying);  // TODO(jadecastro) Introduce tests for the
                                     // time-varying case.
@@ -175,7 +212,11 @@ class TestMpcWithCubicSystem : public ::testing::Test {
     auto cubic_system = builder.AddSystem<CubicPolynomialSystem>(time_step_);
     cubic_system->set_name("cubic_system");
 
-    MakeTimeInvariantMpcController();
+    if (is_time_varying) {
+      MakeTimeVaryingMpcController();
+    } else {
+      MakeTimeInvariantMpcController();
+    }
     EXPECT_NE(nullptr, dut_);
     auto controller = builder.AddSystem(std::move(dut_));
     controller->set_name("controller");
@@ -188,7 +229,7 @@ class TestMpcWithCubicSystem : public ::testing::Test {
     diagram_ = builder.Build();
   }
 
-  void Simulate() {
+  void Simulate(double sim_time) {
     EXPECT_NE(nullptr, diagram_);
     EXPECT_EQ(nullptr, simulator_);
 
@@ -202,19 +243,23 @@ class TestMpcWithCubicSystem : public ::testing::Test {
         cubic_system_context.get_mutable_discrete_state()->get_mutable_vector();
 
     // Set an initial condition near the fixed point.
-    x0->SetFromVector(10. * Eigen::Vector2d::Ones());
+    x0->SetFromVector(x_init_);
 
     simulator_->set_target_realtime_rate(1.);
     simulator_->Initialize();
-    simulator_->StepTo(time_horizon_);
+    simulator_->StepTo(sim_time);
   }
 
-  const double time_step_ = 0.1;
-  const double time_horizon_ = 0.2;
+  const double time_step_ = 0.05;
+  const double time_horizon_ = 3.;
+
+  const Eigen::Vector2d x_init_ = 10. * Eigen::Vector2d::Ones();
 
   // Set up the quadratic cost matrices.
   const Eigen::Matrix2d Q_ = Eigen::Matrix2d::Identity();
   const Vector1d R_ = Vector1d::Constant(1.);
+
+  PiecewisePolynomialTrajectory* x0_traj_{nullptr};
 
   std::unique_ptr<Simulator<double>> simulator_;
 
@@ -227,13 +272,28 @@ class TestMpcWithCubicSystem : public ::testing::Test {
 TEST_F(TestMpcWithCubicSystem, TimeInvariantMpc) {
   const double kTolerance = 1e-10;
   MakeControlledSystem(false /* is NOT time-varying */);
-  Simulate();
+  Simulate(1.);
 
   // Result should be deadbeat; expect convergence to within a tiny tolerance in
   // one step.
   Eigen::Vector2d result =
       simulator_->get_mutable_context()->get_discrete_state(0)->get_value();
   EXPECT_TRUE(CompareMatrices(result, Eigen::Vector2d::Zero(), kTolerance));
+}
+
+TEST_F(TestMpcWithCubicSystem, TimeVaryingMpc) {
+  const double kTolerance = 1e-10;
+  const double kSimTime = 20 * time_step_;
+
+  MakeControlledSystem(true /* is time varying */);
+  Simulate(kSimTime);
+
+  // Result should be deadbeat; expect convergence to within a tiny tolerance in
+  // one step.
+  Eigen::Vector2d result =
+      simulator_->get_mutable_context()->get_discrete_state(0)->get_value();
+  EXPECT_TRUE(CompareMatrices(result, x0_traj_->value(kSimTime + time_step_),
+                              kTolerance));
 }
 
 GTEST_TEST(TestMpcConstructor, ThrowIfRNotStrictlyPositiveDefinite) {

@@ -70,19 +70,131 @@ LinearModelPredictiveController<T>::LinearModelPredictiveController(
 }
 
 template <typename T>
+LinearModelPredictiveController<T>::LinearModelPredictiveController(
+    std::unique_ptr<System<double>> model,
+    std::unique_ptr<PiecewisePolynomialTrajectory> x0,
+    std::unique_ptr<PiecewisePolynomialTrajectory> u0, const Eigen::MatrixXd& Q,
+    const Eigen::MatrixXd& R, double time_period, double time_horizon)
+    : LinearModelPredictiveController(std::move(model), nullptr, Q, R,
+                                      time_period, time_horizon) {
+  const auto eq_model =
+      std::make_unique<EquilibriumSystem<double>>(std::move(model_),
+                                                  time_period_);
+  scheduled_model_.reset(new TimeScheduledAffineSystem<T>(
+      *eq_model, std::move(x0), std::move(u0), time_period_));
+  const auto symbolic_scheduled_model = scheduled_model_->ToAutoDiffXd();
+  DRAKE_DEMAND(symbolic_scheduled_model != nullptr);
+  // TODO(jadecastro): We always asssume we start at t = 0 under this
+  // scheme. Implement a state-dependent scheduling scheme.
+
+  // The following is unneeded in DirTran, since it punts on context.
+  /*
+  auto state_vector =
+      base_context_->get_mutable_discrete_state()->get_mutable_vector();
+  auto input_vector = std::make_unique<BasicVector<T>>(u0->cols());
+  const auto state_ref = x0->value(0);
+  state_vector->SetFromVector(state_ref);
+  const auto input_ref = u0->value(0);
+  input_vector->SetFromVector(input_ref);
+  base_context_->SetInputPortValue(
+      0,
+      std::make_unique<FreestandingInputPortValue>(
+          std::move(input_vector)));
+  */
+
+  
+}
+
+template <typename T>
 void LinearModelPredictiveController<T>::CalcControl(
     const Context<T>& context, BasicVector<T>* control) const {
+  const double t = context.get_time();
   const Eigen::VectorBlock<const VectorX<T>> current_state =
       this->EvalEigenVectorInput(context, state_input_index_);
 
-  const Eigen::VectorXd current_input =
-      SetupAndSolveQp(*base_context_, current_state);
+  std::cout << " time: " << context.get_time() << std::endl;
 
-  const VectorX<T> input_ref = model_->EvalEigenVectorInput(*base_context_, 0);
+  if (base_context_ != nullptr) {  // Regulate to a fixed equilibrium.
+    const Eigen::VectorXd current_input =
+        SetupAndSolveQp(*base_context_, current_state);
 
-  control->SetFromVector(current_input + input_ref);
+    InputPortDescriptor<double> descriptor(nullptr, 0, kVectorValued, 0);
+    const VectorX<T> input_ref =
+        base_context_->EvalVectorInput(nullptr, descriptor)->CopyToVector();
 
-  // TODO(jadecastro) Implement the time-varying case.
+    control->SetFromVector(current_input + input_ref);
+    std::cout << " inputs:\n" << current_input + input_ref << std::endl;
+
+  } else {  // Regulate the system to the current trajectory value.
+    const VectorX<T> state_ref = scheduled_model_->x0(t);
+    std::cout << " state ref:\n" << state_ref << std::endl;
+    std::cout << " current state:\n" << current_state << std::endl;
+    const Eigen::VectorXd current_input =
+        SetupAndSolveQp(current_state, state_ref, t);
+
+    const VectorX<T> input_ref = scheduled_model_->u0(t);
+    std::cout << " input ref:\n" << input_ref << std::endl;
+    control->SetFromVector(current_input + input_ref);
+    std::cout << " inputs:\n" << current_input + input_ref << std::endl;
+  }
+}
+
+template <typename T>
+VectorX<T> LinearModelPredictiveController<T>::SetupAndSolveQp(
+    const VectorX<T>& current_state, const VectorX<T>& state_ref, const T& time)
+    const {
+  DRAKE_DEMAND(scheduled_model_ != nullptr);
+
+  const int kNumSampleTimes = (int)(time_horizon_ / time_period_ + 0.5);
+  std::cout << " Num time samples: " << kNumSampleTimes << std::endl;
+
+  /*
+  MultipleShooting prog(
+      num_inputs_, num_states_, kNumSampleTimes, time_period_);
+
+  // Add dynamic constraint for the time-varying affine system.
+  const auto symbolic_model = linear_model->ToSymbolic();
+  DRAKE_DEMAND(symbolic_model != nullptr);
+  for (int i = 0; i < kNumSampleTimes - 1; i++) {
+    VectorX<symbolic::Expression> update = symbolic_model->discrete_update(0);
+    symbolic::Substitution sub;
+    sub.emplace(symbolic_model->time(), i * time_period_);
+    for (int j = 0; j < num_states_; j++) {
+      sub.emplace(symbolic_model->discrete_state(0)[j], prog.state(i)[j]);
+    }
+    for (int j = 0; j < num_inputs_; j++) {
+      sub.emplace(symbolic_model->input(0)[j], prog.input(i)[j]);
+    }
+    for (int j = 0; j < num_states_; j++) {
+      update(j) = update(j).Substitute(sub);
+    }
+    prog.AddLinearConstraint(prog.state(i + 1) == update);
+    prog.AddRunningCost();
+  }
+  */
+
+  // Needs to be reworked to include the base trajectory states/inputs at each
+  // time step.
+  const auto model_context = scheduled_model_->CreateDefaultContext();
+  model_context->set_time(time);
+  DirectTranscription prog(scheduled_model_.get(), *model_context,
+                           kNumSampleTimes - time / time_period_);
+  // TODO Desire a tighter coupling between model_context's time and number of
+  // samples.
+
+  const auto state_error = prog.state();
+  const auto input_error = prog.input();
+
+  prog.AddRunningCost(state_error.transpose() * Q_ * state_error +
+                      1e2 * input_error.transpose() * R_ * input_error);
+
+  prog.AddLinearConstraint(prog.initial_state() == current_state - state_ref);
+
+  // Don't demand optimality.
+  const auto result = prog.Solve();
+  std::cout << " Solution Result: " << result << std::endl;
+
+  return prog.GetInputSamples().col(0);
 }
 
 template <typename T>

@@ -59,15 +59,35 @@ class LinearModelPredictiveController : public LeafSystem<T> {
   /// @pre base_context must have discrete states set as appropriate for the
   /// given @p model.  The input must also be initialized via
   /// `base_context->FixInputPort(0, u0)`, or otherwise initialized via Diagram.
-
-  // TODO(jadecastro) Implement a version that regulates to an arbitrary
-  // trajectory.
   LinearModelPredictiveController(
       std::unique_ptr<systems::System<double>> model,
       std::unique_ptr<systems::Context<double>> base_context,
       const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R, double time_period,
       double time_horizon);
-    // TODO(jadecastro) Get time_period directly from the plant model.
+  // TODO(jadecastro) Get time_period directly from the plant model.
+
+  /// Constructor an unconstrained, trajectory-regulating MPC formulation with
+  /// linearization occurring about the provided trajectory.
+  ///
+  /// @param model The plant model of the System to be controlled.
+  /// @param x0 The state trajectory or size num_states.
+  /// @param u0 The input trajectory or size num_inputs.
+  /// @param Q A symmetric positive semi-definite state cost matrix of size
+  /// (num_states x num_states).
+  /// @param R A symmetric positive definite control effort cost matrix of size
+  /// (num_inputs x num_inputs).
+  /// @param time_period The discrete time period (in seconds) at which
+  /// controller updates occur.
+  /// @param time_horizon The prediction time horizon (seconds).
+  ///
+  /// @pre model must have discrete states of dimension num_states and inputs
+  /// of dimension num_inputs.
+  LinearModelPredictiveController(
+      std::unique_ptr<System<double>> model,
+      std::unique_ptr<PiecewisePolynomialTrajectory> x0,
+      std::unique_ptr<PiecewisePolynomialTrajectory> u0,
+      const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R, double time_period,
+      double time_horizon);
 
   const InputPortDescriptor<T>& get_state_port() const {
     return this->get_input_port(state_input_index_);
@@ -83,6 +103,10 @@ class LinearModelPredictiveController : public LeafSystem<T> {
   // input.
   VectorX<T> SetupAndSolveQp(const Context<T>& base_context,
                              const VectorX<T>& current_state) const;
+
+  // TODO(jadecastro) Get rid of this function as there's a lot of redundancy.
+  VectorX<T> SetupAndSolveQp(const VectorX<T>& current_state,
+                             const VectorX<T>& state_ref, const T& time) const;
 
   const int state_input_index_{-1};
   const int control_output_index_{-1};
