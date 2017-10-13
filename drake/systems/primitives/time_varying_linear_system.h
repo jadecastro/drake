@@ -8,10 +8,66 @@
 #include "drake/common/eigen_types.h"
 #include "drake/common/extract_double.h"
 #include "drake/common/trajectories/piecewise_polynomial_trajectory.h"
-#include "drake/systems/primitives/linear_system.h"
 
 namespace drake {
 namespace systems {
+
+/// Base class for a discrete or continuous linear time-varying (LTV) system.
+///
+/// If `time_period > 0.0`, the system will have the following discrete-time
+/// state update:
+///   @f[ x(t+h) = A(t) x(t) + B(t) u(t), @f]
+/// where `h` is the time_period.  If `time_period == 0.0`, the system will have
+/// the following continuous-time state update:
+///   @f[ \dot{x}(t) = A(t) x(t) + B(t) u(t), @f]
+///
+/// both with the output:
+///   @f[ y(t) = C(t) x(t) + D(t) u(t). @f]
+///
+/// @tparam T The vector element type, which must be a valid Eigen scalar.
+///
+/// Instantiated templates for the following kinds of T's are provided:
+/// - double
+/// - AutoDiffXd
+/// - symbolic::Expression
+///
+/// They are already available to link against in the containing library.
+/// No other values for T are currently supported.
+///
+/// @ingroup primitive_systems
+///
+template <typename T>
+class TimeVaryingLinearSystem : public TimeVaryingAffineSystem<T> {
+ public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(TimeVaryingLinearSystem)
+
+ protected:
+  /// Constructor.
+  ///
+  /// @param converter scalar-type conversion support helper (i.e., AutoDiff,
+  /// etc.); pass a default-constructed object if such support is not desired.
+  /// See @ref system_scalar_conversion for detailed background and examples
+  /// related to scalar-type conversion support.
+  /// @param num_states size of the system's state vector
+  /// @param num_inputs size of the system's input vector
+  /// @param num_outputs size of the system's output vector
+  /// @param time_period discrete update period, or 0.0 to use continuous time
+  TimeVaryingLinearSystem(SystemScalarConverter converter,
+                          int num_states, int num_inputs, int num_outputs,
+                          double time_period) : TimeVaryingAffineSystem<T>(
+          std::move(converter), num_states, num_inputs, num_outputs,
+          time_period) {}
+
+ private:
+  // N.B. A linear system is simply a restricted form of an affine system with
+  // the affine terms set to zero.  The following adds this restriction.
+  VectorX<T> f0(const T&) const final {
+    return VectorX<T>::Zero(this->num_states());
+  }
+  VectorX<T> y0(const T&) const final {
+    return VectorX<T>::Zero(this->num_outputs());
+  }
+};
 
 /// Stores time-varying matrix data necessary to construct a Linear Time-Varying
 /// system.  The trajectory matrices must obey the following dimensions :
@@ -59,13 +115,6 @@ struct LinearTimeVaryingData {
   PiecewisePolynomialTrajectory C{PiecewisePolynomial<double>()};
   PiecewisePolynomialTrajectory D{PiecewisePolynomial<double>()};
 };
-
-// Return a vector of the given size, with result[i] == i * step.
-inline std::vector<double> vector_iota(int size, double step) {
-  std::vector<double> result(size);
-  for (int i{0}; i < size; ++i) result[i] = i * step;
-  return result;
-}
 
 /// A continuous- or discrete-time Linear Time-Varying system described by a
 /// piecewise polynomial trajectory of system matrices.
@@ -116,7 +165,7 @@ class PiecewisePolynomialLinearSystem final
       : PiecewisePolynomialLinearSystem<T>(
             SystemTypeTag<systems::PiecewisePolynomialLinearSystem>{},
             {PiecewisePolynomial<double>::FirstOrderHold(
-                vector_iota(A.size(), time_period), A),
+                 vector_iota(A.size(), time_period), A),
              PiecewisePolynomial<double>::FirstOrderHold(
                  vector_iota(B.size(), time_period), B),
              PiecewisePolynomial<double>::FirstOrderHold(
@@ -179,6 +228,7 @@ class PiecewisePolynomialLinearSystem final
 
   // Return a vector of the given size, with result[i] == i * step.
   static std::vector<double> vector_iota(int size, double step) {
+    DRAKE_DEMAND(step > 0.);
     std::vector<double> result(size);
     for (int i{0}; i < size; ++i) result[i] = i * step;
     return result;

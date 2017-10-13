@@ -283,6 +283,49 @@ std::unique_ptr<AffineSystem<double>> FirstOrderTaylorApproximation(
       WhichAction::DoLinearize);
 }
 
+std::unique_ptr<PiecewisePolynomialLinearSystem<double>>
+FirstOrderTaylorApproximation(const System<double>& system,
+                              const std::vector<Eigen::MatrixXd>& x0,
+                              const std::vector<Eigen::MatrixXd>& u0,
+                              double time_period) {
+  std::unique_ptr<Context<double>> base_context =
+      model.CreateDefaultContext();
+  auto state_vector =
+      base_context->get_mutable_discrete_state()->get_mutable_vector();
+  auto input_vector = std::make_unique<BasicVector<double>>(
+      context->num_inputs());
+  // ^ do this with less ceremony?
+
+  // Check x0, u0 against the model.
+  DRAKE_DEMAND(x0.size() == u0.size());
+  DRAKE_DEMAND(x0[0].rows() == context.num_states());
+  DRAKE_DEMAND(u0[0].rows() == context.num_inputs());
+  DRAKE_DEMAND(x0[0].cols() == 1);
+  DRAKE_DEMAND(u0[0].cols() == 1);
+
+  std::vector<MatrixX<double>> A_vector(x0.size());
+  std::vector<MatrixX<double>> B_vector(x0.size());
+  std::vector<MatrixX<double>> C_vector(x0.size());
+  std::vector<MatrixX<double>> D_vector(x0.size());
+  for (auto i : x0.size()) {
+    state_vector->set_value(x0[i]);
+    input_vector->set_value(u0[i]);
+    base_context->SetInputPortValue(
+        0, std::make_unique<FreestandingInputPortValue>(
+            std::move(input_vector)));
+
+    const std::unique_ptr<LinearSystem<double>> linear_model =
+        FirstOrderTaylorApproximation(model, *base_context);
+
+    A_vector.emplace_back(linear_model->A());
+    B_vector.emplace_back(linear_model->B());
+    C_vector.emplace_back(linear_model->C());
+    D_vector.emplace_back(linear_model->D());
+  }
+  return PiecewisePolynomialLinearSystem(
+      A_vector, B_vector, C_vector, D_vector, time_period);
+}
+
 /// Returns the controllability matrix:  R = [B, AB, ..., A^{n-1}B].
 Eigen::MatrixXd ControllabilityMatrix(const LinearSystem<double>& sys) {
   DRAKE_DEMAND(sys.time_period() == 0.0);

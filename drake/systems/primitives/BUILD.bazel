@@ -23,11 +23,11 @@ drake_cc_library(
         ":matrix_gain",
         ":multiplexer",
         ":pass_through",
-        ":piecewise_polynomial_linear_system",
         ":random_source",
         ":saturation",
         ":signal_log",
         ":signal_logger",
+        ":time_varying_linear_system",
         ":trajectory_source",
         ":zero_order_hold",
     ],
@@ -164,11 +164,10 @@ drake_cc_library(
 )
 
 drake_cc_library(
-    name = "piecewise_polynomial_linear_system",
-    srcs = ["piecewise_polynomial_linear_system.cc"],
-    hdrs = ["piecewise_polynomial_linear_system.h"],
+    name = "time_varying_linear_system",
+    srcs = ["time_varying_linear_system.cc"],
+    hdrs = ["time_varying_linear_system.h"],
     deps = [
-        ":linear_system",
         "//drake/common:default_scalars",
         "//drake/common:essential",
         "//drake/common:extract_double",
@@ -416,9 +415,9 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
-    name = "piecewise_polynomial_linear_system_test",
+    name = "time_varying_linear_system_test",
     deps = [
-        ":piecewise_polynomial_linear_system",
+        ":time_varying_linear_system",
         "//drake/common/test_utilities:eigen_matrix_compare",
         "//drake/systems/framework",
         "//drake/systems/framework/test_utilities",
