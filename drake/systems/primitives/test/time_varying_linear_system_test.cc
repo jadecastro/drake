@@ -1,4 +1,4 @@
-#include "drake/systems/primitives/piecewise_polynomial_linear_system.h"
+#include "drake/systems/primitives/time_varying_linear_system.h"
 
 #include <gtest/gtest.h>
 

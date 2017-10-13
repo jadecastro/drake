@@ -134,7 +134,7 @@ class SimpleTimeVaryingLinearSystem final
   }
 };
 
-GTEST_TEST(SimpleTimeVaryingLinearSystemTest, ConstructorTest) {
+GTEST_TEST(TimeVaryingLinearSystemTest, ConstructorTest) {
   SimpleTimeVaryingLinearSystem sys;
 
   EXPECT_EQ(sys.get_num_output_ports(), 1);
@@ -145,7 +145,7 @@ GTEST_TEST(SimpleTimeVaryingLinearSystemTest, ConstructorTest) {
   EXPECT_TRUE(CompareMatrices(sys.D(0.), Eigen::Matrix<double, 2, 1>::Ones()));
 }
 
-class TestLinearizeFromAffine : public ::testing::Test {
+class TestTaylorApproximationFromAffine : public ::testing::Test {
  protected:
   void SetUp() {
     A_ << 1, 2, 3, 4, 5, 6, 7, 8, 9;
@@ -179,7 +179,7 @@ class TestLinearizeFromAffine : public ::testing::Test {
 
 // Test that linearizing a continuous-time affine system returns the original
 // A,B,C,D matrices.
-TEST_F(TestLinearizeFromAffine, ContinuousAtEquilibrium) {
+TEST_F(TestTaylorApproximationFromAffine, ContinuousAtEquilibrium) {
   auto context = continuous_system_->CreateDefaultContext();
   context->FixInputPort(0, Vector1d::Constant(u0_));
 
@@ -211,7 +211,7 @@ TEST_F(TestLinearizeFromAffine, ContinuousAtEquilibrium) {
 
 // Test that linearizing a continuous-time affine system about a point that is
 // not at equilibrium returns the original A,B,C,D matrices and affine terms.
-TEST_F(TestLinearizeFromAffine, ContinuousAtNonEquilibrium) {
+TEST_F(TestTaylorApproximationFromAffine, ContinuousAtNonEquilibrium) {
   auto context = continuous_system_->CreateDefaultContext();
   context->FixInputPort(0, Vector1d::Constant(u0_));
   context->get_mutable_continuous_state_vector()->SetFromVector(x0_);
@@ -239,7 +239,7 @@ TEST_F(TestLinearizeFromAffine, ContinuousAtNonEquilibrium) {
                               MatrixCompareType::absolute));
 }
 
-TEST_F(TestLinearizeFromAffine, DiscreteAtEquilibrium) {
+TEST_F(TestTaylorApproximationFromAffine, DiscreteAtEquilibrium) {
   auto context = discrete_system_->CreateDefaultContext();
   context->FixInputPort(0, Vector1d::Constant(u0_));
 
@@ -276,7 +276,7 @@ TEST_F(TestLinearizeFromAffine, DiscreteAtEquilibrium) {
 
 // Test that linearizing a discrete-time affine system about a point that is not
 // at equilibrium returns the original A,B,C,D matrices and affine terms.
-TEST_F(TestLinearizeFromAffine, DiscreteAtNonEquilibrium) {
+TEST_F(TestTaylorApproximationFromAffine, DiscreteAtNonEquilibrium) {
   auto context = discrete_system_->CreateDefaultContext();
   context->FixInputPort(0, Vector1d::Constant(u0_));
   systems::BasicVector<double>* xd =
@@ -331,6 +331,71 @@ GTEST_TEST(TestLinearize, ThrowsWithNonPeriodicDiscreteSystem) {
   auto context = system.CreateDefaultContext();
 
   EXPECT_THROW(Linearize(system, *context), std::runtime_error);
+}
+
+
+class TestTimeVaryingTaylorApproximation : public ::testing::Test {
+ protected:
+  void SetUp() {
+    A_ << 1, 2, 3, 4, 5, 6, 7, 8, 9;
+    B_ << 10, 11, 12;
+    f0_ << 13, 14, 15;
+    C_ << 16, 17, 18, 19, 20, 21;
+    D_ << 22, 23;
+    y0_ << 24, 25;
+
+    discrete_system_.reset(new AffineSystem<double>(
+        A_, B_, f0_, C_, D_, y0_, time_period_));
+  }
+
+  Eigen::Matrix3d A_;
+  Eigen::Matrix<double, 3, 1> B_;
+  Eigen::Vector3d f0_;
+  Eigen::Matrix<double, 2, 3> C_;
+  Eigen::Vector2d D_;
+  Eigen::Vector2d y0_;
+
+  Eigen::Vector3d x0_{26, 27, 28};
+  double u0_{29};
+
+  const double time_period_ = 0.1;
+
+  std::unique_ptr<AffineSystem<double>> discrete_system_;
+};
+
+
+// Test that taking the Taylor-series approximation (to first order) of a
+// discrete-time-varying affine system about a trajectory returns the original
+// A,B,C,D matrices and affine terms at each linearization point.
+TEST_F(TestTimeVaryingTaylorApproximation, DiscreteAtNonEquilibrium) {
+  auto context = discrete_system_->CreateDefaultContext();
+  context->FixInputPort(0, Vector1d::Constant(u0_));
+  systems::BasicVector<double>* xd =
+      context->get_mutable_discrete_state()->get_mutable_vector();
+  xd->SetFromVector(x0_);
+
+  // This Context is not an equilibrium point.
+  EXPECT_THROW(Linearize(*discrete_system_, *context), std::runtime_error);
+
+  // Obtain a linearization at this nonequilibrium condition.
+  std::unique_ptr<AffineSystem<double>> affine_system =
+      FirstOrderTaylorApproximation(*discrete_system_, *context);
+
+  double tol = 1e-10;
+  // We recover the original affine system.
+  EXPECT_TRUE(CompareMatrices(A_, affine_system->A(), tol,
+                              MatrixCompareType::absolute));
+  EXPECT_TRUE(CompareMatrices(B_, affine_system->B(), tol,
+                              MatrixCompareType::absolute));
+  EXPECT_TRUE(CompareMatrices(C_, affine_system->C(), tol,
+                              MatrixCompareType::absolute));
+  EXPECT_TRUE(CompareMatrices(D_, affine_system->D(), tol,
+                              MatrixCompareType::absolute));
+  EXPECT_TRUE(CompareMatrices(f0_, affine_system->f0(), tol,
+                              MatrixCompareType::absolute));
+  EXPECT_TRUE(CompareMatrices(y0_, affine_system->y0(), tol,
+                              MatrixCompareType::absolute));
+  EXPECT_EQ(time_period_, affine_system->time_period());
 }
 
 // Test a few simple systems that are known to be controllable (or not).

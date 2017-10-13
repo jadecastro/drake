@@ -6,7 +6,7 @@
 #include "drake/common/drake_copyable.h"
 #include "drake/common/symbolic.h"
 #include "drake/systems/primitives/affine_system.h"
-#include "drake/systems/primitives/piecewise_polynomial_linear_system.h"
+//#include "drake/systems/primitives/piecewise_polynomial_affine_system.h"
 
 namespace drake {
 namespace systems {
@@ -92,6 +92,63 @@ class LinearSystem : public AffineSystem<T> {
                double time_period);
 };
 
+/// Base class for a discrete or continuous linear time-varying (LTV) system.
+///
+/// If `time_period > 0.0`, the system will have the following discrete-time
+/// state update:
+///   @f[ x(t+h) = A(t) x(t) + B(t) u(t), @f]
+/// where `h` is the time_period.  If `time_period == 0.0`, the system will have
+/// the following continuous-time state update:
+///   @f[ \dot{x}(t) = A(t) x(t) + B(t) u(t), @f]
+///
+/// both with the output:
+///   @f[ y(t) = C(t) x(t) + D(t) u(t). @f]
+///
+/// @tparam T The vector element type, which must be a valid Eigen scalar.
+///
+/// Instantiated templates for the following kinds of T's are provided:
+/// - double
+/// - AutoDiffXd
+/// - symbolic::Expression
+///
+/// They are already available to link against in the containing library.
+/// No other values for T are currently supported.
+///
+/// @ingroup primitive_systems
+///
+template <typename T>
+class TimeVaryingLinearSystem : public TimeVaryingAffineSystem<T> {
+ public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(TimeVaryingLinearSystem)
+
+ protected:
+  /// Constructor.
+  ///
+  /// @param converter scalar-type conversion support helper (i.e., AutoDiff,
+  /// etc.); pass a default-constructed object if such support is not desired.
+  /// See @ref system_scalar_conversion for detailed background and examples
+  /// related to scalar-type conversion support.
+  /// @param num_states size of the system's state vector
+  /// @param num_inputs size of the system's input vector
+  /// @param num_outputs size of the system's output vector
+  /// @param time_period discrete update period, or 0.0 to use continuous time
+  TimeVaryingLinearSystem(SystemScalarConverter converter,
+                          int num_states, int num_inputs, int num_outputs,
+                          double time_period) : TimeVaryingAffineSystem<T>(
+          std::move(converter), num_states, num_inputs, num_outputs,
+          time_period) {}
+
+ private:
+  // N.B. A linear system is simply a restricted form of an affine system with
+  // the affine terms set to zero.  The following adds this restriction.
+  VectorX<T> f0(const T&) const final {
+    return VectorX<T>::Zero(this->num_states());
+  }
+  VectorX<T> y0(const T&) const final {
+    return VectorX<T>::Zero(this->num_outputs());
+  }
+};
+
 /// Takes the first-order Taylor expansion of a System around a nominal
 /// operating point (defined by the Context).
 ///
@@ -127,11 +184,11 @@ std::unique_ptr<LinearSystem<double>> Linearize(
 /// point, it may be represented either of the form:
 ///   @f[ \dot{x} - \dot{x0} = A (x - x0) + B (u - u0), @f]
 /// for continuous time, or
-///   @f[ x[n+1] - x0[n+1] = A (x[n] - x0[n]) + B (u[n] - u0[n]), @f]
+///   @f[ x[n+1] - x1 = A (x[n] - x0) + B (u[n] - u0), @f]
 /// for discrete time.  As above, we denote x0, u0 to be the nominal state and
 /// input at the provided @p context.  The system description is affine when the
-/// terms @f$ \dot{x0} - A x0 - B u0 @f$ and @f$ x0[n+1] - A x0[n] - B u0[n] @f$
-/// are nonzero.
+/// terms @f$ \dot{x0} - A x0 - B u0 @f$ and @f$ x1 - A x0 - B u0 @f$ are
+/// nonzero.
 ///
 /// More precisely, let x be a state and u be an input.  This function returns
 /// an AffineSystem of the form:
@@ -140,10 +197,10 @@ std::unique_ptr<LinearSystem<double>> Linearize(
 /// where @f$ f0 = \dot{x0} - A x0 - B u0 @f$ (CT) and
 /// @f$ f0 = x0[n+1] - A x[n] - B u[n] @f$ (DT).
 ///
-/// @param system The system or subsystem to linearize.
+/// @param system The system or subsystem to approximate (to first order).
 /// @param context Defines the nominal operating point about which the system
-/// should be linearized.
-/// @returns An AffineSystem at this linearization point.
+/// should be approximate.
+/// @returns An AffineSystem representation of the Taylor-series approximation.
 ///
 /// Note that x, u and y are in the same coordinate system as the original
 /// @p system, since the terms involving x0, u0 reside in f0.
@@ -153,39 +210,38 @@ std::unique_ptr<LinearSystem<double>> Linearize(
 std::unique_ptr<AffineSystem<double>> FirstOrderTaylorApproximation(
     const System<double>& system, const Context<double>& context);
 
-/// A first-order Taylor series approximation to a @p system in the neighborhood
-/// of a list of arbitrary points.  When Taylor-expanding a system at a
-/// non-equilibrium point, it may be represented either of the form:
-///   @f[ \dot{x} - \dot{x0} = A (x - x0) + B (u - u0), @f]
-/// for continuous time, or
-///   @f[ x[n+1] - x0[n+1] = A (x[n] - x0[n]) + B (u[n] - u0[n]), @f]
-/// for discrete time.  As above, we denote x0, u0 to be the nominal state and
-/// input at the provided @p context.  The system description is affine when the
-/// terms @f$ \dot{x0} - A x0 - B u0 @f$ and @f$ x0[n+1] - A x0[n] - B u0[n] @f$
-/// are nonzero.
-///
-/// More precisely, let x be a state and u be an input.  This function returns
-/// an AffineSystem of the form:
-///   @f[ \dot{x} = A x + B u + f0, @f] (CT)
-///   @f[ x[n+1] = A x[n] + B u[n] + f0, @f] (DT)
-/// where @f$ f0 = \dot{x0} - A x0 - B u0 @f$ (CT) and
-/// @f$ f0 = x0[n+1] - A x[n] - B u[n] @f$ (DT).
+/// A first-order Taylor series approximation to a discrete-time @p system in
+/// the neighborhood of a list of arbitrary points.  This function is a
+/// generalization of the AffineSystem representation to the following
+/// time-varying affine form:
+///   @f[ x[n+1] - x0[n+1] = A[n] (x[n] - x0[n]) + B[n] (u[n] - u0[n]), @f]
+/// where x0[n], u0[n] are the nominal state and input provided as discrete-time
+/// data vectors in the respective input parameters @p x0, @p u0.
 ///
 /// @param system The system or subsystem to linearize.
-/// @param context Defines the nominal operating point about which the system
-/// should be linearized.
-/// @returns An AffineSystem at this linearization point.
+/// @param x0 Defines the nominal state about which the Taloy series
+/// approximation is taken.
+/// @param u0 Defines the nominal input about which the Taloy series
+/// approximation is taken.
+/// @param time_period The time period associated with each nominal state/input
+/// pair.
+/// @returns An PiecewisePolynomialAffineSystem at this linearization point.
 ///
-/// Note that x, u and y are in the same coordinate system as the original
-/// @p system, since the terms involving x0, u0 reside in f0.
+/// Note that, as in the case with AffineSystem, x, u and y are in the same
+/// coordinate system as the original @p system, since the terms involving x0,
+/// u0 reside in f0.
 ///
 /// @ingroup primitive_systems
 ///
-std::unique_ptr<PiecewisePolynomialLinearSystem<double>>
+/*
+std::unique_ptr<PiecewisePolynomialAffineSystem<double>>
 FirstOrderTaylorApproximation(const System<double>& system,
                               const std::vector<Eigen::MatrixXd>& x0,
                               const std::vector<Eigen::MatrixXd>& u0,
                               double time_period);
+*/
+// TODO(jadecastro) Replace this with the actual time_period derived from the
+// system, once #6878 is resolved.
 
 /// Returns the controllability matrix:  R = [B, AB, ..., A^{n-1}B].
 /// @ingroup control_systems

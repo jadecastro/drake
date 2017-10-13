@@ -283,23 +283,25 @@ std::unique_ptr<AffineSystem<double>> FirstOrderTaylorApproximation(
       WhichAction::DoLinearize);
 }
 
-std::unique_ptr<PiecewisePolynomialLinearSystem<double>>
+/*
+std::unique_ptr<PiecewisePolynomialAffineSystem<double>>
 FirstOrderTaylorApproximation(const System<double>& system,
                               const std::vector<Eigen::MatrixXd>& x0,
                               const std::vector<Eigen::MatrixXd>& u0,
                               double time_period) {
+  DRAKE_DEMAND(system.get_num_input_ports() > 0);
   std::unique_ptr<Context<double>> base_context =
-      model.CreateDefaultContext();
+      system.CreateDefaultContext();
+  DRAKE_DEMAND(base_context->has_only_discrete_state());
+  const int num_inputs = system.get_input_port(0).size();
+  auto input_vector = std::make_unique<BasicVector<double>>(num_inputs);
   auto state_vector =
       base_context->get_mutable_discrete_state()->get_mutable_vector();
-  auto input_vector = std::make_unique<BasicVector<double>>(
-      context->num_inputs());
-  // ^ do this with less ceremony?
 
-  // Check x0, u0 against the model.
+  // Check x0, u0 against the system.
   DRAKE_DEMAND(x0.size() == u0.size());
-  DRAKE_DEMAND(x0[0].rows() == context.num_states());
-  DRAKE_DEMAND(u0[0].rows() == context.num_inputs());
+  DRAKE_DEMAND(x0[0].rows() == state_vector->size());
+  DRAKE_DEMAND(u0[0].rows() == num_inputs);
   DRAKE_DEMAND(x0[0].cols() == 1);
   DRAKE_DEMAND(u0[0].cols() == 1);
 
@@ -307,24 +309,25 @@ FirstOrderTaylorApproximation(const System<double>& system,
   std::vector<MatrixX<double>> B_vector(x0.size());
   std::vector<MatrixX<double>> C_vector(x0.size());
   std::vector<MatrixX<double>> D_vector(x0.size());
-  for (auto i : x0.size()) {
+  for (int i{0}; i < static_cast<int>(x0.size()); ++i) {
     state_vector->set_value(x0[i]);
     input_vector->set_value(u0[i]);
     base_context->SetInputPortValue(
         0, std::make_unique<FreestandingInputPortValue>(
             std::move(input_vector)));
 
-    const std::unique_ptr<LinearSystem<double>> linear_model =
-        FirstOrderTaylorApproximation(model, *base_context);
+    const std::unique_ptr<AffineSystem<double>> affine_model =
+        FirstOrderTaylorApproximation(system, *base_context);
 
-    A_vector.emplace_back(linear_model->A());
-    B_vector.emplace_back(linear_model->B());
-    C_vector.emplace_back(linear_model->C());
-    D_vector.emplace_back(linear_model->D());
+    A_vector.emplace_back(affine_model->A());
+    B_vector.emplace_back(affine_model->B());
+    C_vector.emplace_back(affine_model->C());
+    D_vector.emplace_back(affine_model->D());
   }
-  return PiecewisePolynomialLinearSystem(
+  return std::make_unique<PiecewisePolynomialLinearSystem<double>>(
       A_vector, B_vector, C_vector, D_vector, time_period);
 }
+*/
 
 /// Returns the controllability matrix:  R = [B, AB, ..., A^{n-1}B].
 Eigen::MatrixXd ControllabilityMatrix(const LinearSystem<double>& sys) {
@@ -377,6 +380,3 @@ bool IsObservable(const LinearSystem<double>& sys, double threshold) {
 
 DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
     class ::drake::systems::LinearSystem)
-
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::systems::TimeVaryingLinearSystem)
