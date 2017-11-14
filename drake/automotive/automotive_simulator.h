@@ -47,10 +47,12 @@ class AutomotiveSimulator {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(AutomotiveSimulator)
 
+  /// The default constructor does NOT perform any visualization.
+  AutomotiveSimulator();
   /// A constructor that configures this object to use DrakeLcm, which
   /// encapsulates a _real_ LCM instance.
-  AutomotiveSimulator();
-  explicit AutomotiveSimulator(std::unique_ptr<lcm::DrakeLcmInterface> lcm);
+  explicit AutomotiveSimulator(std::unique_ptr<lcm::DrakeLcmInterface> lcm,
+                               bool disable_lcm = false);
   ~AutomotiveSimulator();
 
   /// Returns the LCM object used by this AutomotiveSimulator.
@@ -68,14 +70,15 @@ class AutomotiveSimulator {
   /// @param name The car's name, which must be unique among all cars. Otherwise
   /// a std::runtime_error will be thrown.
   ///
-  /// @param channel_name  The SimpleCar will subscribe to an LCM channel of
-  /// this name to receive commands.  It must be non-empty.
+  /// @param channel_name The SimpleCar will subscribe to an LCM channel of this
+  /// name to receive commands.  If empty, then the input port fixed to a
+  /// DrivingCommand using the default constructor.
   ///
   /// @param initial_state The SimpleCar's initial state.
   ///
   /// @return The ID of the car that was just added to the simulation.
   int AddPriusSimpleCar(
-      const std::string& name, const std::string& channel_name,
+      const std::string& name, const std::string& channel_name = std::string(),
       const SimpleCarState<T>& initial_state = SimpleCarState<T>());
 
   /// Adds a SimpleCar to this simulation controlled by a MOBIL planner coupled
@@ -118,6 +121,32 @@ class AutomotiveSimulator {
   int AddPriusTrajectoryCar(const std::string& name,
                             const Curve2<double>& curve, double speed,
                             double start_time);
+
+  /// Adds a car and IdmController to this simulation.  If @p to_lane is null
+  /// then a TrajectoryCar is added to the simulator that is powered by an
+  /// IdmController.  Otherwise, a SimpleCar is added, powered by an
+  /// IdmController and a PurePursuitController that takes as input a constant
+  /// source that contains the @p to_lane as the destination lane for the car.
+  /// The car is visualized as a Toyota Prius. This includes its
+  /// EulerFloatingJoint output.
+  ///
+  /// @pre Start() has NOT been called.
+  ///
+  /// @param name The car's name, which must be unique among all cars. Otherwise
+  /// a std::runtime_error will be thrown.
+  ///
+  /// @param curve See documentation of TrajectoryCar::TrajectoryCar.
+  ///
+  /// @param speed See documentation of TrajectoryCar::TrajectoryCar.
+  ///
+  /// @param start_time See documentation of TrajectoryCar::TrajectoryCar.
+  ///
+  /// @param to_lane   
+  ///
+  /// @return The ID of the car that was just added to the simulation.
+  int AddIdmControlledCar(
+      const std::string& name, const Curve2<double>& curve, double speed,
+      double start_time, const maliput::api::Lane* to_lane = nullptr);
 
   /// Adds a MaliputRailcar to this simulation visualized as a Toyota Prius.
   ///
@@ -223,6 +252,13 @@ class AutomotiveSimulator {
   /// @pre Build() has NOT been called.
   void Build();
 
+  /// Builds the Diagram and intializes the Diagram Context to the predefined
+  /// initial states.
+  ///
+  /// @pre Build() has NOT been called.
+  void BuildAndInitialize(
+      std::unique_ptr<systems::Context<double>> initial_context = nullptr);
+
   /// Returns the System containing the entire AutomotiveSimulator diagram.
   ///
   /// @pre Build() has been called.
@@ -242,7 +278,9 @@ class AutomotiveSimulator {
   //
   // TODO(jwnimmer-tri) Perhaps our class should be AutomotiveSimulatorBuilder?
   // Port a few more demo programs, then decide what looks best.
-  void Start(double target_realtime_rate = 0.0);
+  void Start(double target_realtime_rate = 0.0,
+             std::unique_ptr<systems::Context<double>>
+             initial_context = nullptr);
 
   /// Returns whether the automotive simulator has started.
   bool has_started() const { return simulator_ != nullptr; }

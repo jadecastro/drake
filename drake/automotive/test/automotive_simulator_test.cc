@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include "drake/automotive/create_trajectory_params.h"
 #include "drake/automotive/curve2.h"
 #include "drake/automotive/lane_direction.h"
 #include "drake/automotive/maliput/api/lane.h"
@@ -206,7 +207,7 @@ GTEST_TEST(AutomotiveSimulatorTest, TestMobilControlledSimpleCar) {
   // Finish all initialization, so that we can test the post-init state.
   simulator->Start();
 
-  // Advances the simulation to allow the MaliputRailcar to begin accelerating.
+  // Advances the simulation.
   simulator->StepBy(0.5);
 
   const lcmt_viewer_draw draw_message =
@@ -351,6 +352,76 @@ GTEST_TEST(AutomotiveSimulatorTest, TestPriusTrajectoryCar) {
                   draw_message.quaternion.at(i + n).at(j), 1e-8);
     }
   }
+}
+
+GTEST_TEST(AutomotiveSimulatorTest, TestIdmControlledTrajectoryCar) {
+  const std::string kJointStateChannelName = "0_FLOATING_JOINT_STATE";
+
+  const std::string joint_state_name =
+      systems::lcm::LcmPublisherSystem::make_name(kJointStateChannelName);
+
+  // Set up a basic simulation with an IDM-controlled TrajectoryCar.
+  auto simulator = std::make_unique<AutomotiveSimulator<double>>(
+      std::make_unique<lcm::DrakeMockLcm>());
+  lcm::DrakeMockLcm* lcm =
+      dynamic_cast<lcm::DrakeMockLcm*>(simulator->get_lcm());
+  ASSERT_NE(lcm, nullptr);
+
+  const maliput::api::RoadGeometry* road{};
+  EXPECT_NO_THROW(
+      road = simulator->SetRoadGeometry(
+          std::make_unique<const maliput::dragway::RoadGeometry>(
+              maliput::api::RoadGeometryId({"TestDragway"}), 2 /* num lanes */,
+              100 /* length */, 4 /* lane width */, 1 /* shoulder width */,
+              5 /* maximum_height */,
+              std::numeric_limits<double>::epsilon() /* linear_tolerance */,
+              std::numeric_limits<double>::epsilon() /* angular_tolerance */)));
+
+
+  // ------------------------------------------------------------------
+  // +---->  +s, +x     |     Car     |       |     Decoy     |
+  // ------------------------------------------------------------------
+  double start_position = 2;
+  double start_speed = 10;
+
+  auto dragway_road = dynamic_cast<const maliput::dragway::RoadGeometry*>(road);
+
+  const int lane_index = 0;
+  const maliput::api::Lane* destination_lane =
+      dragway_road->junction(0)->segment(0)->lane(lane_index);
+  const auto& params = CreateTrajectoryParamsForDragway(
+      *dragway_road, lane_index, start_speed, start_position);
+
+  const int id_idm_trajectory_car =
+      simulator->AddIdmControlledCar(
+          "idm_trajectory_car", std::get<0>(params), start_speed,
+          start_position, destination_lane);
+  // TODO: Test the case when destination_lane = nullptr.
+  EXPECT_EQ(id_idm_trajectory_car, 0);
+
+  MaliputRailcarState<double> decoy_state;
+  decoy_state.set_s(6);
+  decoy_state.set_speed(0);
+  const int id_decoy = simulator->AddPriusMaliputRailcar(
+      "decoy", LaneDirection(road->junction(0)->segment(0)->lane(0)),
+      MaliputRailcarParams<double>(), decoy_state);
+  EXPECT_EQ(id_decoy, 1);
+
+  // Finish all initialization, so that we can test the post-init state.
+  simulator->Start();
+
+  // Advances the simulation.
+  simulator->StepBy(0.5);
+
+  const lcmt_viewer_draw draw_message =
+      lcm->DecodeLastPublishedMessageAs<lcmt_viewer_draw>("DRAKE_VIEWER_DRAW");
+  EXPECT_EQ(draw_message.num_links, 2 * PriusVis<double>(0, "").num_poses());
+
+  // Expect the car to decelerate.
+  const double car_x = draw_message.position.at(0).at(0);
+  const double average_speed = (car_x - start_position) / 0.5;
+  EXPECT_LE(0., car_x);
+  EXPECT_GE(start_speed, average_speed);
 }
 
 // Returns the x-position of the vehicle based on an lcmt_viewer_draw message.
