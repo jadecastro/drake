@@ -54,7 +54,7 @@ AutomotiveSimulator<T>::AutomotiveSimulator()
 template <typename T>
 AutomotiveSimulator<T>::AutomotiveSimulator(
     std::unique_ptr<lcm::DrakeLcmInterface> lcm, bool disable_lcm)
-    // TODO: Revisit why we can't simply make this null.
+    // TODO: Revisit why we can't just get rid of the bool by making this null.
     : lcm_(std::move(lcm)) {
   aggregator_ =
       builder_->template AddSystem<systems::rendering::PoseAggregator<T>>();
@@ -137,7 +137,9 @@ int AutomotiveSimulator<T>::AddPriusSimpleCar(
 
     builder_->Connect(*command_subscriber, *simple_car);
 
-    AddPublisher(*simple_car, id);
+    if (lcm_) {
+      AddPublisher(*simple_car, id);
+    }
   }
   return id;
 }
@@ -232,7 +234,9 @@ int AutomotiveSimulator<T>::AddPriusTrajectoryCar(
   ConnectCarOutputsAndPriusVis(id, trajectory_car->pose_output(),
       trajectory_car->velocity_output());
 
-  AddPublisher(*trajectory_car, id);
+  if (lcm_) {
+    AddPublisher(*trajectory_car, id);
+  }
   return id;
 }
 

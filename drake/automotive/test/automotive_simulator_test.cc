@@ -128,7 +128,7 @@ GTEST_TEST(AutomotiveSimulatorTest, TestPriusSimpleCar) {
 // Tests the ability to initialize a SimpleCar to a non-zero initial state.
 GTEST_TEST(AutomotiveSimulatorTest, TestPriusSimpleCarInitialState) {
   auto simulator = std::make_unique<AutomotiveSimulator<double>>(
-      std::make_unique<lcm::DrakeMockLcm>());
+      nullptr, true /* disable lcm */);
   const double kX{10};
   const double kY{5.5};
   const double kHeading{M_PI_2};
@@ -361,8 +361,7 @@ GTEST_TEST(AutomotiveSimulatorTest, TestIdmControlledTrajectoryCar) {
       systems::lcm::LcmPublisherSystem::make_name(kJointStateChannelName);
 
   // Set up a basic simulation with an IDM-controlled TrajectoryCar.
-  auto simulator = std::make_unique<AutomotiveSimulator<double>>(
-      std::make_unique<lcm::DrakeMockLcm>());
+  auto simulator = std::make_unique<AutomotiveSimulator<double>>(nullptr);
   lcm::DrakeMockLcm* lcm =
       dynamic_cast<lcm::DrakeMockLcm*>(simulator->get_lcm());
   ASSERT_NE(lcm, nullptr);

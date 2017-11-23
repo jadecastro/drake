@@ -7,6 +7,7 @@
 #include "drake/automotive/gen/simple_car_state.h"
 #include "drake/automotive/maliput/api/road_geometry.h"
 #include "drake/automotive/maliput/dragway/road_geometry.h"
+#include "drake/math/autodiff.h"
 #include "drake/systems/framework/context.h"
 
 namespace drake {
@@ -24,14 +25,31 @@ struct TrajectoryCarStruct {
 
 namespace sim_setup {
 
-// TODO(jadecastro): Needs a more specialized name.
+void InitializeAutoDiffContext(systems::Context<AutoDiffXd>* context) {
+  const auto& states = context->get_continuous_state_vector();
+  const int num_states = states.size();
+  Eigen::VectorXd context_vector(num_states + 1);  // time + states.
+  for (int i{0}; i < num_states; ++i) {
+    context_vector(i) = states.GetAtIndex(i).value();
+  }
+  context_vector(num_states) = 0.;  // initial time
+
+  const auto autodiff_context_vector = math::initializeAutoDiff(context_vector);
+
+  const AutoDiffXd time_autodiff = autodiff_context_vector(num_states);
+  context->set_time(time_autodiff);
+  const auto states_autodiff = autodiff_context_vector.segment(0, num_states);
+  context->get_mutable_continuous_state().SetFromVector(states_autodiff);
+}
+
 template <typename T>
 std::unique_ptr<AutomotiveSimulator<T>> SetupAutomotiveSimulator(
     std::unique_ptr<const maliput::api::RoadGeometry> road_geometry,
     int num_dragway_lanes, int ego_desired_lane_index,
     const std::vector<int> traffic_lane_indices) {
   // Construct without LCM enabled as it is not yet AutoDiff-supported.
-  auto simulator = std::make_unique<AutomotiveSimulator<T>>();
+  auto simulator = std::make_unique<AutomotiveSimulator<T>>(
+      nullptr, true /* disable lcm */);
   auto simulator_road = simulator->SetRoadGeometry(std::move(road_geometry));
   auto dragway_road_geometry =
       dynamic_cast<const maliput::dragway::RoadGeometry*>(simulator_road);
@@ -89,25 +107,24 @@ template <typename T>
 std::pair<SimpleCarState<T>*, std::vector<TrajectoryCarStruct<T>>>
     GetAutomotiveSubsystemStates(const systems::System<T>& plant,
                                  std::vector<int> traffic_lane_indices,
-                                 systems::Context<T>* context) {
+                                 systems::Context<T>& context) {
   const auto diagram = dynamic_cast<const systems::Diagram<T>*>(&plant);
   DRAKE_DEMAND(diagram != nullptr);
-  auto diagram_context = dynamic_cast<systems::DiagramContext<T>*>(context);
-  DRAKE_DEMAND(diagram_context != nullptr);
+  auto& diagram_context = dynamic_cast<systems::DiagramContext<T>&>(context);
 
   // Define the initial context values.  Parse the cars, one by one.
   // Note: context is dual purpose: we write these, and then over-write them
   // with a vector containing the endowed with the desired partial derivatives.
   std::vector<TrajectoryCarStruct<T>> traffic_structs{};
-  SimpleCarState<T>* ego_state = nullptr;
-  std::vector<const systems::System<T>*> systems = diagram->GetSystems();
-  for (int i{0}; i < (int)systems.size(); ++i) {
-    systems::VectorBase<T>* state =
-        diagram_context->GetMutableSubsystemContext(i)
-            ->get_mutable_continuous_state_vector();
-    if (state->size() == 0) continue;  // Skip any stateless systems.
-    auto traffic_state = dynamic_cast<TrajectoryCarState<T>*>(state);
-    ego_state = dynamic_cast<SimpleCarState<T>*>(state);
+  SimpleCarState<T>* ego_state;
+  std::vector<const systems::System<T>*> all_systems = diagram->GetSystems();
+  for (int i{0}; i < static_cast<int>(all_systems.size()); ++i) {
+    systems::VectorBase<T>& state =
+        diagram_context.GetMutableSubsystemContext(i)
+            .get_mutable_continuous_state_vector();
+    if (state.size() == 0) continue;  // Skip any stateless systems.
+    auto traffic_state = dynamic_cast<TrajectoryCarState<T>*>(&state);
+    ego_state = dynamic_cast<SimpleCarState<T>*>(&state);
     if (traffic_state != nullptr) {
       TrajectoryCarStruct<T> traffic_struct{};
       traffic_struct.states = traffic_state;

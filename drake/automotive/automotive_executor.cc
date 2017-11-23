@@ -2,13 +2,13 @@
 
 #include <gflags/gflags.h>
 
-#include "drake/automotive/autodiff_utils.h"
 #include "drake/automotive/automotive_simulator.h"
 #include "drake/automotive/automotive_simulator_setup.h"
 #include "drake/automotive/gen/simple_car_state.h"
 #include "drake/automotive/maliput/api/road_geometry.h"
 #include "drake/automotive/maliput/dragway/road_geometry.h"
-#include "drake/common/call_matlab.h"
+#include "drake/common/autodiff.h"
+#include "drake/common/autodiffxd_make_coherent.h"
 #include "drake/systems/framework/context.h"
 
 namespace drake {
@@ -26,7 +26,7 @@ static AutoDiffXd EvalInstantaneousLossFunction(
   using std::pow;
 
   const auto& plant = simulator.get_system();
-  auto context = simulator.get_mutable_context();
+  auto& context = simulator.get_mutable_context();
 
   SimpleCarState<AutoDiffXd>* ego_state = nullptr;
   std::vector<TrajectoryCarStruct<AutoDiffXd>> traffic_structs{};
@@ -47,8 +47,8 @@ static AutoDiffXd EvalInstantaneousLossFunction(
         traffic_lane_indices.size() - 1 - i++]);
     AutoDiffXd y_traffic =
         lane->ToGeoPosition({0., 0., 0.}).y();
-    autodiff::SetZeroPartials(y_ego, &y_traffic);  // Use any state variable as
-                                                   // the model vector
+    autodiffxd_make_coherent(y_ego, &y_traffic);  // Use any state variable as
+                                                  // the model vector
     // N.B. Coefficients chosen to get the greatest response along the x-axis.
     const AutoDiffXd car_loss =
         1. / (0.05 * pow(x_ego - x_traffic, 2.) +
@@ -128,7 +128,7 @@ int DoMain(void) {
   std::vector<TrajectoryCarStruct<AutoDiffXd>> traffic_structs{};
   std::tie(ego_state, traffic_structs) =
       sim_setup::GetAutomotiveSubsystemStates(*plant, traffic_lane_indices,
-                                              context.get());
+                                              *context);
   DRAKE_DEMAND(traffic_structs.size() == traffic_lane_indices.size());
 
   // Set all of the initial states by name.
@@ -139,13 +139,13 @@ int DoMain(void) {
   ego_state->set_y(initial_lane_y_value);
   ego_state->set_heading(ego_heading);
   ego_state->set_velocity(ego_velocity);
-  for (int i{0}; i < (int)traffic_structs.size(); ++i) {
+  for (int i{0}; i < static_cast<int>(traffic_structs.size()); ++i) {
     traffic_structs[i].states->set_position(traffic_pos[i]);
     traffic_structs[i].states->set_speed(traffic_speed[i]);
   }
 
   // Declare the partial derivatives for all of the context members.
-  autodiff::InitializeAutoDiffContext(context.get());
+  sim_setup::InitializeAutoDiffContext(context.get());
 
   // Initialize the Drake Simulator.
   std::unique_ptr<systems::Simulator<AutoDiffXd>> simulator =
