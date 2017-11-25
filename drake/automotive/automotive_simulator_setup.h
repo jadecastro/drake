@@ -93,12 +93,18 @@ std::unique_ptr<systems::Simulator<T>> SetupSimulator(
   std::unique_ptr<systems::Simulator<T>> simulator =
       std::make_unique<systems::Simulator<T>>(plant);
   simulator->reset_context(std::move(context));
-  simulator->set_target_realtime_rate(100.);
+  simulator->set_target_realtime_rate(1.);
+  std::cout << " SetupSimulator0 " << std::endl;
   simulator->get_mutable_integrator()->set_maximum_step_size(
       simulator_time_step);
+  std::cout << " SetupSimulator1 " << std::endl;
   simulator->get_mutable_integrator()->set_requested_minimum_step_size(
       simulator_time_step);
+  std::cout << " SetupSimulator2 " << std::endl;
+  simulator->get_mutable_integrator()->request_initial_step_size_target(
+      simulator_time_step);
   simulator->Initialize();
+  std::cout << " SetupSimulator3 " << std::endl;
 
   return std::move(simulator);
 }

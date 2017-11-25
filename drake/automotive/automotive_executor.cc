@@ -65,10 +65,14 @@ static AutoDiffXd EvalLossFunction(
     const AutoDiffXd& time_horizon) {
   using std::max;
 
+  std::cout << " EvalLossFunction-2 " << std::endl;
   AutoDiffXd t = simulator->get_context().get_time();
+    std::cout << " EvalLossFunction-1 " << std::endl;
   AutoDiffXd result{-std::numeric_limits<AutoDiffXd>::infinity()};
   while (t < time_horizon) {
+    std::cout << " EvalLossFunction0 " << std::endl;
     simulator->StepTo(t + time_step);
+    std::cout << " EvalLossFunction1 " << std::endl;
     t = simulator->get_context().get_time();
 
     // Evaluate the loss function at this time step.
@@ -89,11 +93,11 @@ int DoMain(void) {
   const int num_dragway_lanes = 2;
 
   // Ego car parameters and initial conditions.
-  const int ego_initial_lane_index = 0;
+  //const int ego_initial_lane_index = 0;
   const int ego_desired_lane_index = 1;  // Remove this once we have MOBIL.
-  const double ego_x = 50.;
-  const double ego_heading = 0.;
-  const double ego_velocity = 5.;
+  //const double ego_x = 50.;
+  //const double ego_heading = 0.;
+  //const double ego_velocity = 5.;
 
   // Traffic car initial conditions.
   const std::vector<int> traffic_lane_indices{0, 1};  // N.B. vector's size
@@ -120,6 +124,7 @@ int DoMain(void) {
   auto automotive_simulator = sim_setup::SetupAutomotiveSimulator<double>(
       std::move(road_geometry), num_dragway_lanes, ego_desired_lane_index,
       traffic_lane_indices);
+  std::cout << " HERE0 " << std::endl;
   const auto plant = automotive_simulator->GetDiagram().ToAutoDiffXd();
   auto context = plant->CreateDefaultContext();
 
@@ -130,27 +135,31 @@ int DoMain(void) {
       sim_setup::GetAutomotiveSubsystemStates(*plant, traffic_lane_indices,
                                               *context);
   DRAKE_DEMAND(traffic_structs.size() == traffic_lane_indices.size());
+  std::cout << " HERE1 " << std::endl;
 
   // Set all of the initial states by name.
-  const double initial_lane_y_value =
-      -kLaneWidth / 2. * (num_dragway_lanes - 1) +
-      ego_initial_lane_index * kLaneWidth;
-  ego_state->set_x(ego_x);
-  ego_state->set_y(initial_lane_y_value);
-  ego_state->set_heading(ego_heading);
-  ego_state->set_velocity(ego_velocity);
+  //const double initial_lane_y_value =
+  //    -kLaneWidth / 2. * (num_dragway_lanes - 1) +
+  //    ego_initial_lane_index * kLaneWidth;
+  //ego_state->set_x(ego_x);
+  //ego_state->set_y(initial_lane_y_value);
+  //ego_state->set_heading(ego_heading);
+  //ego_state->set_velocity(ego_velocity);
   for (int i{0}; i < static_cast<int>(traffic_structs.size()); ++i) {
-    traffic_structs[i].states->set_position(traffic_pos[i]);
-    traffic_structs[i].states->set_speed(traffic_speed[i]);
+    //    traffic_structs[i].states->set_position(traffic_pos[i]);
+    //traffic_structs[i].states->set_speed(traffic_speed[i]);
   }
 
   // Declare the partial derivatives for all of the context members.
+  std::cout << " HERE2 " << std::endl;
   sim_setup::InitializeAutoDiffContext(context.get());
+  std::cout << " HERE3 " << std::endl;
 
   // Initialize the Drake Simulator.
   std::unique_ptr<systems::Simulator<AutoDiffXd>> simulator =
       sim_setup::SetupSimulator<AutoDiffXd>(*plant, std::move(context),
                                             0.01 /* simulator time step */);
+  std::cout << " HERE4 " << std::endl;
 
   // Simulate forward up to the specified horizon, and evaluate the loss
   // function at the desired time steps along the way.
