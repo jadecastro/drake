@@ -624,9 +624,8 @@ void AutomotiveSimulator<T>::Start(
   DRAKE_DEMAND(!has_started());
 
   BuildAndInitialize(std::move(initial_context));
-  TransmitLoadMessage();
-
   if (lcm_) {
+    TransmitLoadMessage();
     lcm_->StartReceiveThread();
   }
 

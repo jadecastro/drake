@@ -104,6 +104,10 @@ class TrajectoryCar final : public systems::LeafSystem<T> {
   }
   /// @}
 
+  optional<bool> DoHasDirectFeedthrough(int, int) const override {
+    return false;
+  };
+
  protected:
   /// Data structure returned by CalcRawPose containing raw pose information.
   struct PositionHeading {
@@ -186,7 +190,8 @@ class TrajectoryCar final : public systems::LeafSystem<T> {
                     systems::rendering::PoseVector<T>* pose) const {
     // Convert the raw pose into a pose vector.
     pose->set_translation(Eigen::Translation<T, 3>(raw_pose.position[0],
-                                                   raw_pose.position[1], 0));
+                                                   raw_pose.position[1],
+                                                   0. * raw_pose.position[0]));
     const Vector3<T> z_axis{0.0, 0.0, 1.0};
     const Eigen::AngleAxis<T> rotation(raw_pose.heading, z_axis);
     pose->set_rotation(Eigen::Quaternion<T>(rotation));
