@@ -218,7 +218,7 @@ bool PoseSelector<T>::IsWithinLane(const GeoPositionT<T>& geo_position,
       lane->ToLanePositionT<T>(geo_position, nullptr, &distance);
   const maliput::api::RBounds r_bounds =
       lane->lane_bounds(ExtractDoubleOrThrow(pos.s()));
-  return (distance <= tol && pos.r() >= r_bounds.min() - tol &&
+  return (distance < tol && pos.r() >= r_bounds.min() - tol &&
           pos.r() <= r_bounds.max() + tol);
 }
 
@@ -388,7 +388,7 @@ PoseSelector<T>::FindConfluentBranches(
 template <typename T>
 bool PoseSelector<T>::IsEqual(const Lane* lane0, const Lane* lane1) {
   if (!lane0 || !lane1) return false;
-  return lane0->id().string() == lane1->id().string();
+  return lane0->id() == lane1->id();
 }
 
 template <typename T>

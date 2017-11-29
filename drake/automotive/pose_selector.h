@@ -75,18 +75,17 @@ class PoseSelector {
   /// the argument is a Lane* object (@p lane), only poses in the same path as
   /// the ego (ahead or behind) are tracked.
   ///
-  /// The ego vehicle must be within
-  /// the `driveable_bounds` of @p lane (i.e. the road is contiguous with @p
-  /// lane along the `r`-direction).  This function is used, for instance, as
-  /// logic for lane-change planners (e.g. MOBIL).  The ego car's pose (@p
-  /// ego_pose) and the poses of the traffic cars (@p traffic_poses) are
-  /// provided.  The parameter @p scan_distance determines the distance along
-  /// the sequence of lanes to scan before declaring that no traffic car is
-  /// ahead (resp. behind) the ego car.  If no leading/trailing vehicles are
-  /// seen within @p traffic_lane, `s`-positions are taken to be at infinite
-  /// distances away from the ego car.  Traffic vehicles having exactly the same
-  /// s-position as the ego vehicle but situated in a different (parallel) lane
-  /// are taken to be behind the ego vehicle.
+  /// The ego vehicle must be within the `driveable_bounds` of @p lane (i.e. the
+  /// road is contiguous with @p lane along the `r`-direction).  This function
+  /// is used, for instance, as logic for lane-change planners (e.g. MOBIL).
+  /// The ego car's pose (@p ego_pose) and the poses of the traffic cars (@p
+  /// traffic_poses) are provided.  The parameter @p scan_distance determines
+  /// the distance along the sequence of lanes to scan before declaring that no
+  /// traffic car is ahead (resp. behind) the ego car.  If no leading/trailing
+  /// vehicles are seen within @p traffic_lane, `s`-positions are taken to be at
+  /// infinite distances away from the ego car.  Traffic vehicles having exactly
+  /// the same s-position as the ego vehicle but situated in a different
+  /// (parallel) lane are taken to be behind the ego vehicle.
   ///
   /// @return A map of AheadOrBehind values to vehicle ClosestPoses (containing
   /// RoadOdometries and closest relative distances).  Relative distances are
@@ -153,19 +152,22 @@ class PoseSelector {
 
   /// Returns `true` if and only if @p lane_position is within the longitudinal
   /// (s), driveable (r) and elevation (h) bounds of the specified @p lane
-  /// (i.e. within `lane->driveable_bounds()` and `lane->elevation_bounds()`).
+  /// (i.e. within `linear_tolerance()` of `lane->driveable_bounds()` and
+  /// `lane->elevation_bounds()`).
   static bool IsWithinDriveable(
       const maliput::api::LanePositionT<T>& lane_position,
       const maliput::api::Lane* lane);
 
   /// Returns `true` if and only if @p geo_position is within the longitudinal
   /// (s), lateral (r) and elevation (h) bounds of the specified @p lane
-  /// (i.e. within `lane->lane_bounds()` and `lane->elevation_bounds()`).
+  /// (i.e. within `linear_tolerance()` of `lane->lane_bounds()` and
+  /// `lane->elevation_bounds()`).
   static bool IsWithinLane(const maliput::api::GeoPositionT<T>& geo_position,
                            const maliput::api::Lane* lane);
 
-  /// Returns `true` if and only if @p lane_position is within the driveable
-  /// bounds of @p lane and, in addition, `r` is within its lane bounds.
+  /// Returns `true` if and only if @p lane_position is within
+  /// `linear_tolerance()` of the driveable bounds of @p lane and, in addition,
+  /// `r` is within its lane bounds.
   static bool IsWithinLane(const maliput::api::LanePositionT<T>& lane_position,
                            const maliput::api::Lane* lane);
 

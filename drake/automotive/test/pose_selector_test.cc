@@ -6,6 +6,7 @@
 #include "drake/automotive/maliput/api/road_geometry.h"
 #include "drake/automotive/maliput/dragway/road_geometry.h"
 #include "drake/automotive/maliput/monolane/builder.h"
+#include "drake/automotive/maliput/monolane/road_geometry.h"
 #include "drake/automotive/monolane_onramp_merge.h"
 #include "drake/common/extract_double.h"
 #include "drake/common/test_utilities/eigen_matrix_compare.h"
@@ -122,7 +123,7 @@ static void SetDefaultDragwayPoses(PoseVector<T>* ego_pose,
                           Isometry3<T>(translation_far_behind));
 }
 
-static void SetDefaultDragwayPoseDerivatives(
+static void SetDefaultDerivatives(
     PoseVector<AutoDiffXd>* ego_pose, PoseBundle<AutoDiffXd>* traffic_poses) {
   Eigen::Translation<AutoDiffXd, 3> ego_translation =
       ego_pose->get_translation();
@@ -170,56 +171,6 @@ static void SetPoses(const T& s_offset, const T& r_offset,
       T(0.) /* vz */;
   traffic_poses->set_pose(0, Isometry3<T>(translation));
   traffic_poses->set_velocity(0, traffic_velocity);
-}
-
-static void SetDefaultOnrampPoses(const Lane* ego_lane,
-                                  const Lane* traffic_lane,
-                                  const double traffic_vy,
-                                  PoseVector<double>* ego_pose,
-                                  FrameVelocity<double>* ego_velocity,
-                                  PoseBundle<double>* traffic_poses) {
-  DRAKE_DEMAND(traffic_poses->get_num_poses() == 1);
-  DRAKE_DEMAND(kEgoSPosition > kJustBehindSPosition &&
-               kJustBehindSPosition > 0.);
-
-  // Set the ego vehicle at s = 1. in the ego_lane.
-  const LanePosition srh_near_start{1., 0., 0.};
-  const GeoPosition ego_xyz = ego_lane->ToGeoPosition(srh_near_start);
-  ego_pose->set_translation(
-      Eigen::Translation3d(ego_xyz.x(), ego_xyz.y(), ego_xyz.z()));
-  const Rotation ego_rotation = ego_lane->GetOrientation(srh_near_start);
-  const Rotation new_rotation = Rotation::FromRpy(ego_rotation.roll(),
-                                                  ego_rotation.pitch(),
-                                                  ego_rotation.yaw() + M_PI);
-  ego_pose->set_rotation(math::RollPitchYawToQuaternion(new_rotation.rpy()));
-
-  const Eigen::Matrix3d ego_rotmat =
-      math::rpy2rotmat(new_rotation.rpy());
-  const double ego_speed{10.};
-  drake::Vector6<double> velocity{};
-  velocity << 0., /* ωx */ 0., /* ωy */ 0., /* ωz */
-      ego_rotmat(0, 0) * ego_speed, /* vx */
-      ego_rotmat(1, 0) * ego_speed, /* vy */
-      ego_rotmat(2, 0) * ego_speed; /* vz */
-  ego_velocity->set_velocity(multibody::SpatialVelocity<double>(velocity));
-
-  // Set the traffic car at s = Lane::length() - 1 in the traffic_lane.
-  const LanePosition srh_near_finish{traffic_lane->length() - 1., 0., 0.};
-  const GeoPosition traffic_xyz = traffic_lane->ToGeoPosition(srh_near_finish);
-  const Eigen::Translation3d translation_ahead(
-      traffic_xyz.x(), traffic_xyz.y(), traffic_xyz.z());
-  traffic_poses->set_pose(0, Eigen::Isometry3d(translation_ahead));
-
-  const Rotation traffic_rotation =
-      traffic_lane->GetOrientation(srh_near_finish);
-  const Eigen::Matrix3d traffic_rotmat =
-      math::rpy2rotmat(traffic_rotation.rpy());
-  FrameVelocity<double> velocity_ahead{};
-  velocity_ahead.get_mutable_value() << 0., /* ωx */ 0., /* ωy */ 0., /* ωz */
-      traffic_rotmat(0, 0) * traffic_vy, /* vx */
-      traffic_rotmat(1, 0) * traffic_vy, /* vy */
-      traffic_rotmat(2, 0) * traffic_vy; /* vz */
-  traffic_poses->set_velocity(0, velocity_ahead);
 }
 
 // Returns the lane in the road associated with the provided pose.
@@ -399,7 +350,7 @@ TEST_F(PoseSelectorDragwayTest, TwoLaneDragwayAutoDiff) {
 
   // Define the default poses.
   SetDefaultDragwayPoses(&ego_pose, &traffic_poses);
-  SetDefaultDragwayPoseDerivatives(&ego_pose, &traffic_poses);
+  SetDefaultDerivatives(&ego_pose, &traffic_poses);
 
   // Choose a scan-ahead distance shorter than the lane length.
   const AutoDiffXd scan_ahead_distance(kDragwayLaneLength / 2.);
@@ -570,7 +521,7 @@ TEST_F(PoseSelectorDragwayTest, NoCarsOnShortRoadAutoDiff) {
 
   // Define the default poses.
   SetDefaultDragwayPoses(&ego_pose, &traffic_poses);
-  SetDefaultDragwayPoseDerivatives(&ego_pose, &traffic_poses);
+  SetDefaultDerivatives(&ego_pose, &traffic_poses);
 
   // Choose a scan-ahead distance greater than the lane length.
   const AutoDiffXd scan_ahead_distance(kShortLaneLength + 10.);
@@ -783,10 +734,59 @@ GTEST_TEST(PoseSelectorTest, MultiSegmentRoad) {
   }
 }
 
-GTEST_TEST(PoseSelectorTest, OnrampMerge) {
-  // Instantiate the onramp merge road.
+template <typename T>
+static void SetDefaultOnrampPoses(const Lane* ego_lane,
+                                  const Lane* traffic_lane,
+                                  const T& traffic_speed,
+                                  const T& ego_speed,
+                                  PoseVector<T>* ego_pose,
+                                  FrameVelocity<T>* ego_velocity,
+                                  PoseBundle<T>* traffic_poses) {
+  DRAKE_DEMAND(traffic_poses->get_num_poses() == 1);
+  DRAKE_DEMAND(kEgoSPosition > kJustBehindSPosition &&
+               kJustBehindSPosition > 0.);
+
+  // Set the ego vehicle at s = 1. in the ego_lane.
+  const LanePosition srh_near_start{1., 0., 0.};
+  const GeoPosition ego_xyz = ego_lane->ToGeoPosition(srh_near_start);
+  ego_pose->set_translation(
+      Translation3<T>(T(ego_xyz.x()), T(ego_xyz.y()), T(ego_xyz.z())));
+  const Rotation ego_rotation = ego_lane->GetOrientation(srh_near_start);
+  const Rotation new_rotation = Rotation::FromRpy(ego_rotation.roll(),
+                                                  ego_rotation.pitch(),
+                                                  ego_rotation.yaw() + M_PI);
+  Eigen::Quaternion<double> rotation =
+      math::RollPitchYawToQuaternion(new_rotation.rpy());
+  ego_pose->set_rotation(
+      {T(rotation.w()), T(rotation.x()), T(rotation.y()), T(rotation.z())});
+
+  const Eigen::Matrix3d ego_rotmat = math::rpy2rotmat(new_rotation.rpy());
+  drake::Vector6<T> velocity{};
+  velocity.head(3) = Vector3<T>::Zero();  /* ω */
+  velocity.tail(3) = ego_speed * ego_rotmat.leftCols(1);  /* v */
+  ego_velocity->set_velocity(multibody::SpatialVelocity<T>(velocity));
+
+  // Set the traffic car at s = Lane::length() - 1 in the traffic_lane.
+  const LanePosition srh_near_finish{traffic_lane->length() - 1., 0., 0.};
+  const GeoPosition traffic_xyz = traffic_lane->ToGeoPosition(srh_near_finish);
+  const Translation3<T> translation_ahead(
+      T(traffic_xyz.x()), T(traffic_xyz.y()), T(traffic_xyz.z()));
+  traffic_poses->set_pose(0, Isometry3<T>(translation_ahead));
+
+  const Rotation traffic_rotation =
+      traffic_lane->GetOrientation(srh_near_finish);
+  const Eigen::Matrix3d traffic_rotmat =
+      math::rpy2rotmat(traffic_rotation.rpy());
+  FrameVelocity<T> velocity_ahead{};
+  velocity_ahead.get_mutable_value().head(3) = Vector3<T>::Zero();  /* ω */
+  velocity_ahead.get_mutable_value().tail(3) =
+      traffic_speed * traffic_rotmat.leftCols(1);  /* v */
+  traffic_poses->set_velocity(0, velocity_ahead);
+}
+
+GTEST_TEST(PoseSelectorOnrampTest, CheckBranches) {
   std::unique_ptr<MonolaneOnrampMerge> merge_example(new MonolaneOnrampMerge);
-  auto road = merge_example->BuildOnramp();
+  const auto road = merge_example->BuildOnramp();
 
   PoseVector<double> ego_pose;
   FrameVelocity<double> ego_velocity;
@@ -795,7 +795,8 @@ GTEST_TEST(PoseSelectorTest, OnrampMerge) {
   // Set a traffic car in lane "post5".
   SetDefaultOnrampPoses(GetLaneByJunctionId(*road, "j:onramp0"),
                         GetLaneByJunctionId(*road, "j:post5"),
-                        10. /* traffic_vy */,
+                        10. /* traffic_speed */,
+                        10. /* ego_speed */,
                         &ego_pose, &ego_velocity, &traffic_poses);
 
   // Check that the ego car's pose is in "onramp0".
@@ -814,6 +815,7 @@ GTEST_TEST(PoseSelectorTest, OnrampMerge) {
           1000. /* scan_ahead_distance */, AheadOrBehind::kAhead);
 
   // Verifies that we are on the road and that the correct car was identified.
+  EXPECT_EQ("l:post5", closest_pose_leading.odometry.lane->id().string());
   EXPECT_EQ(39., closest_pose_leading.odometry.pos.s());
   EXPECT_NEAR(252., closest_pose_leading.distance, 1e-3);
 
@@ -824,13 +826,15 @@ GTEST_TEST(PoseSelectorTest, OnrampMerge) {
           AheadOrBehind::kAhead);
 
   // Verifies that we obtain the same result as above.
+  EXPECT_EQ("l:post5", closest_pose_leading.odometry.lane->id().string());
   EXPECT_EQ(39., closest_pose_leading.odometry.pos.s());
   EXPECT_NEAR(252., closest_pose_leading.distance, 1e-3);
 
   // Set a traffic car in lane "pre0".
   SetDefaultOnrampPoses(GetLaneByJunctionId(*road, "j:onramp0"),
                         GetLaneByJunctionId(*road, "j:pre0"),
-                        10. /* traffic_vy */,
+                        10. /* traffic_speed */,
+                        10. /* ego_speed */,
                         &ego_pose, &ego_velocity, &traffic_poses);
 
   closest_pose_leading =
@@ -844,8 +848,68 @@ GTEST_TEST(PoseSelectorTest, OnrampMerge) {
   EXPECT_NEAR(50., closest_pose_leading.distance, 1e-3);
 }
 
-GTEST_TEST(PoseSelectorTest, OnrampMergeAutoDiff) {
-  
+GTEST_TEST(PoseSelectorOnrampTest, CheckBranchesAutoDiff) {
+  std::unique_ptr<MonolaneOnrampMerge> merge_example(new MonolaneOnrampMerge);
+  const auto road = merge_example->BuildOnramp();
+
+  PoseVector<AutoDiffXd> ego_pose;
+  FrameVelocity<AutoDiffXd> ego_velocity;
+  PoseBundle<AutoDiffXd> traffic_poses(1);
+
+  // Set a traffic car in lane "post5".
+  SetDefaultOnrampPoses(GetLaneByJunctionId(*road, "j:onramp0"),
+                        GetLaneByJunctionId(*road, "j:post5"),
+                        AutoDiffXd(10.) /* traffic_speed */,
+                        AutoDiffXd(10.) /* ego_speed */,
+                        &ego_pose, &ego_velocity, &traffic_poses);
+  SetDefaultDerivatives(&ego_pose, &traffic_poses);
+
+  ClosestPose<AutoDiffXd> closest_pose_leading =
+      PoseSelector<AutoDiffXd>::FindSingleClosestPose(
+          *road, ego_pose, traffic_poses,
+          AutoDiffXd(1000.) /* scan_ahead_distance */, AheadOrBehind::kAhead);
+  Vector3<AutoDiffXd> srh_leading = closest_pose_leading.odometry.pos.srh();
+
+  // Verify that we are on the road and that the correct car was identified.
+  EXPECT_EQ("l:post5", closest_pose_leading.odometry.lane->id().string());
+  EXPECT_EQ(39., closest_pose_leading.odometry.pos.s().value());
+  const Matrix3<double> expected_derivatives = Matrix3<double>::Identity();
+  for (int i{0}; i < 3; ++i) {
+    EXPECT_TRUE(CompareMatrices(expected_derivatives.col(i),
+                                srh_leading(i).derivatives()));
+  }
+  EXPECT_NEAR(252., closest_pose_leading.distance.value(), 1e-3);
+  // Distance is always invariant wrt. to x, y and z.
+  EXPECT_TRUE(
+      CompareMatrices(Vector3<double>(0., 0., 0.),
+                      closest_pose_leading.distance.derivatives()));
+
+  // Set a traffic car in lane "pre0".
+  SetDefaultOnrampPoses(GetLaneByJunctionId(*road, "j:onramp0"),
+                        GetLaneByJunctionId(*road, "j:pre0"),
+                        AutoDiffXd(10.) /* traffic_speed */,
+                        AutoDiffXd(10.) /* ego_speed */,
+                        &ego_pose, &ego_velocity, &traffic_poses);
+  SetDefaultDerivatives(&ego_pose, &traffic_poses);
+
+  closest_pose_leading =
+      PoseSelector<AutoDiffXd>::FindSingleClosestPose(
+          *road, ego_pose, traffic_poses,
+          AutoDiffXd(1000.) /* scan_ahead_distance */, AheadOrBehind::kAhead);
+  srh_leading = closest_pose_leading.odometry.pos.srh();
+
+  // Verifies that we are on the road and that the correct car was identified.
+  EXPECT_EQ("l:pre0", closest_pose_leading.odometry.lane->id().string());
+  EXPECT_NEAR(99., closest_pose_leading.odometry.pos.s().value(), 1e-3);
+  for (int i{0}; i < 3; ++i) {
+    EXPECT_TRUE(CompareMatrices(expected_derivatives.col(i),
+                                srh_leading(i).derivatives()));
+  }
+  EXPECT_NEAR(50., closest_pose_leading.distance.value(), 1e-3);
+  // Distance is always invariant wrt. to x, y and z.
+  EXPECT_TRUE(
+      CompareMatrices(Vector3<double>(0., 0., 0.),
+                      closest_pose_leading.distance.derivatives()));
 }
 
 // TODO(jadecastro) We cannot yet test against AutoDiff for multi-segment roads
