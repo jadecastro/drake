@@ -48,8 +48,7 @@ std::unique_ptr<AutomotiveSimulator<T>> SetupAutomotiveSimulator(
     int num_dragway_lanes, int ego_desired_lane_index,
     const std::vector<int> traffic_lane_indices) {
   // Construct without LCM enabled as it is not yet AutoDiff-supported.
-  auto simulator = std::make_unique<AutomotiveSimulator<T>>(
-      nullptr, true /* disable lcm */);
+  auto simulator = std::make_unique<AutomotiveSimulator<T>>(nullptr);
   auto simulator_road = simulator->SetRoadGeometry(std::move(road_geometry));
   auto dragway_road_geometry =
       dynamic_cast<const maliput::dragway::RoadGeometry*>(simulator_road);
@@ -64,10 +63,17 @@ std::unique_ptr<AutomotiveSimulator<T>> SetupAutomotiveSimulator(
                ego_desired_lane_index < segment->num_lanes());
   const maliput::api::Lane* ego_desired_lane =
       segment->lane(ego_desired_lane_index);
-  const auto& params_ego = CreateTrajectoryParamsForDragway(
-      *dragway_road_geometry, ego_desired_lane_index, 0., 0.);
-  simulator->AddIdmControlledCar("ego_car", std::get<0>(params_ego), 0.,
-                                 0., ego_desired_lane);
+  // const auto& params_ego = CreateTrajectoryParamsForDragway(
+  //     *dragway_road_geometry, ego_desired_lane_index, 0., 0.);
+
+  SimpleCarState<T> initial_state;
+  // The following presumes we are on a dragway, in which x -> s, y -> r.
+  initial_state.set_x(T(0.));
+  initial_state.set_y(T(0.));
+  initial_state.set_heading(T(0.));
+  initial_state.set_velocity(T(10.));
+  simulator->AddIdmControlledCar("ego_car", true, initial_state,
+                                 ego_desired_lane);
 
   // Add traffic cars (trajectory cars).
   // TODO(jadecastro): Make these IDM-controlled.

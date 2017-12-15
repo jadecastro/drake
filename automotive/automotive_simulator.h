@@ -223,6 +223,12 @@ class AutomotiveSimulator {
   const maliput::api::RoadGeometry* SetRoadGeometry(
       std::unique_ptr<const maliput::api::RoadGeometry> road);
 
+  /// Gets the RoadGeometry for this simulation.
+  ///
+  /// @pre SetRoadGeometry() was called.
+  ///
+  const maliput::api::RoadGeometry* GetRoadGeometry() { return road_.get(); };
+
   /// Finds and returns a pointer to a lane with the specified name. This method
   /// throws a std::runtime_error if no such lane exists.
   ///
