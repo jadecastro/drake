@@ -385,6 +385,22 @@ drake_cc_library(
     ],
 )
 
+drake_cc_library(
+    name = "automotive_simulator_setup",
+    srcs = ["automotive_simulator_setup.cc"],
+    hdrs = ["automotive_simulator_setup.h"],
+    deps = [
+        ":automotive_simulator",
+        ":create_trajectory_params",
+        ":generated_vectors",
+        ":simple_car",
+        "//drake/automotive/maliput/api",
+        "//drake/automotive/maliput/dragway",
+        "//drake/common:autodiff",
+        "//drake/math:autodiff",
+    ],
+)
+
 drake_cc_binary(
     name = "automotive_demo",
     srcs = [
@@ -441,6 +457,17 @@ drake_java_binary(
     main_class = "lcm.spy.Spy",
     runtime_deps = [
         "//drake/lcmtypes:lcmtypes_drake_java",
+    ],
+)
+
+drake_cc_binary(
+    name = "automotive_executor",
+    srcs = ["automotive_executor.cc"],
+    deps = [
+        ":automotive_simulator_setup",
+        ":generated_vectors",
+        "//drake/common:autodiffxd_make_coherent",
+        "@com_github_gflags_gflags//:gflags",
     ],
 )
 
