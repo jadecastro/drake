@@ -243,7 +243,7 @@ T PoseSelector<T>::CalcLaneProgress(const LaneDirection& lane_direction,
     return T(lane_direction.lane->length()) - lane_position.s();
   }
 }
-
+/*
 template <typename T>
 LaneDirection PoseSelector<T>::CalcLaneDirection(
     const Lane* lane, const LanePositionT<T>& lane_position,
@@ -263,6 +263,87 @@ LaneDirection PoseSelector<T>::CalcLaneDirection(
   const bool with_s = (side == AheadOrBehind::kAhead)
                           ? lane_rotation.dot(rotation) >= sqrt(2.) / 2.
                           : lane_rotation.dot(rotation) < sqrt(2.) / 2.;
+  return LaneDirection(lane, with_s);
+}
+*/
+/*
+template <typename T>
+LaneDirection PoseSelector<T>::CalcLaneDirection(
+    const Lane* lane, const LanePositionT<T>& lane_position,
+    const Eigen::Quaternion<T>& rotation, AheadOrBehind side) {
+  // Get the vehicle's heading with respect to the current lane; use it to
+  // determine if the vehicle is facing with or against the lane's canonical
+  // direction.
+  const LanePosition lane_pos =
+      LanePosition(ExtractDoubleOrThrow(lane_position.s()),
+                   ExtractDoubleOrThrow(lane_position.r()),
+                   ExtractDoubleOrThrow(lane_position.h()));
+  auto true_lane_rot = lane->GetOrientation(lane_pos);
+
+  // Reorder for monolane?
+  auto lane_rotation = true_lane_rot;
+      //    maliput::api::Rotation::FromRpy(Vector3<double>(
+      //      true_lane_rot.yaw(), true_lane_rot.pitch(), true_lane_rot.roll()));
+
+  //const Eigen::Quaternion<T> lane_rotation =
+  //    lane->GetOrientation(lane_pos).quat();
+  // The dot product of two quaternions is the cosine of half the angle between
+  // the two rotations.  Given two quaternions q₀, q₁ and letting θ be the angle
+  // difference between them, then -π/2 ≤ θ ≤ π/2 iff q₀.q₁ ≥ √2/2.
+  //const bool with_s = (side == AheadOrBehind::kAhead)
+  //                        ? lane_rotation.dot(rotation) >= sqrt(2.) / 2.
+  //                        : lane_rotation.dot(rotation) < sqrt(2.) / 2.;
+
+  std::cout << "    car quat " << rotation.w() <<  " " << rotation.x() <<  " "
+            << rotation.y() <<  " "  << rotation.z() <<  " " << std::endl;
+  const auto rpy = math::QuaternionToSpaceXYZ(Vector4<double>(
+      ExtractDoubleOrThrow(rotation.w()), ExtractDoubleOrThrow(rotation.x()),
+      ExtractDoubleOrThrow(rotation.y()), ExtractDoubleOrThrow(rotation.z())));
+  std::cout << "        rpy " << rpy << std::endl;
+  const Eigen::Quaternion<T> quat = lane_rotation.quat();
+  std::cout << "    lane quat " << quat.w() <<  " " << quat.x() <<  " "
+            << quat.y() <<  " "  << quat.z() <<  " " << std::endl;
+  std::cout << "         rpy " << lane_rotation.rpy() << std::endl;
+
+  const Eigen::Quaternion<double> rot(ExtractDoubleOrThrow(rotation.w()),
+                                      ExtractDoubleOrThrow(rotation.x()),
+                                      ExtractDoubleOrThrow(rotation.y()),
+                                      ExtractDoubleOrThrow(rotation.z()));
+  const maliput::api::Rotation ref_rotation = maliput::api::Rotation::FromQuat(rot);
+  const bool with_s = (side == AheadOrBehind::kAhead)
+      ? abs(lane_rotation.yaw() - ref_rotation.yaw()) < M_PI / 2.
+      : abs(lane_rotation.yaw() - ref_rotation.yaw()) >= M_PI / 2.;
+
+  std::cout << "    with_s " << with_s << std::endl;
+
+  return LaneDirection(lane, with_s);
+}
+*/
+template <typename T>
+LaneDirection PoseSelector<T>::CalcLaneDirection(
+    const Lane* lane, const LanePositionT<T>& lane_position,
+    const Eigen::Quaternion<T>& rotation, AheadOrBehind side) {
+  using std::abs;
+
+  // Get the vehicle's heading with respect to the current lane; use it to
+  // determine if the vehicle is facing with or against the lane's canonical
+  // direction.
+  const LanePosition lane_pos =
+      LanePosition(ExtractDoubleOrThrow(lane_position.s()),
+                   ExtractDoubleOrThrow(lane_position.r()),
+                   ExtractDoubleOrThrow(lane_position.h()));
+  const maliput::api::Rotation lane_rotation = lane->GetOrientation(lane_pos);
+  // The dot product of two quaternions is the cosine of half the angle between
+  // the two rotations.  Given two quaternions q₀, q₁ and letting θ be the angle
+  // difference between them, then -π/2 ≤ θ ≤ π/2 iff q₀.q₁ ≥ √2/2.
+  const Eigen::Quaternion<double> rot(ExtractDoubleOrThrow(rotation.w()),
+                                      ExtractDoubleOrThrow(rotation.x()),
+                                      ExtractDoubleOrThrow(rotation.y()),
+                                      ExtractDoubleOrThrow(rotation.z()));
+  const maliput::api::Rotation ref_rotation = maliput::api::Rotation::FromQuat(rot);
+  const bool with_s = (side == AheadOrBehind::kAhead)
+      ? abs(lane_rotation.yaw() - ref_rotation.yaw()) < M_PI / 2.
+      : abs(lane_rotation.yaw() - ref_rotation.yaw()) >= M_PI / 2.;
   return LaneDirection(lane, with_s);
 }
 

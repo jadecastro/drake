@@ -129,30 +129,40 @@ static void SetDefaultDragwayPoseDerivatives(
 // Sets the poses for one ego car and one traffic car, with the relative
 // positions of each determined by the given s_offset an r_offset values.  The
 // optional `yaw` argument determines the orientation of the ego car with
-// respect to the x-axis.
+// respect to the x-axis.  The optional `road_yaw` argument specifies an offset
+// heading angle of the linear road from which the s-coordinate is defined.
 template <typename T>
 static void SetPoses(const T& s_offset, const T& r_offset,
                      PoseVector<T>* ego_pose, PoseBundle<T>* traffic_poses,
-                     const T& yaw = T(0.)) {
+                     const T& yaw = T(0.), const T& road_yaw = T(0.)) {
+  using std::cos;
+  using std::sin;
+
   DRAKE_DEMAND(traffic_poses->get_num_poses() == 1);
-  DRAKE_DEMAND(kEgoSPosition > 0. && kDragwayLaneLength > kEgoSPosition);
-  DRAKE_DEMAND(kJustAheadSPosition > kEgoSPosition &&
-               kDragwayLaneLength > kJustAheadSPosition);
-  DRAKE_DEMAND(kEgoSPosition > kJustBehindSPosition &&
-               kJustBehindSPosition > 0.);
+  DRAKE_DEMAND(kEgoSPosition > 0.);
 
   // Create poses for one traffic car and one ego car.
   ego_pose->set_translation(Translation3<T>(
-      T(kEgoSPosition) /* s */, T(kEgoRPosition) /* r */, T(0.) /* h */));
+      T(kEgoSPosition) * cos(road_yaw)
+      + T(kEgoRPosition) * sin(road_yaw) /* x */,
+      T(kEgoSPosition) * sin(road_yaw)
+      + T(kEgoRPosition) * cos(road_yaw) /* y */,
+      T(0.) /* z */));
   ego_pose->set_rotation(
-      RollPitchYawToQuaternion(Vector3<T>{T(0.), T(0.), T(yaw)}));
+      RollPitchYawToQuaternion(Vector3<T>{T(0.), T(0.), yaw - road_yaw}));
+  // std::cout << "  ego geo pos " << ego_pose->get_isometry().translation() << std::endl;
 
-  const Translation3<T> translation(T(kEgoSPosition) + s_offset /* s */,
-                                    T(kEgoRPosition) + r_offset /* r */,
-                                    T(0.) /* h */);
+  const Translation3<T> translation(
+      (T(kEgoSPosition) + s_offset) * cos(road_yaw)
+      + (T(kEgoRPosition) + r_offset) * sin(road_yaw)/* x */,
+      (T(kEgoSPosition) + s_offset) * sin(road_yaw)
+      + (T(kEgoRPosition) + r_offset) * cos(road_yaw) /* y */,
+      T(0.) /* z */);
   FrameVelocity<T> traffic_velocity{};
-  traffic_velocity.get_mutable_value() << T(0.) /* ωx */, T(0.) /* ωy */,
-      T(0.) /* ωz */, T(kTrafficXVelocity) /* vx */, T(0.) /* vy */,
+  traffic_velocity.get_mutable_value() <<
+      T(0.) /* ωx */, T(0.) /* ωy */, T(0.) /* ωz */,
+      T(kTrafficXVelocity) * cos(road_yaw) /* vx */,
+      T(kTrafficXVelocity) * sin(road_yaw) /* vy */,
       T(0.) /* vz */;
   traffic_poses->set_pose(0, Isometry3<T>(translation));
   traffic_poses->set_velocity(0, traffic_velocity);
@@ -421,7 +431,7 @@ TEST_F(PoseSelectorDragwayTest, EgoOrientation) {
                                               scan_ahead_distance);
 
     // Expect the correct result independent of the ego vehicle's orientation.
-    const bool is_with_s = yaw > -M_PI / 2. && yaw < M_PI / 2.;
+    const bool is_with_s = yaw >= -M_PI / 2. && yaw <= M_PI / 2.;
     ClosestPose<double> closest_ahead =
         (is_with_s) ? closest_poses.at(AheadOrBehind::kAhead)
                     : closest_poses.at(AheadOrBehind::kBehind);
@@ -431,6 +441,83 @@ TEST_F(PoseSelectorDragwayTest, EgoOrientation) {
     EXPECT_EQ(kJustAheadSPosition, closest_ahead.odometry.pos.s());
     EXPECT_EQ(kJustBehindSPosition, closest_behind.odometry.pos.s());
   }
+}
+
+// Build a road with one linear lane.
+std::unique_ptr<const maliput::api::RoadGeometry> MakeLineLaneRoad(double yaw) {
+  const maliput::monolane::EndpointZ kEndZZero(0., 0., 0., 0.);
+  Builder builder(
+      maliput::api::RBounds(-std::abs(kEgoRPosition) - 2.,
+                            std::abs(kEgoRPosition) + 2.) /* lane_bounds */,
+      maliput::api::RBounds(
+          -std::abs(kEgoRPosition) - 2.,
+          std::abs(kEgoRPosition) + 2.) /* driveable_bounds */,
+      maliput::api::HBounds(0., 5.) /* elevation bounds */,
+      0.01 /* linear tolerance */, 0.01 /* angular_tolerance */);
+  builder.Connect("line_lane" /* id */, Endpoint({0., 0., yaw}, kEndZZero) /* start */,
+                  kRoadSegmentLength /* length */, kEndZZero /* z_end */);
+
+  return builder.Build(maliput::api::RoadGeometryId("LineLaneRoad"));
+}
+
+// Verifies the result is independent of road orientation.
+GTEST_TEST(PoseSelectorTest, RoadOrientation) {
+  //  double thing = -M_PI / 8;
+  int num_fail{0};
+  for (double road_yaw = -M_PI-0.1; road_yaw <= M_PI; road_yaw += 0.1) {
+    const std::unique_ptr<const maliput::api::RoadGeometry> road =
+        MakeLineLaneRoad(road_yaw);
+
+    //    const maliput::api::Lane* lane = road->junction(0)->segment(0)->lane(0);
+
+    PoseVector<double> ego_pose;
+    PoseBundle<double> traffic_poses(1);
+
+    // Define the default poses.
+    const double kSOffset = 0.1;
+    SetPoses(kSOffset, 0. /* r_offset */, &ego_pose, &traffic_poses,
+             0. /* yaw angle */, road_yaw);
+
+
+    /*
+    std::cout << "  lane @ 0: " << lane->ToGeoPosition({0., 0., 0.}) << std::endl;
+    std::cout << "  lane @ length: " << lane->ToGeoPosition({lane->length(), 0., 0.}) << std::endl;
+    const GeoPosition ego_geo_position = GeoPosition::FromXyz(ego_pose.get_isometry().translation());
+    std::cout << "  ego lane pos " << lane->ToLanePosition(ego_geo_position, nullptr, nullptr) << std::endl;
+    const Isometry3<double> traffic_isometry = traffic_poses.get_pose(0);
+    const GeoPosition traffic_geo_position = GeoPosition::FromXyz(traffic_isometry.translation());
+    std::cout << "  traffic lane pos " << lane->ToLanePosition(traffic_geo_position, nullptr, nullptr) << std::endl;
+    */
+
+
+    // Choose a scan-ahead distance shorter than the lane length.
+    const double scan_ahead_distance = kRoadSegmentLength / 2.;
+
+    for (double yaw = -M_PI-0.1; yaw <= M_PI; yaw += 0.1) {
+      // N.B. 0 corresponds to "aligned with the lane along the s-direction".
+      ego_pose.set_rotation(
+          RollPitchYawToQuaternion(Vector3<double>{0., 0., yaw}));
+      // std::cout << "  yaw " << yaw << std::endl;
+
+      const std::map<AheadOrBehind, const ClosestPose<double>> closest_poses =
+          PoseSelector<double>::FindClosestPair(get_lane(ego_pose, *road),
+                                                ego_pose, traffic_poses,
+                                                scan_ahead_distance);
+
+      // Expect the correct result independent of the ego vehicle's orientation.
+      const bool is_with_s =
+          yaw - road_yaw >= -M_PI / 2. && yaw - road_yaw < M_PI / 2.;
+      // std::cout << "  is_with_s " << is_with_s << std::endl;
+      ClosestPose<double> closest_ahead =
+          (is_with_s) ? closest_poses.at(AheadOrBehind::kAhead)
+                      : closest_poses.at(AheadOrBehind::kBehind);
+      EXPECT_EQ(kEgoSPosition + kSOffset, closest_ahead.odometry.pos.s());
+      if (kEgoSPosition + kSOffset != closest_ahead.odometry.pos.s()) {
+        num_fail++;
+      }
+    }
+  }
+  std::cout << " ** NUM FAILURES: " << num_fail << std::endl;
 }
 
 TEST_F(PoseSelectorDragwayTest, NoCarsOnShortRoad) {
