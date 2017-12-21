@@ -96,8 +96,9 @@ ClosestPose<T> PoseSelector<T>::FindSingleClosestPose(
 
   const GeoPositionT<T> ego_geo_position =
       GeoPositionT<T>::FromXyz(ego_pose.get_isometry().translation());
+  T distance{};
   const LanePositionT<T> ego_lane_position =
-      lane->ToLanePositionT<T>(ego_geo_position, nullptr, nullptr);
+      lane->ToLanePositionT<T>(ego_geo_position, nullptr, &distance);
   LaneDirection lane_direction =
       CalcLaneDirection(lane, ego_lane_position, ego_pose.get_rotation(), side);
 
@@ -474,8 +475,6 @@ template <typename T>
 LaneDirection PoseSelector<T>::CalcLaneDirection(
     const Lane* lane, const LanePositionT<T>& lane_position,
     const Eigen::Quaternion<T>& rotation, AheadOrBehind side) {
-  using std::abs;
-
   // Get the vehicle's heading with respect to the current lane; use it to
   // determine if the vehicle is facing with or against the lane's canonical
   // direction.
@@ -483,18 +482,14 @@ LaneDirection PoseSelector<T>::CalcLaneDirection(
       LanePosition(ExtractDoubleOrThrow(lane_position.s()),
                    ExtractDoubleOrThrow(lane_position.r()),
                    ExtractDoubleOrThrow(lane_position.h()));
-  const maliput::api::Rotation lane_rotation = lane->GetOrientation(lane_pos);
+  const Eigen::Quaternion<T> lane_rotation =
+      lane->GetOrientation(lane_pos).quat();
   // The dot product of two quaternions is the cosine of half the angle between
   // the two rotations.  Given two quaternions q₀, q₁ and letting θ be the angle
   // difference between them, then -π/2 ≤ θ ≤ π/2 iff q₀.q₁ ≥ √2/2.
-  const Eigen::Quaternion<double> rot(ExtractDoubleOrThrow(rotation.w()),
-                                      ExtractDoubleOrThrow(rotation.x()),
-                                      ExtractDoubleOrThrow(rotation.y()),
-                                      ExtractDoubleOrThrow(rotation.z()));
-  const maliput::api::Rotation ref_rotation = maliput::api::Rotation::FromQuat(rot);
   const bool with_s = (side == AheadOrBehind::kAhead)
-      ? abs(lane_rotation.yaw() - ref_rotation.yaw()) < M_PI / 2.
-      : abs(lane_rotation.yaw() - ref_rotation.yaw()) >= M_PI / 2.;
+                          ? lane_rotation.dot(rotation) >= sqrt(2.) / 2.
+                          : lane_rotation.dot(rotation) < sqrt(2.) / 2.;
   return LaneDirection(lane, with_s);
 }
 
