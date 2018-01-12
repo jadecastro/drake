@@ -27,18 +27,26 @@ using MapType = Polynomial::MapType;
 using Bound = std::map<Variable, double>;
 using Bounds = std::pair<Bound, Bound>;
 
-Expression MakeMomentVector(const Polynomial& p, Bounds b) {
+Expression MakeCost(const Polynomial& p, Bounds b) {
   // Build a moment vector.
   MapType map = p.monomial_to_coefficient_map();
   Expression coeff;
+  Variables ivars = p.indeterminates();
   for (const auto& monomial : map) {
     Variables vars = monomial.first.GetVariables();
     auto powers = monomial.first.get_powers();
     Expression moment{1.};
-    for (const auto& var : vars) {
+    for (const auto& var : ivars) {
+      std::cout << "      power " << var << "  " << powers[var]+1 << std::endl;
+      if (powers.find(var) == powers.end()) {
+        moment *= b.second[var] - b.first[var];  // zero exponent case.
+        continue;
+      }
       moment *= (pow(b.second[var], powers[var]+1) -
                  pow(b.first[var], powers[var]+1)) / (powers[var]+1);
     }
+    std::cout << " d var -- monomial -- moment: "
+              << monomial.second  << "  " << monomial.first << "  " << moment << std::endl;
     coeff += moment * monomial.second;
   }
   return coeff;
@@ -54,7 +62,7 @@ void ComputeIndicator() {
   const VectorX<Variable> xvec{prog.NewIndeterminates<1>("x")};
   const Variable& x = xvec(0);
 
-  const int d = 10;
+  const int d = 50;
 
   // Domain bounds on x.
   const double x_bound = 1.;  // Bounding box on x: |x| ≤ x_bound.
@@ -65,23 +73,46 @@ void ComputeIndicator() {
   //
   // Inf  w'l  ∀ v, w, q
   // s.t. w ≥ v + 1 on K
+  //      v, w are s.o.s
   const Polynomial v{prog.NewSosPolynomial({x}, d).first};
   const Polynomial w{prog.NewSosPolynomial({x}, d).first};
   const Polynomial q{prog.NewSosPolynomial({x}, d-2).first};
   prog.AddSosConstraint(w - v - 1. - q * gx);
 
-  const Expression m = MakeMomentVector(
+  const Expression m = MakeCost(
       w, std::make_pair(Bound{{x, -x_bound}}, Bound{{x, x_bound}}));
   // Expect the moments of the Lebesgue measure µ2 on B to be
   // y2 = (2, 0, 2/3, 0, 2/5, 0, 2/7, ...)
-  std::cout << " Cost " << m << std::endl;
+  std::cout << " Cost function " << m << std::endl;
   prog.AddCost(m);
 
   const solvers::SolutionResult result{prog.Solve()};
+  std::cout << " Solution result " << result << std::endl;
+  //prog.PrintSolution();
+  std::cout << " Program attributes " << std::endl;
+  std::cout << "    generic costs " << prog.generic_costs().size() << std::endl;
+  std::cout << "    linear costs " << prog.linear_costs().size() << std::endl;
+  std::cout << "    quadratic costs " << prog.quadratic_costs().size() << std::endl;
+  std::cout << "    positive semidefinite constraints " << prog.positive_semidefinite_constraints().size() << std::endl;
+  std::cout << " Optimal cost " << prog.GetOptimalCost() << std::endl;
+  std::cout << "    Solution v: " << std::endl;
+  for (const auto& it : v.decision_variables()) {
+    std::cout << "               " << it << " " << prog.GetSolution(it) << std::endl;
+  }
+  std::cout << "    Solution w: " << std::endl;
+  for (const auto& it : w.decision_variables()) {
+    std::cout << "               " << it << " " << prog.GetSolution(it) << std::endl;
+  }
+  std::cout << "    Solution q: " << std::endl;
+  for (const auto& it : q.decision_variables()) {
+    std::cout << "               " << it << " " << prog.GetSolution(it) << std::endl;
+  }
+  std::cout << " w: " << w << std::endl;
+
   DRAKE_DEMAND(result == solvers::SolutionResult::kSolutionFound);
 }
 
-/// Cubic Polynomial System:
+/// Cubic polynomial system with input:
 ///   ẋ = -x + x³ + u
 ///   y = x
 template <typename T>
@@ -128,7 +159,7 @@ void ComputeBackwardReachableSet() {
 
   // Domain bounds on t, x, u.
   const double T = 2.;
-  const double x_bound = 1.;  // Bounding box on x: |x| ≤ x_bound.
+  const double x_bound = 5.;  // Bounding box on x: |x| ≤ x_bound.
   const double u_bound = 1.;  // Bounding box on u: |u| ≤ u_bound.
   const Polynomial gt = Polynomial{t * (T - t)};
   const Polynomial gx1 = Polynomial{pow(x_bound, 2.)} - Polynomial{x * x};
@@ -142,8 +173,8 @@ void ComputeBackwardReachableSet() {
   //      v ≥ 0 on {T} × ∂X_T  (∂(⋅) denotes the boundary of (⋅))
   //      w ≥ v + 1 on {0} × X
   //      w ≥ 0 on X
-  const Polynomial v{prog.NewFreePolynomial({t, x}, d)};
-  const Polynomial w{prog.NewFreePolynomial({x}, d)};
+  const Polynomial v{prog.NewSosPolynomial({t, x}, d).first};
+  const Polynomial w{prog.NewSosPolynomial({x}, d).first};
 
   // "L" operator.
   const Polynomial Lv{v.Jacobian(tvec).coeff(0) +
@@ -168,24 +199,32 @@ void ComputeBackwardReachableSet() {
   const Polynomial s01{prog.NewSosPolynomial({x}, d-2).first};
   prog.AddSosConstraint(w - s01 * gx1);
 
-  const Expression m = MakeMomentVector(
+  const Expression m = MakeCost(
       w, std::make_pair(Bound{{x, -x_bound}}, Bound{{x, x_bound}}));
-  std::cout << " Cost " << m << std::endl;
+  std::cout << " Cost function " << m << std::endl;
   prog.AddCost(m);
 
   const solvers::SolutionResult result{prog.Solve()};
+
+  std::cout << " Solution result " << result << std::endl;
+  //prog.PrintSolution();
+  std::cout << " Program attributes " << std::endl;
+  std::cout << "    positive semidefinite constraints " << prog.positive_semidefinite_constraints().size() << std::endl;
+  std::cout << " Optimal cost " << prog.GetOptimalCost() << std::endl;
+
+  std::cout << " w: " << w << std::endl;
+  std::cout << "    Solution w: " << std::endl;
+  for (const auto& it : w.decision_variables()) {
+    std::cout << "               " << it << " " << prog.GetSolution(it) << std::endl;
+  }
+
   DRAKE_DEMAND(result == solvers::SolutionResult::kSolutionFound);
-
-  // cout << "Verified that " << v << " < " << prog.GetSolution(m.GetVariables()[0])
-  //     << " is in the region of attraction." << endl;
-
-  // Check that ρ ≃ 1.0.
-  // DRAKE_DEMAND(std::abs(prog.GetSolution(rho) - 1.0) < 1e-6);
 }
+
 }  // namespace drake
 
 int main() {
-  // drake::ComputeBackwardReachableSet();
-  drake::ComputeIndicator();
+  drake::ComputeBackwardReachableSet();
+  // drake::ComputeIndicator();
   return 0;
 }
