@@ -45,11 +45,24 @@ Expression MakeCost(const Polynomial& p, Bounds b) {
       moment *= (pow(b.second[var], powers[var]+1) -
                  pow(b.first[var], powers[var]+1)) / (powers[var]+1);
     }
-    std::cout << " d var -- monomial -- moment: "
+    std::cout << " coeff -- monomial -- moment: "
               << monomial.second  << "  " << monomial.first << "  " << moment << std::endl;
     coeff += moment * monomial.second;
   }
   return coeff;
+}
+
+Polynomial SubstituteIndeterminate(const Polynomial& p,
+                                   const Environment& env) {
+  const MapType map = p.monomial_to_coefficient_map();
+  Polynomial p_new;
+  for (const auto& monom : map) {
+    const auto monom_coeff = monom.first.Substitute(env);
+    const symbolic::Monomial new_monom{monom_coeff.second};
+    // const symbolic::Monomial new_monom{monom.first};
+    p_new.AddProduct(monom.second * monom_coeff.first, new_monom);
+  }
+  return p_new;
 }
 
 /// Cubic polynomial system:
@@ -86,7 +99,7 @@ void ComputeBackwardReachableSet() {
   const Variable& t = tvec(0);
   const Variable& x = xvec(0);
 
-  const int d = 6;
+  const int d = 10;
 
   // Extract the polynomial dynamics.
   context->get_mutable_continuous_state_vector().SetAtIndex(0, x);
@@ -94,7 +107,8 @@ void ComputeBackwardReachableSet() {
 
   // Domain bounds on t, x.
   const double T = 1.;
-  const double x_bound = 5.;  // Bounding box on x: |x| ≤ x_bound.
+  const double x_bound = 1.;  // Bounding box on x: |x| ≤ x_bound.
+
   const Polynomial gt = Polynomial{t * (T - t)};
   const Polynomial gx1 = Polynomial{-(x - x_bound) * (x + x_bound)};
 
@@ -106,40 +120,34 @@ void ComputeBackwardReachableSet() {
   //      v ≥ 0 on {T} × X_T
   //      w ≥ v + 1 on {0} × X
   //      w ≥ 0 on X
-  const Polynomial v{prog.NewSosPolynomial({t, x}, d).first};
-  const Polynomial w{prog.NewSosPolynomial({x}, d).first};
+  const Polynomial v{prog.NewFreePolynomial({t, x}, d)};
+  const Polynomial w{prog.NewFreePolynomial({x}, d)};
+  std::cout << " num w " << w.decision_variables().size() << std::endl;
+  std::cout << " num v " << v.decision_variables().size() << std::endl;
 
   // "L" operator.
   const Polynomial Lv{v.Jacobian(tvec).coeff(0) +
         v.Jacobian(xvec).coeff(0) * Polynomial((*derivatives)[0])};
 
-  const Polynomial q0{prog.NewSosPolynomial({t, x}, d-2).first};
   const Polynomial q1{prog.NewSosPolynomial({t, x}, d-2).first};
-  prog.AddSosConstraint(-Lv - q1 * gx1 - q0 * gt);
+  const Polynomial qt{prog.NewSosPolynomial({t, x}, d-2).first};
+  prog.AddSosConstraint(-Lv - q1 * gx1 - qt * gt);
+  std::cout << " num q1 " << q1.decision_variables().size() << std::endl;
+  std::cout << " num qt " << qt.decision_variables().size() << std::endl;
 
+  const Polynomial v_at_T = SubstituteIndeterminate(v, Environment{{t, T}});
   const Polynomial qT{prog.NewSosPolynomial({x}, d-2).first};
-  const Polynomial qtT{prog.NewSosPolynomial({t, x}, d-2).first};
-  const Polynomial gtT = Polynomial{(t - T) * (T + 0.001 - t)};
+  prog.AddSosConstraint(v_at_T - qT * gxT);
+  std::cout << " num qT " << qT.decision_variables().size() << std::endl;
 
-  std::cout << " v: " << v << std::endl;
-  std::cout << "   degree: " << v.TotalDegree() << std::endl;
-  std::cout << "   dv: " << v.decision_variables() << std::endl;
-  std::cout << "   ind: " << v.indeterminates() << std::endl;
-  std::cout << " v subs: " << Polynomial{v.ToExpression().Substitute(t, 0.)} << std::endl;
-  const Polynomial new_v(prog.NewFreePolynomial(v.ToExpression().Substitute(t, 0.));
-  std::cout << "   degree: " << new_v.TotalDegree() << std::endl;
-  std::cout << "   dv: " << new_v.decision_variables() << std::endl;
-  std::cout << "   ind: " << new_v.indeterminates() << std::endl;
-  prog.AddSosConstraint(new_v - qtT * gtT)
-  // prog.AddSosConstraint(v - qT * gxT + qtT * gtT);
-
+  const Polynomial v_at_0 = SubstituteIndeterminate(v, Environment{{t, 0.}});
   const Polynomial q01{prog.NewSosPolynomial({x}, d-2).first};
-  const Polynomial qt0{prog.NewSosPolynomial({t, x}, d-2).first};
-  const Polynomial gt0 = Polynomial{-t * (t + 0.001)};
-  prog.AddSosConstraint(w - v - 1. - q01 * gx1 + qt0 * gt0);
+  prog.AddSosConstraint(w - v_at_0 - 1. - q01 * gx1);
+  std::cout << " num q01 " << q01.decision_variables().size() << std::endl;
 
   const Polynomial s01{prog.NewSosPolynomial({x}, d-2).first};
   prog.AddSosConstraint(w - s01 * gx1);
+  std::cout << " num s01 " << s01.decision_variables().size() << std::endl;
 
   const Expression m = MakeCost(
       w, std::make_pair(Bound{{x, -x_bound}}, Bound{{x, x_bound}}));
@@ -151,6 +159,7 @@ void ComputeBackwardReachableSet() {
   std::cout << " Solution result " << result << std::endl;
   //prog.PrintSolution();
   std::cout << " Program attributes " << std::endl;
+  std::cout << "    number of decision variables " << prog.num_vars() << std::endl;
   std::cout << "    positive semidefinite constraints " << prog.positive_semidefinite_constraints().size() << std::endl;
   std::cout << " Optimal cost " << prog.GetOptimalCost() << std::endl;
 
