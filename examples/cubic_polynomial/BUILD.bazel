@@ -32,6 +32,7 @@ drake_cc_binary(
     add_test_rule = 1,
     tags = mosek_test_tags(),
     deps = [
+        "//drake/common/proto:call_python",
         "//drake/solvers:mathematical_program",
         "//drake/systems/framework:vector_system",
     ],

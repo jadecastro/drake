@@ -203,7 +203,6 @@ symbolic::Polynomial MathematicalProgram::NewFreePolynomial(
 pair<symbolic::Polynomial, Binding<PositiveSemidefiniteConstraint>>
 MathematicalProgram::NewSosPolynomial(const Variables& indeterminates,
                                       const int degree) {
-  std::cout << " degree " << degree << std::endl;
   DRAKE_DEMAND(degree > 0 && degree % 2 == 0);
   const drake::VectorX<symbolic::Monomial> x{
       MonomialBasis(indeterminates, degree / 2)};
