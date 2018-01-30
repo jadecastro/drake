@@ -8,6 +8,7 @@
 #include "drake/automotive/maliput/dragway/road_geometry.h"
 #include "drake/automotive/simple_car.h"
 #include "drake/common/proto/call_python.h"
+#include "drake/common/symbolic.h"
 #include "drake/lcm/drake_lcm.h"
 #include "drake/systems/trajectory_optimization/direct_collocation.h"
 
@@ -21,12 +22,16 @@ namespace {
 using common::CallPython;
 using systems::trajectory_optimization::DirectCollocation;
 
-static constexpr int kNumTrafficCarsForLaneChange = 2;
+// Road parameters -- Assume fixed for now.
 static constexpr double kLaneWidth = 3.;
 static constexpr double kDragwayLength = 150.;
+static const std::string kEgoCarName = "ego_car";
+static const std::string kLaneChangerName = "lane_changer";
+static const std::string kLaneFollowerName = "lane_follower";
 
 static std::unique_ptr<AutomotiveSimulator<double>>
-SetupSimulator(bool is_playback_mode, int num_dragway_lanes = 1) {
+SetupSimulator(bool is_playback_mode, int num_dragway_lanes,
+               int num_lane_changers, int num_lane_followers) {
   std::unique_ptr<const maliput::api::RoadGeometry> road_geometry =
       std::make_unique<const maliput::dragway::RoadGeometry>(
           maliput::api::RoadGeometryId({"Dircol Test Dragway"}),
@@ -34,6 +39,7 @@ SetupSimulator(bool is_playback_mode, int num_dragway_lanes = 1) {
           0. /* shoulder width */, 5. /* maximum_height */,
           std::numeric_limits<double>::epsilon() /* linear_tolerance */,
           std::numeric_limits<double>::epsilon() /* angular_tolerance */);
+  DRAKE_DEMAND(num_dragway_lanes > 0 || num_lane_changers == 0);
 
   auto simulator = (is_playback_mode)
       ? std::make_unique<AutomotiveSimulator<double>>(
@@ -54,83 +60,84 @@ SetupSimulator(bool is_playback_mode, int num_dragway_lanes = 1) {
   const maliput::api::Lane* ego_goal_lane =
       dragway_road_geometry->junction(0)->segment(0)->lane(kEgoGoalLaneIndex);
 
+  // Provide a valid instantiation to be fixed in the optimization.
   const double start_s_ego = 5.;
   const double start_speed_ego = 20.;
   const maliput::api::GeoPosition start_position_ego =
       ego_start_lane->ToGeoPosition({start_s_ego, 0., 0.});
 
   SimpleCarState<double> ego_initial_state;
-  // The following presumes we are on a dragway, in which x -> s, y -> r.
   ego_initial_state.set_x(start_position_ego.x());
   ego_initial_state.set_y(start_position_ego.y());
   ego_initial_state.set_heading(0.);
   ego_initial_state.set_velocity(start_speed_ego);
 
-  simulator->AddIdmControlledCar("ego_car",
+  simulator->AddIdmControlledCar(kEgoCarName,
                                  true /* move along the "s"-direction */,
                                  ego_initial_state, ego_goal_lane);
 
-  if (num_dragway_lanes > 1) {
-    for (int i{0}; i < num_dragway_lanes; ++i) {
-      const int lane_index_traffic = i % num_dragway_lanes;
+  for (int i{0}; i < num_lane_followers; ++i) {
+    // The prescribed lane cannot be changed by the solver.
+    const int lane_index_traffic = i % num_dragway_lanes;
 
-      const double start_s_traffic = 20.;
-      const double speed_traffic = 10.;
-      //const int lane_index_traffic = (i == 0) ? 0 : 2;
+    // Provide a valid instantiation for the lane follower (note these will be
+    // overwritten).
+    const double start_s_lf = 20.;
+    const double start_speed_lf = 10.;
 
-      const auto& params_traffic = CreateTrajectoryParamsForDragway(
-          *dragway_road_geometry, lane_index_traffic, speed_traffic,
-          start_s_traffic);
-      simulator->AddPriusTrajectoryCar(
-          "traffic_trajectory_car_" + std::to_string(i),
-          std::get<0>(params_traffic), speed_traffic, start_s_traffic);
-    }
-  } else {
-    const double start_s_leader = 1.;
-    const double speed_leader = 10.;
-
-    const auto& params_leader = CreateTrajectoryParamsForDragway(
-        *dragway_road_geometry, kEgoStartLaneIndex, speed_leader,
-        start_s_leader);
-    simulator->AddPriusTrajectoryCar("leading_trajectory_car",
-                                     std::get<0>(params_leader), speed_leader,
-                                     start_s_leader);
+    const auto& lf_params = CreateTrajectoryParamsForDragway(
+        *dragway_road_geometry, lane_index_traffic, start_speed_lf, start_s_lf);
+    simulator->AddPriusTrajectoryCar(
+        kLaneFollowerName + "_" + std::to_string(i),
+        std::get<0>(lf_params), start_speed_lf, start_s_lf);
   }
-
-  if (num_dragway_lanes == 3) {
-    // Instantiate a third traffic car: a SimpleCar governed by a
-    // PurePursuitController.
+  for (int i{0}; i < num_lane_changers; ++i) {
+    // Provide a valid instantiation for the lane changer (note these will be
+    // overwritten).
     const double start_s_lc = 5.;
     const double start_speed_lc = 10.;
     const maliput::api::GeoPosition start_position_lc =
         ego_start_lane->ToGeoPosition({start_s_lc, 0., 0.});
 
     SimpleCarState<double> lc_initial_state;
-    // The following presumes we are on a dragway, in which x -> s, y -> r.
     lc_initial_state.set_x(start_position_lc.x());
     lc_initial_state.set_y(start_position_lc.y());
     lc_initial_state.set_heading(0.);
     lc_initial_state.set_velocity(start_speed_lc);
 
-    simulator->AddIdmControlledCar("lane_changer",
+    // All lane changers move into the ego car's lane.
+    simulator->AddIdmControlledCar(kLaneChangerName + "_" + std::to_string(i),
                                    true /* move along the "s"-direction */,
                                    lc_initial_state, ego_goal_lane);
   }
-
-
-  // TODO(jadecastro): Double Check!
   return std::unique_ptr<AutomotiveSimulator<double>>(simulator.release());
 }
 
+template <typename T>
+void SetSimpleCarState(const systems::Diagram<T>& diagram,
+                       const systems::System<T>& car,
+                       const SimpleCarState<T>& value,
+                       systems::Context<T>* context) {
+  systems::VectorBase<T>& context_state =
+      diagram.GetMutableSubsystemContext(car, context)
+      .get_mutable_continuous_state_vector();
+  SimpleCarState<T>* const state =
+      dynamic_cast<SimpleCarState<T>*>(&context_state);
+  DRAKE_ASSERT(state);
+  state->set_value(value.get_value());
+}
+
 int DoMain(void) {
-
   const int kNumLanes = 3;  // Number of lanes in the scenario.
+  const int kNumLaneChangingCars = 3;  // Number of lanes in the scenario.
+  const int kNumLaneFollowingCars = 3;  // Number of lanes in the scenario.
 
-  auto simulator = SetupSimulator(false /* is_playback_mode */, kNumLanes);
+  auto simulator = SetupSimulator(false /* is_playback_mode */, kNumLanes,
+                                  kNumLaneChangingCars, kNumLaneFollowingCars);
 
   simulator->BuildAndInitialize();
 
-  const auto& plant = simulator->GetDiagram();
+  const systems::System<double>& plant = simulator->GetDiagram();
   auto context = plant.CreateDefaultContext();
 
   // Set up a direct-collocation feasibility problem.
@@ -170,160 +177,136 @@ int DoMain(void) {
   // MOBIL-admissible preconditions (i.e. the desired lane is not the current
   // one over the provided range initial conditions).
 
-  // TODO(jadecastro): Caution: The following is a super-hackish way to fix the
-  // constraints for each scenario.  How best to obtain correspondences for all
-  // the indices?
-  const double delta_y =  0.; //0.5 * kLaneWidth;
+  const double delta_y =  0.;  // 0.5 * kLaneWidth;
   VectorX<double> vect0(14);
   VectorX<double> vectf(14);
-  if (kNumLanes == 3) {
-    vect0 << 20., 1. * kLaneWidth + delta_y, 0., 10., 30., 5., 60., 8.,
-        40., 5., 30., -1. * kLaneWidth + delta_y, 0., 5.5;
-    vectf << 30., 0.4 * kLaneWidth + delta_y, 0., 10., 40., 5., 80., 8.,
-        60., 5., 40., -0.6 * kLaneWidth + delta_y, 0., 5.5;
 
-    // Begin with a reasonable spacing between cars.
-    // -- Traffic Car 3 (left lane)
-    prog.AddLinearConstraint(prog.initial_state()(0) >= vect0(0));
-                             //prog.initial_state()(4));  // x traffic2
-    //prog.AddLinearConstraint(prog.initial_state()(0) <= kDragwayLength);
-                                                        // x traffic2
-    prog.AddLinearConstraint(prog.initial_state()(1) == kLaneWidth + delta_y);
-                                                              // y traffic2
-    prog.AddLinearConstraint(prog.initial_state()(2) == vect0(2));  // heading
-                                                              // traffic2
-    prog.AddLinearConstraint(prog.initial_state()(3) >= vect0(3));
-                                                           // velocity traffic2
-    // -- Traffic Car 2 (left lane)
-    prog.AddLinearConstraint(prog.initial_state()(4) >= vect0(4));
-    prog.AddLinearConstraint(prog.initial_state()(4) <= vect0(4) + 5.);
-    prog.AddLinearConstraint(prog.initial_state()(5) == vect0(5));
-    // -- Traffic Car 1 (middle lane)
-    // prog.AddLinearConstraint(prog.initial_state()(4) + 5. <=
-    //                          prog.initial_state()(8));  // s traffic1
-    // prog.AddLinearConstraint(prog.initial_state()(4) <= 47.5);  // s traffic1
-    //prog.AddLinearConstraint(prog.initial_state()(5) <= 5.);// s_dot traffic1
-    prog.AddLinearConstraint(prog.initial_state()(6) >= vect0(6));
-    prog.AddLinearConstraint(prog.initial_state()(6) <= vect0(6) + 5.);
-    prog.AddLinearConstraint(prog.initial_state()(7) >= vect0(7));
-                                                              // s_dot traffic1
-    // -- Traffic Car 0 (right lane)
-    prog.AddLinearConstraint(prog.initial_state()(8) >= vect0(8));
-                                                              // s traffic0
-    prog.AddLinearConstraint(prog.initial_state()(8) <= vect0(8) + 5.);
-    prog.AddLinearConstraint(prog.initial_state()(9) == vect0(9));
-                                                              // s_dot traffic0
-    // -- Ego Car (right lane)
-    prog.AddLinearConstraint(prog.initial_state()(10) == vect0(10));  // x ego
-    prog.AddLinearConstraint(prog.initial_state()(11) ==
-                             -1. * kLaneWidth + delta_y);  // y ego
-    prog.AddLinearConstraint(prog.initial_state()(12) == vect0(12));
-                                                               // heading ego
-    prog.AddLinearConstraint(prog.initial_state()(13) == vect0(13));
-                                                               // velocity ego
+  const auto& diagram = dynamic_cast<const systems::Diagram<double>&>(plant);
+  std::vector<const systems::System<double>*> systems = diagram.GetSystems();
 
-    // Set state constaints for all time steps.
-    for (int i{0}; i < kNumTimeSamples; ++i) {
-      // -- Traffic Car 3 (moving to the middle lane)
-      prog.AddLinearConstraint(prog.state(i)(0) >= 20.);
-                                                           // x traffic2
-      //prog.AddLinearConstraint(prog.state(i)(0) <= kDragwayLength);
-                                                           // x traffic2
-      prog.AddLinearConstraint(prog.state(i)(1) <= kLaneWidth + delta_y);
-                                                           // y traffic2
-      //prog.AddLinearConstraint(prog.state(i)(2) >= 0.);  // heading traffic2
-      prog.AddLinearConstraint(prog.state(i)(3) <= 15.);  // velocity traffic2
-      prog.AddLinearConstraint(prog.state(i)(3) >= 4.);  // velocity traffic2
+  auto coeff_context = plant.CreateDefaultContext();
 
-      // -- Traffic Car 2 (left lane)
-      prog.AddLinearConstraint(prog.state(i)(4) >= 20.);  // s traffic1
-      prog.AddLinearConstraint(prog.state(i)(5) >= 5.);  // s_dot traffic1
+  SimpleCarState<double> ego_coefficients;
+  ego_coefficients.set_x(-1.);
 
-      // -- Traffic Car 1 (middle lane)
-      //prog.AddLinearConstraint(prog.state(i)(4) + 3. <= prog.state(i)(8));
-                                                         // s traffic1
-      //prog.AddLinearConstraint(prog.state(i)(5) <= 5.);  // s_dot traffic1
-      prog.AddLinearConstraint(prog.state(i)(6) >= 70.);  // s traffic1
-      prog.AddLinearConstraint(prog.state(i)(7) >= 5.);  // s_dot traffic1
-      // -- Traffic Car 0 (right lane)
-      prog.AddLinearConstraint(prog.state(i)(8) >= 40.);  // s traffic0
-      prog.AddLinearConstraint(prog.state(i)(9) == 5.);  // s_dot traffic0
-      // -- Ego Car (moving to the middle lane)
-      prog.AddLinearConstraint(prog.state(i)(10) >= 30.);  // x ego
-      prog.AddLinearConstraint(prog.state(i)(11) >= -kLaneWidth + delta_y);
-                                                          // y ego
-      //prog.AddLinearConstraint(prog.state(i)(10) >= 0.);  // heading ego
-      prog.AddLinearConstraint(prog.state(i)(13) <= 7.);  // velocity ego
-      prog.AddLinearConstraint(prog.state(i)(13) >= 4.);  // velocity ego
+  SimpleCarState<double> all_lc_coefficients;
+  all_lc_coefficients.set_x(1.);
+
+  vect0 << 20., 1. * kLaneWidth + delta_y, 0., 10., 30., 5., 60., 8.,
+      40., 5., 30., -1. * kLaneWidth + delta_y, 0., 5.5;
+  vectf << 30., 0.4 * kLaneWidth + delta_y, 0., 10., 40., 5., 80., 8.,
+      60., 5., 40., -0.6 * kLaneWidth + delta_y, 0., 5.5;
+
+  for (const auto& car : systems) {
+    std::string name = car->get_name();
+    std::cout << " NAME " << name << std::endl;
+    if (name.find(kEgoCarName + "_simple_car") != std::string::npos) {
+      SetSimpleCarState(diagram, *car, ego_coefficients, coeff_context.get());
+    } else if (name.find(kLaneFollowerName) != std::string::npos) {
+    } else if ((name.find(kLaneChangerName) != std::string::npos) &&
+               (name.find("simple_car") != std::string::npos)) {
+      SetSimpleCarState(diagram, *car, all_lc_coefficients,
+                        coeff_context.get());
     }
-
-    // Unsafe criterion: Find a collision with Traffic Car 2 merging into the
-    // middle lane.  Assume for now that, irrespective of its orientation, the
-    // traffic car occupies a lane-aligned bounding box.
-
-    // y ego >= y traffic 2 - 0.5 * kLaneWidth && x ego <= x traffic2 + 2.5 &&
-    // x ego >= x traffic2 - 2.5
-    prog.AddLinearConstraint(prog.final_state()(11) >=
-                             //-0.51 * kLaneWidth + delta_y);
-                             prog.final_state()(1) - 0.5 * kLaneWidth);
-    prog.AddLinearConstraint(prog.final_state()(10) >=
-                             prog.final_state()(0) - 2.5);
-    prog.AddLinearConstraint(prog.final_state()(10) <=
-                             prog.final_state()(0) + 2.5);
-
-    // Add a cost to encourage solutions that minimize the distance to a crash.
-    //prog.AddRunningCost((prog.state()(4) - prog.state()(0)) *
-    //                    (prog.state()(4) - prog.state()(0)) +
-    //                    (prog.state()(5) - (-0.5 * kLaneWidth + delta_y)) *
-    //                    (prog.state()(5) - (-0.5 * kLaneWidth + delta_y)));
-
-   } else if (kNumLanes == 2) {
-    vect0 << 5., 5., 60., 5., 50., -0.5 * kLaneWidth + delta_y, 0., 5.5;
-    vectf << 60. - 2.5, 5., 80., 5., 60., -0.01 * kLaneWidth + delta_y, 0., 5.5;
-
-    DRAKE_DEMAND(kNumTrafficCarsForLaneChange == 2);
-    // Begin with a reasonable spacing between cars.
-    // -- Traffic Car 1 (left lane)
-    prog.AddLinearConstraint(prog.initial_state()(0) >= 5.);  // s traffic1
-    //prog.AddLinearConstraint(prog.initial_state()(0) <= 47.5);  // s traffic1
-    prog.AddLinearConstraint(prog.initial_state()(1) >= 5.);  // s_dot traffic1
-    // -- Traffic Car 0 (right lane)
-    prog.AddLinearConstraint(prog.initial_state()(2) == 60.);  // s traffic0
-    prog.AddLinearConstraint(prog.initial_state()(3) == 5.);  // s_dot traffic0
-    // -- Ego Car (right lane)
-    prog.AddLinearConstraint(prog.initial_state()(4) == 50.);  // x ego
-    prog.AddLinearConstraint(prog.initial_state()(5) ==
-                             -0.5 * kLaneWidth + delta_y);
-                                                               // y ego
-    prog.AddLinearConstraint(prog.initial_state()(6) == 0.);  // heading ego
-    prog.AddLinearConstraint(prog.initial_state()(7) == 5.5);  // velocity ego
-
-    // Set state constaints for all time steps.
-    for (int i{0}; i < kNumTimeSamples; ++i) {
-      //prog.AddLinearConstraint(prog.state()(0) >= prog.state()(2));
-      // -- Traffic Car 1 (left lane)
-      prog.AddLinearConstraint(prog.state(i)(0) >= 5.);  // s traffic0
-      prog.AddLinearConstraint(prog.state(i)(1) >= 5.);  // s_dot traffic0
-      // -- Traffic Car 0 (right lane)
-      prog.AddLinearConstraint(prog.state(i)(2) >= 60.);  // s traffic1
-      prog.AddLinearConstraint(prog.state(i)(3) == 5.);  // s_dot traffic1
-      // -- Ego Car (moving to the left lane)
-      prog.AddLinearConstraint(prog.state(i)(4) >= 50.);  // x ego
-      prog.AddLinearConstraint(prog.state(i)(5) >=
-                               -0.5 * kLaneWidth + delta_y);  // y ego
-      //prog.AddLinearConstraint(prog.state(i)(6) >= 0.);  // heading ego
-      prog.AddLinearConstraint(prog.state(i)(7) <= 7.);  // velocity ego
-      prog.AddLinearConstraint(prog.state(i)(7) >= 4.);  // velocity ego
-    }
-
-    // Unsafe criterion: Find a collision with the traffic car in left lane.
-    // y ego >= 0. && x ego <= x traffic1 + 2.5 && x ego >= x traffic1 - 2.5
-    prog.AddLinearConstraint(prog.final_state()(5) >= -0.01 + delta_y);
-    prog.AddLinearConstraint(prog.final_state()(4) >=
-                             prog.final_state()(0) - 2.5);
-    prog.AddLinearConstraint(prog.final_state()(4) <=
-                             prog.final_state()(0) + 2.5);
   }
+
+  // Create an inequality constraint of the form Ax <= b.
+  coeff_context.get_continuous_state_vector().get
+
+  // Begin with a reasonable spacing between cars.
+  // -- Traffic Car 3 (left lane)
+  prog.AddLinearConstraint(prog.initial_state()(0) >= vect0(0));
+  //prog.initial_state()(4));  // x traffic2
+  //prog.AddLinearConstraint(prog.initial_state()(0) <= kDragwayLength);
+  // x traffic2
+  prog.AddLinearConstraint(prog.initial_state()(1) == kLaneWidth + delta_y);
+  // y traffic2
+  prog.AddLinearConstraint(prog.initial_state()(2) == vect0(2));  // heading
+  // traffic2
+  prog.AddLinearConstraint(prog.initial_state()(3) >= vect0(3));
+  // velocity traffic2
+  // -- Traffic Car 2 (left lane)
+  prog.AddLinearConstraint(prog.initial_state()(4) >= vect0(4));
+  prog.AddLinearConstraint(prog.initial_state()(4) <= vect0(4) + 5.);
+  prog.AddLinearConstraint(prog.initial_state()(5) == vect0(5));
+  // -- Traffic Car 1 (middle lane)
+  // prog.AddLinearConstraint(prog.initial_state()(4) + 5. <=
+  //                          prog.initial_state()(8));  // s traffic1
+  // prog.AddLinearConstraint(prog.initial_state()(4) <= 47.5);  // s traffic1
+  //prog.AddLinearConstraint(prog.initial_state()(5) <= 5.);// s_dot traffic1
+  prog.AddLinearConstraint(prog.initial_state()(6) >= vect0(6));
+  prog.AddLinearConstraint(prog.initial_state()(6) <= vect0(6) + 5.);
+  prog.AddLinearConstraint(prog.initial_state()(7) >= vect0(7));
+  // s_dot traffic1
+  // -- Traffic Car 0 (right lane)
+  prog.AddLinearConstraint(prog.initial_state()(8) >= vect0(8));
+  // s traffic0
+  prog.AddLinearConstraint(prog.initial_state()(8) <= vect0(8) + 5.);
+  prog.AddLinearConstraint(prog.initial_state()(9) == vect0(9));
+  // s_dot traffic0
+  // -- Ego Car (right lane)
+  prog.AddLinearConstraint(prog.initial_state()(10) == vect0(10));  // x ego
+  prog.AddLinearConstraint(prog.initial_state()(11) ==
+                           -1. * kLaneWidth + delta_y);  // y ego
+  prog.AddLinearConstraint(prog.initial_state()(12) == vect0(12));
+  // heading ego
+  prog.AddLinearConstraint(prog.initial_state()(13) == vect0(13));
+  // velocity ego
+
+  // Set state constaints for all time steps.
+  for (int i{0}; i < kNumTimeSamples; ++i) {
+    // -- Traffic Car 3 (moving to the middle lane)
+    prog.AddLinearConstraint(prog.state(i)(0) >= 20.);
+    // x traffic2
+    //prog.AddLinearConstraint(prog.state(i)(0) <= kDragwayLength);
+    // x traffic2
+    prog.AddLinearConstraint(prog.state(i)(1) <= kLaneWidth + delta_y);
+    // y traffic2
+    //prog.AddLinearConstraint(prog.state(i)(2) >= 0.);  // heading traffic2
+    prog.AddLinearConstraint(prog.state(i)(3) <= 15.);  // velocity traffic2
+    prog.AddLinearConstraint(prog.state(i)(3) >= 4.);  // velocity traffic2
+
+    // -- Traffic Car 2 (left lane)
+    prog.AddLinearConstraint(prog.state(i)(4) >= 20.);  // s traffic1
+    prog.AddLinearConstraint(prog.state(i)(5) >= 5.);  // s_dot traffic1
+
+    // -- Traffic Car 1 (middle lane)
+    //prog.AddLinearConstraint(prog.state(i)(4) + 3. <= prog.state(i)(8));
+    // s traffic1
+    //prog.AddLinearConstraint(prog.state(i)(5) <= 5.);  // s_dot traffic1
+    prog.AddLinearConstraint(prog.state(i)(6) >= 70.);  // s traffic1
+    prog.AddLinearConstraint(prog.state(i)(7) >= 5.);  // s_dot traffic1
+    // -- Traffic Car 0 (right lane)
+    prog.AddLinearConstraint(prog.state(i)(8) >= 40.);  // s traffic0
+    prog.AddLinearConstraint(prog.state(i)(9) == 5.);  // s_dot traffic0
+    // -- Ego Car (moving to the middle lane)
+    prog.AddLinearConstraint(prog.state(i)(10) >= 30.);  // x ego
+    prog.AddLinearConstraint(prog.state(i)(11) >= -kLaneWidth + delta_y);
+    // y ego
+    //prog.AddLinearConstraint(prog.state(i)(10) >= 0.);  // heading ego
+    prog.AddLinearConstraint(prog.state(i)(13) <= 7.);  // velocity ego
+    prog.AddLinearConstraint(prog.state(i)(13) >= 4.);  // velocity ego
+  }
+
+  // Unsafe criterion: Find a collision with Traffic Car 2 merging into the
+  // middle lane.  Assume for now that, irrespective of its orientation, the
+  // traffic car occupies a lane-aligned bounding box.
+
+  // y ego >= y traffic 2 - 0.5 * kLaneWidth && x ego <= x traffic2 + 2.5 &&
+  // x ego >= x traffic2 - 2.5
+  prog.AddLinearConstraint(prog.final_state()(11) >=
+                           //-0.51 * kLaneWidth + delta_y);
+                           prog.final_state()(1) - 0.5 * kLaneWidth);
+  prog.AddLinearConstraint(prog.final_state()(10) >=
+                           prog.final_state()(0) - 2.5);
+  prog.AddLinearConstraint(prog.final_state()(10) <=
+                           prog.final_state()(0) + 2.5);
+
+  // Add a cost to encourage solutions that minimize the distance to a crash.
+  //prog.AddRunningCost((prog.state()(4) - prog.state()(0)) *
+  //                    (prog.state()(4) - prog.state()(0)) +
+  //                    (prog.state()(5) - (-0.5 * kLaneWidth + delta_y)) *
+  //                    (prog.state()(5) - (-0.5 * kLaneWidth + delta_y)));
 
   systems::BasicVector<double> x0(vect0);
   systems::BasicVector<double> xf(vectf);
@@ -388,8 +371,9 @@ int DoMain(void) {
   //if (result == solvers::SolutionResult::kSolutionFound) {
   if (true) {
     // Build another simulator with LCM capability and run in play-back mode.
-    auto simulator_lcm = SetupSimulator(true /* is_playback_mode */,
-                                        kNumLanes);
+    auto simulator_lcm = SetupSimulator(true /* is_playback_mode */, kNumLanes,
+                                        kNumLaneChangingCars,
+                                        kNumLaneFollowingCars);
     simulator_lcm->Build();
 
     // Pipe the offending initial condition into AutomotiveSimulator.
