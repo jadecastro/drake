@@ -199,6 +199,19 @@ drake_cc_library(
     ],
 )
 
+
+drake_cc_library(
+    name = "maliput_autodiff_adapter",
+    srcs = ["maliput_autodiff_adapter.cc"],
+    hdrs = ["maliput_autodiff_adapter.h"],
+    deps = [
+        "//automotive/maliput/api",
+        "//common:autodiff",
+        "//common:autodiffxd_make_coherent",
+        "//math:geometric_transform",
+    ],
+)
+
 drake_cc_library(
     name = "maliput_railcar",
     srcs = ["maliput_railcar.cc"],
@@ -558,6 +571,17 @@ drake_cc_googletest(
     deps = [
         "//automotive:dynamic_bicycle_car",
         "//systems/framework/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "maliput_autodiff_adapter_test",
+    deps = [
+        "//automotive:maliput_autodiff_adapter",
+        "//automotive:multilane_onramp_merge",
+        "//automotive/maliput/dragway",
+        "//common:essential",
+        "//common/test_utilities:eigen_matrix_compare",
     ],
 )
 
