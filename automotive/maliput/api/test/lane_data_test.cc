@@ -6,6 +6,16 @@
 #include "drake/common/symbolic.h"
 #include "drake/common/test_utilities/eigen_matrix_compare.h"
 
+
+
+
+
+
+
+
+
+#include <iostream>
+
 namespace drake {
 namespace maliput {
 namespace api {
@@ -78,6 +88,10 @@ TYPED_TEST(LanePositionTest, ComponentSetters) {
   // Check the individual component setters.
   using T = TypeParam;
   LanePositionT<T> dut(T(0.1), T(0.2), T(0.3));
+
+  Eigen::Matrix3d m;
+  m = Eigen::AngleAxisd(0., Eigen::Vector3d::UnitZ());
+  std::cout << "  hei " << m << std::endl;
 
   dut.set_s(T(99.));
   CHECK_ALL_LANE_POSITION_ACCESSORS(dut, T(99.), T(0.2), T(0.3));
