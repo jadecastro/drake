@@ -69,6 +69,17 @@ drake_pybind_library(
     ],
 )
 
+drake_pybind_library(
+    name = "automotive_py",
+    cc_deps = [
+        "//automotive:simple_car",
+        "//bindings/pydrake/systems:systems_pybind",
+    ],
+    cc_so_name = "automotive",
+    cc_srcs = ["automotive_py.cc"],
+    package_info = PACKAGE_INFO,
+)
+
 drake_py_library(
     name = "backwards_compatibility_py",
     srcs = [
@@ -175,6 +186,15 @@ drake_py_test(
     deps = [
         ":odr_test_module_py",
         ":symbolic_py",
+    ],
+)
+
+drake_py_test(
+    name = "automotive_test",
+    size = "small",
+    deps = [
+        ":automotive_py",
+        "//bindings/pydrake/systems",
     ],
 )
 
