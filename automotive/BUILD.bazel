@@ -442,6 +442,25 @@ drake_cc_binary(
     ],
 )
 
+drake_cc_binary(
+    name = "idm_test",
+    srcs = [
+        "idm_test.cc",
+    ],
+    data = [
+        "//automotive/models:prod_models",
+    ],
+    deps = [
+        ":automotive_simulator",
+        ":create_trajectory_params",
+        ":monolane_onramp_merge",
+        "//automotive/maliput/dragway",
+        "//automotive/maliput/multilane",
+        "//common:text_logging_gflags",
+        "//lcm",
+    ],
+)
+
 drake_py_binary(
     name = "steering_command_driver",
     srcs = ["steering_command_driver.py"],
