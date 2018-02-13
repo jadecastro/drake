@@ -72,7 +72,10 @@ drake_pybind_library(
 drake_pybind_library(
     name = "automotive_py",
     cc_deps = [
+        "//automotive:calc_ongoing_road_position",
+        "//automotive:idm_controller",
         "//automotive:simple_car",
+        "//automotive/maliput/dragway",
         "//bindings/pydrake/systems:systems_pybind",
     ],
     cc_so_name = "automotive",
@@ -206,6 +209,8 @@ drake_py_test(
     size = "small",
     deps = [
         ":automotive_py",
+        "//bindings/pydrake/maliput:api_py",
+        "//bindings/pydrake/maliput:dragway_py",
         "//bindings/pydrake/systems",
     ],
 )

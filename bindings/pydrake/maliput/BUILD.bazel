@@ -38,6 +38,9 @@ drake_py_library(
 
 drake_pybind_library(
     name = "api_py",
+    cc_deps = [
+        "//automotive/maliput/api",
+    ],
     cc_so_name = "api",
     cc_srcs = ["api_py.cc"],
     package_info = PACKAGE_INFO,
@@ -48,6 +51,9 @@ drake_pybind_library(
 
 drake_pybind_library(
     name = "dragway_py",
+    cc_deps = [
+        "//automotive/maliput/dragway",
+    ],
     cc_so_name = "dragway",
     cc_srcs = ["dragway_py.cc"],
     package_info = PACKAGE_INFO,
@@ -57,8 +63,7 @@ drake_pybind_library(
 )
 
 PY_LIBRARIES_WITH_INSTALL = [
-    ":api_py",
-    ":dragway_py",
+    ":maliput_py",
 ]
 
 PY_LIBRARIES = [
@@ -66,7 +71,7 @@ PY_LIBRARIES = [
 ]
 
 drake_py_library(
-    name = "maliput",
+    name = "automotive",
     imports = PACKAGE_INFO.py_imports,
     deps = PY_LIBRARIES_WITH_INSTALL + PY_LIBRARIES,
 )
@@ -79,7 +84,7 @@ install(
 )
 
 drake_py_test(
-    name = "maliput_test",
+    name = "dragway_test",
     size = "small",
     deps = [
         ":api_py",

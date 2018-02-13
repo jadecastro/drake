@@ -67,9 +67,11 @@ void PurePursuitController<T>::OutputSteeringCommand(
                                                           kCarParamsIndex);
 
   // Obtain the input/output data structures.
+  std::cout << " OutputSteeringCommand: data type: " << this->lane_input().get_data_type() << std::endl;
   const LaneDirection* const lane_direction =
       this->template EvalInputValue<LaneDirection>(
           context, this->lane_input().get_index());
+  std::cout << " OutputSteeringCommand: evaluated input. " << std::endl;
   DRAKE_ASSERT(lane_direction != nullptr);
 
   const PoseVector<T>* const ego_pose =

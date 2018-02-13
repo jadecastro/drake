@@ -13,20 +13,14 @@ using std::vector;
 namespace drake {
 namespace pydrake {
 
-PYBIND11_MODULE(maliput, m) {
+PYBIND11_MODULE(api, m) {
   // NOLINTNEXTLINE(build/namespaces): Emulate placement in namespace.
-  using namespace drake::maliput;
+  using namespace drake::maliput::api;
 
   m.doc() = "Bindings for Maliput.";
 
-  py::class_<api::RoadGeometryId>(m, "RoadGeometryId")
+  py::class_<RoadGeometryId>(m, "RoadGeometryId")
       .def(py::init<std::string>());
-
-  py::class_<dragway::RoadGeometry>(m, "RoadGeometry")
-      .def(py::init<api::RoadGeometryId, int, double, double, double, double,
-           double, double>())
-      .def("linear_tolerance", &dragway::RoadGeometry::linear_tolerance)
-      .def("angular_tolerance", &dragway::RoadGeometry::angular_tolerance);
 }
 
 }  // namespace pydrake

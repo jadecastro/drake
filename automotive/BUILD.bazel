@@ -330,7 +330,6 @@ drake_cc_library(
     name = "calc_ongoing_road_position",
     srcs = ["calc_ongoing_road_position.cc"],
     hdrs = ["calc_ongoing_road_position.h"],
-    visibility = [],
     deps = [
         ":pose_selector",
         "//automotive/maliput/api",

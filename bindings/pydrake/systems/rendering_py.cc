@@ -3,6 +3,7 @@
 
 #include "drake/bindings/pydrake/pydrake_pybind.h"
 #include "drake/bindings/pydrake/util/eigen_geometry_pybind.h"
+#include "drake/systems/rendering/pose_aggregator.h"
 #include "drake/systems/rendering/pose_vector.h"
 
 namespace drake {
@@ -19,6 +20,16 @@ PYBIND11_MODULE(rendering, m) {
   py::module::import("pydrake.systems.framework");
 
   using T = double;
+
+  py::class_<PoseAggregator<T>, LeafSystem<T>> pose_aggregator(
+      m, "PoseAggregator");
+  pose_aggregator
+    .def(py::init())
+    .def("AddSingleInput", &PoseAggregator<T>::AddSingleInput)
+    .def("AddSinglePoseAndVelocityInput",
+         &PoseAggregator<T>::AddSinglePoseAndVelocityInput)
+    .def("AddBundleInput", &PoseAggregator<T>::AddBundleInput)
+    .def("set_name", &PoseAggregator<T>::set_name);
 
   py::class_<PoseVector<T>, BasicVector<T>> pose_vector(m, "PoseVector");
   pose_vector
