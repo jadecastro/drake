@@ -304,6 +304,14 @@ ClosestPose<T> FindSingleClosestInDefaultPath(
       // Figure out whether or not the result is within scan_distance.
       if (distance_scanned + distance_increment < scan_distance) {
         result.distance = distance_scanned + distance_increment;
+        std::cout << " Ego car: " << std::endl;
+        std::cout << "   lane: " << lane->id().string() << std::endl;
+        std::cout << "   lane pos: " << ego_lane_position.s() << " "
+                  << ego_lane_position.r() << " " <<  ego_lane_position.h() << std::endl;
+        std::cout << " Traffic car: " << std::endl;
+        std::cout << "   lane: " << result.odometry.lane->id().string() << std::endl;
+        std::cout << "   lane pos: " << result.odometry.pos.s() << " "
+                  << result.odometry.pos.r() << " " << result.odometry.pos.h() << std::endl;
         return result;
       }
     }
