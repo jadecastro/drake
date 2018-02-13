@@ -154,6 +154,7 @@ void IdmController<T>::ImplCalcAcceleration(
   const T net_distance = max(actual_headway, idm_params.distance_lower_limit());
   const T closing_velocity = s_dot_ego - s_dot_lead;
 
+  std::cout << " net distance " << net_distance << std::endl;
   // Compute the acceleration command from the IDM equation.
   (*command)[0] = IdmPlanner<T>::Evaluate(idm_params, s_dot_ego, net_distance,
                                           closing_velocity);

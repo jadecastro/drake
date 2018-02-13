@@ -72,7 +72,12 @@ ClosestPose<T> PoseSelector<T>::FindSingleClosestPose(
           GeoPositionT<T>::FromXyz(traffic_isometry.translation());
 
       if (ego_geo_position == traffic_geo_position) continue;
+      std::cout << "   ego_geo_position " << ego_geo_position.x() << " "
+                << ego_geo_position.y() << " " << ego_geo_position.z() << std::endl;
+      std::cout << "   traffic_geo_position " << traffic_geo_position.x() << " "
+                << traffic_geo_position.y() << " " << traffic_geo_position.z() << std::endl;
       if (!IsWithinLane(traffic_geo_position, lane_direction.lane)) continue;
+      std::cout << "   within lane " << std::endl;
 
       const LanePositionT<T> traffic_lane_position =
           lane_direction.lane->ToLanePositionT<T>(traffic_geo_position, nullptr,
@@ -110,6 +115,12 @@ ClosestPose<T> PoseSelector<T>::FindSingleClosestPose(
       // Figure out whether or not the result is within scan_distance.
       if (distance_scanned + distance_increment < scan_distance) {
         result.distance = distance_scanned + distance_increment;
+        std::cout << "    ego lane " << lane->id().string() << std::endl;
+        std::cout << "      ego lane pos " << ego_lane_position.s() << " "
+                  << ego_lane_position.r() << " " <<  ego_lane_position.h() << std::endl;
+        std::cout << "    result.odometry.lane " << result.odometry.lane->id().string() << std::endl;
+        std::cout << "      result.odometry.pos " << result.odometry.pos.s() << " "
+                  << result.odometry.pos.r() << " " << result.odometry.pos.h() << std::endl;
         return result;
       }
     }
@@ -168,6 +179,9 @@ bool PoseSelector<T>::IsWithinLane(const GeoPositionT<T>& geo_position,
       lane->ToLanePositionT<T>(geo_position, nullptr, &distance);
   const maliput::api::RBounds r_bounds =
       lane->lane_bounds(ExtractDoubleOrThrow(pos.s()));
+  std::cout << "        r_bounds.min() " << r_bounds.min() << std::endl;
+  std::cout << "        r_bounds.max() " << r_bounds.max() << std::endl;
+  std::cout << "        r " << pos.r() << std::endl;
   return (distance == 0. && pos.r() >= r_bounds.min() &&
           pos.r() <= r_bounds.max());
 }
