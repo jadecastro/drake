@@ -4,7 +4,7 @@
 #include "drake/automotive/gen/driving_command.h"
 #include "drake/automotive/calc_ongoing_road_position.h"
 #include "drake/automotive/idm_controller.h"
-#include "drake/automotive/maliput/dragway/road_geometry.h"
+#include "drake/automotive/maliput/api/road_geometry.h"
 #include "drake/automotive/pure_pursuit_controller.h"
 #include "drake/automotive/simple_car.h"
 #include "drake/bindings/pydrake/pydrake_pybind.h"
@@ -20,7 +20,7 @@ PYBIND11_MODULE(automotive, m) {
   // NOLINTNEXTLINE(build/namespaces): Emulate placement in namespace.
   using namespace drake::automotive;
 
-  m.doc() = "Bindings for the SimpleCar plant.";
+  m.doc() = "Bindings for Automotive systems.";
 
   py::module::import("pydrake.systems.framework");
 
@@ -34,16 +34,20 @@ PYBIND11_MODULE(automotive, m) {
       .value("kCache", RoadPositionStrategy::kCache)
       .value("kExhaustiveSearch", RoadPositionStrategy::kExhaustiveSearch);
 
+  py::enum_<ScanStrategy>(m, "ScanStrategy")
+      .value("kPath", ScanStrategy::kPath)
+      .value("kBranches", ScanStrategy::kBranches);
+
   py::class_<LaneDirection>(m, "LaneDirection")
-      .def(py::init<const maliput::dragway::Lane*, bool>());
+      .def(py::init<const maliput::api::Lane*, bool>());
   pysystems::AddValueInstantiation<LaneDirection>(m);
 
   // TODO(jadecastro) How to write the below instantiation against
   // "maliput::api"?
   // Use BasicVector's approach to expose base class members here.
   py::class_<IdmController<T>, LeafSystem<T>>(m, "IdmController")
-      .def(py::init<const maliput::dragway::RoadGeometry&,
-           RoadPositionStrategy, double>())
+      .def(py::init<const maliput::api::RoadGeometry&,
+           ScanStrategy, RoadPositionStrategy, double>())
       .def("ego_pose_input", &IdmController<T>::ego_pose_input)
       .def("ego_velocity_input", &IdmController<T>::ego_velocity_input)
       .def("traffic_input", &IdmController<T>::traffic_input);
@@ -63,7 +67,7 @@ PYBIND11_MODULE(automotive, m) {
       .def("velocity_output", &SimpleCar<T>::velocity_output);
 
   m.def("create_lane_direction",
-        [](const maliput::dragway::Lane* lane, bool with_s) {
+        [](const maliput::api::Lane* lane, bool with_s) {
           return new LaneDirection(lane, with_s);
         });
 

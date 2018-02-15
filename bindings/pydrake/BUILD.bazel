@@ -124,6 +124,18 @@ drake_pybind_library(
     py_srcs = ["symbolic.py"],
 )
 
+drake_pybind_library(
+    name = "trajectories_py",
+    cc_deps = [
+        "//common/trajectories:piecewise_polynomial",
+        "//common/trajectories:piecewise_polynomial_trajectory",
+        "//bindings/pydrake/systems:systems_pybind",
+    ],
+    cc_so_name = "trajectories",
+    cc_srcs = ["trajectories_py.cc"],
+    package_info = PACKAGE_INFO,
+)
+
 PY_LIBRARIES_WITH_INSTALL = [
     ":autodiffutils_py",
     ":common_py",
@@ -209,6 +221,7 @@ drake_py_test(
     size = "small",
     deps = [
         ":automotive_py",
+        ":trajectories_py",
         "//bindings/pydrake/maliput:api_py",
         "//bindings/pydrake/maliput:dragway_py",
         "//bindings/pydrake/systems",
