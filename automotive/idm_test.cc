@@ -60,6 +60,7 @@ void add_idm_car(std::string car_name, const drake::maliput::api::Lane* lane,
   state.set_speed(speed);
   simulator->AddIdmControlledPriusMaliputRailcar(
       car_name, drake::automotive::LaneDirection(lane),
+      drake::automotive::ScanStrategy::kPath,
       drake::automotive::RoadPositionStrategy::kExhaustiveSearch, 0,
       params, state);
 }
