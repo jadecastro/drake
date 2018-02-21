@@ -312,6 +312,7 @@ ClosestPose<T> FindSingleClosestInDefaultPath(
         std::cout << "   lane: " << result.odometry.lane->id().string() << std::endl;
         std::cout << "   lane pos: " << result.odometry.pos.s() << " "
                   << result.odometry.pos.r() << " " << result.odometry.pos.h() << std::endl;
+        throw std::runtime_error(" The ego car and traffic car should not be in the same lane in this scenario.");
         return result;
       }
     }

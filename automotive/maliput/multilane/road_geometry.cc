@@ -60,8 +60,15 @@ void GetPositionIfSmallerDistance(const api::GeoPosition& geo_position,
 
   if (delta > linear_tolerance) {  // It is a worse worse than *distance.
     return;
-  } else if (delta < -linear_tolerance) {  // It is a better match.
+  }
+  // When the new_distance is just less than the previous, it updates all the
+  // values.
+  if ((new_distance < *distance) ||
+      ((new_distance == *distance) && (new_distance > 0.))) {
+    std::cout << "  (smaller dist) pos: " << lane_position << std::endl;
     replace_values(new_distance, lane_position, new_nearest_position);
+  } else if (delta < -linear_tolerance) {  // It is a better match.
+      replace_values(new_distance, lane_position, new_nearest_position);
   } else {  // They are almost equal so it is worth checking the lane bounds.
       // When new_distance and *distance are within linear_tolerance, we need to
       // compare against the lane bounds and the r coordinate.
@@ -143,6 +150,7 @@ api::RoadPosition RoadGeometry::DoToRoadPosition(
     const api::Lane* lane = this->junction(0)->segment(0)->lane(0);
     road_position = {lane, lane->ToLanePosition(geo_position, nearest_position,
                                                 &min_distance)};
+    std::cout << "Start. " << std::endl;
     for (int i = 0; i < num_junctions(); ++i) {
       const api::Junction* junction = this->junction(i);
       for (int j = 0; j < junction->num_segments(); ++j) {
@@ -151,10 +159,15 @@ api::RoadPosition RoadGeometry::DoToRoadPosition(
           GetPositionIfSmallerDistance(geo_position, segment->lane(k),
                                        &road_position, &min_distance,
                                        nearest_position, linear_tolerance_);
+          if (min_distance == 0.) {
+            std::cout << "       @ " << i << " " << j << " " << k << std::endl;
+          }
         }
       }
     }
   }
+
+  if (min_distance > 0.) std::cout << " *** Distance found was > 0 !!! " << std::endl;
 
   if (distance != nullptr) *distance = min_distance;
   return road_position;
