@@ -34,7 +34,8 @@ void GetPositionIfSmallerDistance(const api::GeoPosition& geo_position,
                                   const api::Lane* const lane,
                                   api::RoadPosition* road_position,
                                   double* distance,
-                                  api::GeoPosition* nearest_position) {
+                                  api::GeoPosition* nearest_position,
+                                  double linear_tolerance) {
   DRAKE_DEMAND(lane != nullptr);
   DRAKE_DEMAND(road_position != nullptr);
   DRAKE_DEMAND(distance != nullptr);
@@ -55,29 +56,27 @@ void GetPositionIfSmallerDistance(const api::GeoPosition& geo_position,
     }
   };
 
-  // Returns if the result is not better than the previous one.
-  if (new_distance > *distance) {
+  const double delta = new_distance - *distance;
+
+  if (delta > linear_tolerance) {  // It is a worse worse than *distance.
     return;
-  }
-  // When the new_distance is just less than the previous, it updates all the
-  // values.
-  if (new_distance < *distance) {
+  } else if (delta < -linear_tolerance) {  // It is a better match.
     replace_values(new_distance, lane_position, new_nearest_position);
-    return;
-  }
-  // When new_distance and *distance are zero, we need to compare against the
-  // lane bounds and the r coordinate.
-  const api::RBounds lane_bounds = lane->lane_bounds(lane_position.s());
-  if (lane_position.r() >= lane_bounds.min() &&
-      lane_position.r() < lane_bounds.max()) {
-    // Given that `geo_position` is inside the lane_bounds and there is no
-    // overlapping of lane_bounds, the road_position is returned.
-    replace_values(new_distance, lane_position, new_nearest_position);
-  } else {
-    // Compares the r coordinate and updates the closest_road_position if it is
-    // a better match.
-    if (std::abs(lane_position.r()) < std::abs(road_position->pos.r())) {
+  } else {  // They are almost equal so it is worth checking the lane bounds.
+    // When new_distance and *distance are within linear_tolerance, we need to
+    // compare against the lane bounds and the r coordinate.
+    const api::RBounds lane_bounds = lane->lane_bounds(lane_position.s());
+    if (lane_position.r() >= lane_bounds.min() &&
+        lane_position.r() < lane_bounds.max()) {
+      // Given that `geo_position` is inside the lane_bounds and there is no
+      // overlapping of lane_bounds, the road_position is returned.
       replace_values(new_distance, lane_position, new_nearest_position);
+    } else {
+      // Compares the r coordinate and updates the closest_road_position if it
+      // is a better match.
+      if (std::abs(lane_position.r()) < std::abs(road_position->pos.r())) {
+        replace_values(new_distance, lane_position, new_nearest_position);
+      }
     }
   }
 }
@@ -129,7 +128,7 @@ api::RoadPosition RoadGeometry::DoToRoadPosition(
         for (int i = 0; i < ends->size(); ++i) {
           GetPositionIfSmallerDistance(geo_position, ends->get(i).lane,
                                        &road_position, &min_distance,
-                                       nearest_position);
+                                       nearest_position, linear_tolerance_);
         }
       }
     }
@@ -151,7 +150,7 @@ api::RoadPosition RoadGeometry::DoToRoadPosition(
         for (int k = 0; k < segment->num_lanes(); ++k) {
           GetPositionIfSmallerDistance(geo_position, segment->lane(k),
                                        &road_position, &min_distance,
-                                       nearest_position);
+                                       nearest_position, linear_tolerance_);
         }
       }
     }
