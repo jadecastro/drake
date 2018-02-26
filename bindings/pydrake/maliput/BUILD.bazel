@@ -63,7 +63,8 @@ drake_pybind_library(
 )
 
 PY_LIBRARIES_WITH_INSTALL = [
-    ":maliput_py",
+    ":api_py",
+    ":dragway_py",
 ]
 
 PY_LIBRARIES = [
@@ -71,7 +72,7 @@ PY_LIBRARIES = [
 ]
 
 drake_py_library(
-    name = "automotive",
+    name = "maliput",
     imports = PACKAGE_INFO.py_imports,
     deps = PY_LIBRARIES_WITH_INSTALL + PY_LIBRARIES,
 )
@@ -84,7 +85,7 @@ install(
 )
 
 drake_py_test(
-    name = "dragway_test",
+    name = "maliput_test",
     size = "small",
     deps = [
         ":api_py",
