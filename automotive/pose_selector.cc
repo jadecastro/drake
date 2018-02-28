@@ -239,6 +239,13 @@ ClosestPose<T> FindSingleClosestInDefaultPath(
       GeoPositionT<T>::FromXyz(ego_pose.get_isometry().translation());
   const LanePositionT<T> ego_lane_position =
       lane->ToLanePositionT<T>(ego_geo_position, nullptr, nullptr);
+
+  std::cout << "    Ego RoadPosition: lane = " << lane->id().string()
+            << " (s = " << ego_lane_position.s()
+            << ", r = " << ego_lane_position.r()
+            << ", h = " << ego_lane_position.h()
+            << ")" << std::endl;
+
   LaneDirection lane_direction =
       CalcLaneDirection<T>(lane, ego_lane_position, ego_pose.get_rotation(),
                            side);
@@ -312,7 +319,7 @@ ClosestPose<T> FindSingleClosestInDefaultPath(
         std::cout << "   lane: " << result.odometry.lane->id().string() << std::endl;
         std::cout << "   lane pos: " << result.odometry.pos.s() << " "
                   << result.odometry.pos.r() << " " << result.odometry.pos.h() << std::endl;
-        throw std::runtime_error(" The ego car and traffic car should not be in the same lane in this scenario.");
+        // throw std::runtime_error(" The ego car and traffic car should not be in the same lane in this scenario.");
         return result;
       }
     }

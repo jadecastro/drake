@@ -133,6 +133,8 @@ void IdmController<T>::ImplCalcAcceleration(
   }
 
   // Find the single closest car ahead.
+  std::cout << this->get_name() << std::endl;
+
   const ClosestPose<T> lead_car_pose = PoseSelector<T>::FindSingleClosestPose(
       ego_position.lane, ego_pose, traffic_poses,
       idm_params.scan_ahead_distance(), AheadOrBehind::kAhead,
