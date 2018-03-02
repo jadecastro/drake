@@ -38,9 +38,6 @@ drake_py_library(
 
 drake_pybind_library(
     name = "api_py",
-    cc_deps = [
-        "//automotive/maliput/api",
-    ],
     cc_so_name = "api",
     cc_srcs = ["api_py.cc"],
     package_info = PACKAGE_INFO,
@@ -51,9 +48,6 @@ drake_pybind_library(
 
 drake_pybind_library(
     name = "dragway_py",
-    cc_deps = [
-        "//automotive/maliput/dragway",
-    ],
     cc_so_name = "dragway",
     cc_srcs = ["dragway_py.cc"],
     package_info = PACKAGE_INFO,

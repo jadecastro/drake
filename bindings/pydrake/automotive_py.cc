@@ -66,14 +66,20 @@ PYBIND11_MODULE(automotive, m) {
       .def("pose_output", &SimpleCar<T>::pose_output)
       .def("velocity_output", &SimpleCar<T>::velocity_output);
 
+  // TODO: Just add to the ctor?
   m.def("create_lane_direction",
         [](const maliput::api::Lane* lane, bool with_s) {
           return new LaneDirection(lane, with_s);
         });
 
-  m.def("create_driving_command", []() -> BasicVector<T>* {
-      return new DrivingCommand<T>();
-    });
+  py::class_<DrivingCommand<T>, BasicVector<T>>(m, "DrivingCommand")
+      .def(py::init<>())
+      .def("steering_angle", &DrivingCommand<T>::steering_angle)
+      .def("acceleration", &DrivingCommand<T>::acceleration)
+      .def("set_steering_angle", &DrivingCommand<T>::set_steering_angle,
+           py::arg("steering_angle"))
+      .def("set_acceleration", &DrivingCommand<T>::set_acceleration,
+           py::arg("acceleration"));
 }
 
 }  // namespace pydrake

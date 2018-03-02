@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 from pydrake.systems.rendering import (
+    create_frame_velocity,
+    PoseAggregator,
     PoseVector,
 )
 
@@ -50,6 +52,17 @@ class TestRendering(unittest.TestCase):
         vector_expected = np.hstack((p, q.wxyz()))
         vector_actual = value.get_value()
         self.assertTrue(np.allclose(vector_actual, vector_expected))
+
+    def test_create_frame_velocity(self):
+        w = np.array([0.1, 0.3, 0.5])
+        v = np.array([0., 1., 2.])
+        value = create_frame_velocity(w=w, v=v)
+        self.assertTrue(isinstance(value, BasicVector))
+
+
+    def test_pose_aggregator(self):
+        # TODO: Fill me in.
+        pass
 
 
 if __name__ == "__main__":

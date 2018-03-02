@@ -3,6 +3,8 @@
 
 #include "drake/bindings/pydrake/pydrake_pybind.h"
 #include "drake/bindings/pydrake/util/eigen_geometry_pybind.h"
+#include "drake/multibody/multibody_tree/math/spatial_velocity.h"
+#include "drake/systems/rendering/frame_velocity.h"
 #include "drake/systems/rendering/pose_aggregator.h"
 #include "drake/systems/rendering/pose_vector.h"
 
@@ -41,6 +43,20 @@ PYBIND11_MODULE(rendering, m) {
     .def("set_rotation", &PoseVector<T>::set_rotation);
 
   pose_vector.attr("kSize") = int{PoseVector<T>::kSize};
+
+  py::class_<FrameVelocity<T>, BasicVector<T>> frame_velocity(
+      m, "FrameVelocity");
+  frame_velocity
+    .def(py::init());
+
+  frame_velocity.attr("kSize") = int{FrameVelocity<T>::kSize};
+
+  m.def("create_frame_velocity",
+        [](const Vector3<T>& w, const Vector3<T>& v) {
+          FrameVelocity<T> frame_velocity;
+          frame_velocity.set_velocity(multibody::SpatialVelocity<T>(w, v));
+          return frame_velocity;
+        }, py::arg("w"), py::arg("v"));
 
   // TODO(eric.cousineau): Add more systems as needed.
 }
