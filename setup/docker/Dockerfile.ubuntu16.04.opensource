@@ -5,7 +5,5 @@ RUN apt-get update && yes "Y" \
       | /drake/setup/ubuntu/16.04/install_prereqs.sh \
       && rm -rf /var/lib/apt/lists/* \
       && apt-get clean all
-RUN cd /drake && bazel build //tools:drake_visualizer && bazel build //bindings/pydrake -c dbg
-RUN rm -rf /drake/drake-build && mkdir /drake/drake-build && cd /drake/drake-build && cmake .. && make -j
-RUN echo 'export PYTHONPATH=/drake/drake-build/install/lib/python2.7/site-packages:${PYTHONPATH}' >> ~/.bashrc
+RUN cd /drake && bazel build //tools:drake_visualizer && bazel build //examples/acrobot:acrobot_run_passive
 ENTRYPOINT ["/drake/setup/docker/entrypoint.sh"]

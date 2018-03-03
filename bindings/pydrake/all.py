@@ -23,6 +23,7 @@ from __future__ import absolute_import
 # This module.
 from . import getDrakePath
 from .autodiffutils import *
+from .automotive import *
 from .common import *
 from .forwarddiff import *
 from .math import *

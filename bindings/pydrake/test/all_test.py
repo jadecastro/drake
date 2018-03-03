@@ -43,6 +43,8 @@ class TestAll(unittest.TestCase):
         expected_symbols = (
             # autodiffutils
             "AutoDiffXd",
+            # automotive
+            "SimpleCar",
             # common
             "AddResourceSearchPath",
             # forwarddiff

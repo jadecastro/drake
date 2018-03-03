@@ -72,10 +72,6 @@ drake_pybind_library(
 drake_pybind_library(
     name = "automotive_py",
     cc_deps = [
-        "//automotive:calc_ongoing_road_position",
-        "//automotive:idm_controller",
-        "//automotive:simple_car",
-        "//automotive/maliput/dragway",
         "//bindings/pydrake/systems:systems_pybind",
     ],
     cc_so_name = "automotive",
@@ -124,20 +120,9 @@ drake_pybind_library(
     py_srcs = ["symbolic.py"],
 )
 
-drake_pybind_library(
-    name = "trajectories_py",
-    cc_deps = [
-        "//common/trajectories:piecewise_polynomial",
-        "//common/trajectories:piecewise_polynomial_trajectory",
-        "//bindings/pydrake/systems:systems_pybind",
-    ],
-    cc_so_name = "trajectories",
-    cc_srcs = ["trajectories_py.cc"],
-    package_info = PACKAGE_INFO,
-)
-
 PY_LIBRARIES_WITH_INSTALL = [
     ":autodiffutils_py",
+    ":automotive_py",
     ":common_py",
     ":math_py",
     ":symbolic_py",
@@ -219,9 +204,10 @@ drake_py_test(
 drake_py_test(
     name = "automotive_test",
     size = "small",
+    srcs = ["test/automotive_test.py"],
+    main = "test/automotive_test.py",
     deps = [
         ":automotive_py",
-        ":trajectories_py",
         "//bindings/pydrake/maliput:api_py",
         "//bindings/pydrake/maliput:dragway_py",
         "//bindings/pydrake/systems",
