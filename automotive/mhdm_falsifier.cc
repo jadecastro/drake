@@ -27,11 +27,10 @@ static constexpr double kLaneWidth = 3.;
 static constexpr double kDragwayLength = 150.;
 static const std::string kEgoCarName = "ego_car";
 static const std::string kLaneChangerName = "lane_changer";
-static const std::string kLaneFollowerName = "lane_follower";
 
 static std::unique_ptr<AutomotiveSimulator<double>>
 SetupSimulator(bool is_playback_mode, int num_dragway_lanes,
-               int num_lane_changers, int num_lane_followers) {
+               int num_lane_changers) {
   std::unique_ptr<const maliput::api::RoadGeometry> road_geometry =
       std::make_unique<const maliput::dragway::RoadGeometry>(
           maliput::api::RoadGeometryId({"Dircol Test Dragway"}),
@@ -39,7 +38,7 @@ SetupSimulator(bool is_playback_mode, int num_dragway_lanes,
           0. /* shoulder width */, 5. /* maximum_height */,
           std::numeric_limits<double>::epsilon() /* linear_tolerance */,
           std::numeric_limits<double>::epsilon() /* angular_tolerance */);
-  DRAKE_DEMAND(num_dragway_lanes > 0 || num_lane_changers == 0);
+  DRAKE_DEMAND(num_dragway_lanes > 0);
 
   auto simulator = (is_playback_mode)
       ? std::make_unique<AutomotiveSimulator<double>>(
@@ -74,23 +73,11 @@ SetupSimulator(bool is_playback_mode, int num_dragway_lanes,
 
   simulator->AddIdmControlledCar(kEgoCarName,
                                  true /* move along the "s"-direction */,
-                                 ego_initial_state, ego_goal_lane);
+                                 ego_initial_state, ego_goal_lane,
+                                 ScanStrategy::kPath,
+                                 RoadPositionStrategy::kExhaustiveSearch,
+                                 0. /* (unused) */);
 
-  for (int i{0}; i < num_lane_followers; ++i) {
-    // The prescribed lane cannot be changed by the solver.
-    const int lane_index_traffic = i % num_dragway_lanes;
-
-    // Provide a valid instantiation for the lane follower (note these will be
-    // overwritten).
-    const double start_s_lf = 20.;
-    const double start_speed_lf = 10.;
-
-    const auto& lf_params = CreateTrajectoryParamsForDragway(
-        *dragway_road_geometry, lane_index_traffic, start_speed_lf, start_s_lf);
-    simulator->AddPriusTrajectoryCar(
-        kLaneFollowerName + "_" + std::to_string(i),
-        std::get<0>(lf_params), start_speed_lf, start_s_lf);
-  }
   for (int i{0}; i < num_lane_changers; ++i) {
     // Provide a valid instantiation for the lane changer (note these will be
     // overwritten).
@@ -108,7 +95,10 @@ SetupSimulator(bool is_playback_mode, int num_dragway_lanes,
     // All lane changers move into the ego car's lane.
     simulator->AddIdmControlledCar(kLaneChangerName + "_" + std::to_string(i),
                                    true /* move along the "s"-direction */,
-                                   lc_initial_state, ego_goal_lane);
+                                   lc_initial_state, ego_goal_lane,
+                                   ScanStrategy::kPath,
+                                   RoadPositionStrategy::kExhaustiveSearch,
+                                   0. /* (unused) */);
   }
   return std::unique_ptr<AutomotiveSimulator<double>>(simulator.release());
 }
@@ -130,10 +120,9 @@ void SetSimpleCarState(const systems::Diagram<T>& diagram,
 int DoMain(void) {
   const int kNumLanes = 3;  // Number of lanes in the scenario.
   const int kNumLaneChangingCars = 3;  // Number of lanes in the scenario.
-  const int kNumLaneFollowingCars = 3;  // Number of lanes in the scenario.
 
   auto simulator = SetupSimulator(false /* is_playback_mode */, kNumLanes,
-                                  kNumLaneChangingCars, kNumLaneFollowingCars);
+                                  kNumLaneChangingCars);
 
   simulator->BuildAndInitialize();
 
@@ -153,7 +142,7 @@ int DoMain(void) {
   prog.AddTimeIntervalBounds(kTrajectoryTimeLowerBound / (kNumTimeSamples - 1),
                              kTrajectoryTimeUpperBound / (kNumTimeSamples - 1));
 
-  //.TODO(jadecastro): For lane change case, verify that the initial conditions
+  // TODO(jadecastro): For lane change case, verify that the initial conditions
   // satisfy the preconditions for the "move to the left lane" action in MOBIL.
 
   // Most of the following constraints are fairness conditions that ensure the
@@ -202,16 +191,16 @@ int DoMain(void) {
     std::cout << " NAME " << name << std::endl;
     if (name.find(kEgoCarName + "_simple_car") != std::string::npos) {
       SetSimpleCarState(diagram, *car, ego_coefficients, coeff_context.get());
-    } else if (name.find(kLaneFollowerName) != std::string::npos) {
     } else if ((name.find(kLaneChangerName) != std::string::npos) &&
                (name.find("simple_car") != std::string::npos)) {
       SetSimpleCarState(diagram, *car, all_lc_coefficients,
                         coeff_context.get());
+      std::cout << "  coeff " << coeff_context->get_continuous_state_value().get_value() << std::endl;
     }
   }
 
   // Create an inequality constraint of the form Ax <= b.
-  coeff_context.get_continuous_state_vector().get
+  // coeff_context->get_continuous_state_vector().get
 
   // Begin with a reasonable spacing between cars.
   // -- Traffic Car 3 (left lane)
@@ -372,8 +361,7 @@ int DoMain(void) {
   if (true) {
     // Build another simulator with LCM capability and run in play-back mode.
     auto simulator_lcm = SetupSimulator(true /* is_playback_mode */, kNumLanes,
-                                        kNumLaneChangingCars,
-                                        kNumLaneFollowingCars);
+                                        kNumLaneChangingCars);
     simulator_lcm->Build();
 
     // Pipe the offending initial condition into AutomotiveSimulator.
