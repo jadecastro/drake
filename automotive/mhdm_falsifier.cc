@@ -195,7 +195,9 @@ int DoMain(void) {
                (name.find("simple_car") != std::string::npos)) {
       SetSimpleCarState(diagram, *car, all_lc_coefficients,
                         coeff_context.get());
-      std::cout << "  coeff " << coeff_context->get_continuous_state_value().get_value() << std::endl;
+      std::cout << "  coeff "
+		<< coeff_context->get_continuous_state_vector().CopyToVector()
+		<< std::endl;
     }
   }
 
