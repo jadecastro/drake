@@ -117,9 +117,75 @@ void SetSimpleCarState(const systems::Diagram<T>& diagram,
   state->set_value(value.get_value());
 }
 
+// TODO(jadecastro) Diagram context yearns for a better way at mapping
+// subcontext to subsystem.
+void PopulateInitialConditions(
+    const systems::Diagram<double>& diagram,
+    const SimpleCarState<double>& ego_initial_conditions,
+    const std::vector<SimpleCarState<double>*>& lc_initial_conditions,
+    std::vector<const systems::System<double>*>& systems,
+    systems::Context<double>* context) {
+  int i{0};
+  for (const auto& system : systems) {
+    std::string name = system->get_name();
+    std::cout << " NAME " << name << std::endl;
+    if (name.find(kEgoCarName + "_simple_car") != std::string::npos) {
+      SetSimpleCarState(diagram, *system, ego_initial_conditions, context);
+    } else if ((name.find(kLaneChangerName) != std::string::npos) &&
+               (name.find("simple_car") != std::string::npos)) {
+      SetSimpleCarState(diagram, *system, *lc_initial_conditions[i++], context);
+      std::cout << "  Ado ic "
+                << context->get_continuous_state_vector().CopyToVector()
+                << std::endl;
+    }
+  }
+}
+
+// TODO(jadecastro) Diagram context yearns for a better way at mapping
+// subcontext to subsystem.  In particular, we could take better advantage of
+// named vectors.
+void PopulateCoeffContexts(
+    int num_lane_changers, const systems::Diagram<double>& diagram,
+    const std::vector<const systems::System<double>*>& systems,
+    std::vector<std::unique_ptr<systems::Context<double>>>* coeff_contexts) {
+  DRAKE_DEMAND(coeff_contexts->size() == 0);
+
+  // Ado - Ego.
+  SimpleCarState<double> ego_coefficients;
+  ego_coefficients.set_x(-1.);
+  SimpleCarState<double> all_lc_coefficients;
+  all_lc_coefficients.set_x(1.);
+
+  for (int i{0}; i < num_lane_changers; ++i) {
+    coeff_contexts->emplace_back(diagram.CreateDefaultContext());
+    for (const auto& system : systems) {
+      std::string name = system->get_name();
+      std::cout << " NAME " << name << std::endl;
+      if (name.find(kEgoCarName + "_simple_car") != std::string::npos) {
+        SetSimpleCarState(diagram, *system, ego_coefficients,
+                          (*coeff_contexts)[i].get());
+        break;
+      }
+    }
+  }
+  int i{0};
+  for (const auto& system : systems) {
+    std::string name = system->get_name();
+    if ((name.find(kLaneChangerName) != std::string::npos) &&
+        (name.find("simple_car") != std::string::npos)) {
+      SetSimpleCarState(diagram, *system, all_lc_coefficients,
+                        (*coeff_contexts)[i++].get());
+      std::cout << "  coeff "
+                << (*coeff_contexts)[i-1]->get_continuous_state_vector().
+          CopyToVector()
+                << std::endl;
+    }
+  }
+}
+
 int DoMain(void) {
   const int kNumLanes = 3;  // Number of lanes in the scenario.
-  const int kNumLaneChangingCars = 3;  // Number of lanes in the scenario.
+  const int kNumLaneChangingCars = 4;  // Number of ado cars in this scenario.
 
   auto simulator = SetupSimulator(false /* is_playback_mode */, kNumLanes,
                                   kNumLaneChangingCars);
@@ -142,156 +208,117 @@ int DoMain(void) {
   prog.AddTimeIntervalBounds(kTrajectoryTimeLowerBound / (kNumTimeSamples - 1),
                              kTrajectoryTimeUpperBound / (kNumTimeSamples - 1));
 
-  // TODO(jadecastro): For lane change case, verify that the initial conditions
-  // satisfy the preconditions for the "move to the left lane" action in MOBIL.
-
-  // Most of the following constraints are fairness conditions that ensure the
-  // optimizer does not return the trivial result where the cars are already in
-  // collision.
-
-  // Note: Some constraints, such as limits on the ego car velocity, are added
-  // for the sole purpose of preventing infeasible solutions that would
-  // otherwise result.  This is often a result of the optimizer encountering a
-  // state in one of the car model/planner subsystems that give rise to
-  // behaviors for which the AutoDiffXd derivatives() are undefined.  Other
-  // constraints, such as the limits on relative position and speed of Traffic
-  // Car 1 in the three-lane example, are applied to ensure that the scenario is
-  // consistent with conjunctive failure conditions (i.e. the final "goal" set
-  // is a polytope).
-
-  // Note: The following scenarios are limited to scenarios with continuous
-  // states (and thus free of discrete decisions and hybrid continuous/discrete
-  // states).  For instance, MOBIL with politeness parameter `p` set to zero
-  // qualifies, provided that the initial conditions follow from
-  // MOBIL-admissible preconditions (i.e. the desired lane is not the current
-  // one over the provided range initial conditions).
-
   const double delta_y =  0.;  // 0.5 * kLaneWidth;
   VectorX<double> vect0(14);
   VectorX<double> vectf(14);
 
   const auto& diagram = dynamic_cast<const systems::Diagram<double>&>(plant);
+
+  // Supply ICs externally to main().
+  SimpleCarState<double> ego_initial_conditions;
+  ego_initial_conditions.set_x(30.);
+  ego_initial_conditions.set_y(-1. * kLaneWidth + delta_y);
+  ego_initial_conditions.set_heading(0.);
+  ego_initial_conditions.set_velocity(5.5);
+
+  std::vector<SimpleCarState<double>*> lc_initial_conditions;
+  SimpleCarState<double> car0;
+  car0.set_x(40.);
+  car0.set_y(-1. * kLaneWidth + delta_y);
+  car0.set_heading(0.);
+  car0.set_velocity(5.);
+  lc_initial_conditions.push_back(&car0);
+
+  SimpleCarState<double> car1;
+  car1.set_x(60.);
+  car1.set_y(0. * kLaneWidth + delta_y);
+  car1.set_heading(0.);
+  car1.set_velocity(8.);
+  lc_initial_conditions.push_back(&car1);
+
+  SimpleCarState<double> car2;
+  car2.set_x(30.);
+  car2.set_y(1. * kLaneWidth + delta_y);
+  car2.set_heading(0.);
+  car2.set_velocity(5.);
+  lc_initial_conditions.push_back(&car2);
+
+  SimpleCarState<double> car3;
+  car3.set_x(20.);
+  car3.set_y(1. * kLaneWidth + delta_y);
+  car3.set_heading(0.);
+  car3.set_velocity(10.);
+  lc_initial_conditions.push_back(&car3);
+
   std::vector<const systems::System<double>*> systems = diagram.GetSystems();
+  auto initial_context = diagram.CreateDefaultContext();
+  PopulateInitialConditions(diagram, ego_initial_conditions,
+                            lc_initial_conditions, systems,
+                            initial_context.get());
 
-  auto coeff_context = plant.CreateDefaultContext();
-
-  SimpleCarState<double> ego_coefficients;
-  ego_coefficients.set_x(-1.);
-
-  SimpleCarState<double> all_lc_coefficients;
-  all_lc_coefficients.set_x(1.);
-
-  vect0 << 20., 1. * kLaneWidth + delta_y, 0., 10., 30., 5., 60., 8.,
-      40., 5., 30., -1. * kLaneWidth + delta_y, 0., 5.5;
-  vectf << 30., 0.4 * kLaneWidth + delta_y, 0., 10., 40., 5., 80., 8.,
-      60., 5., 40., -0.6 * kLaneWidth + delta_y, 0., 5.5;
-
-  for (const auto& car : systems) {
-    std::string name = car->get_name();
-    std::cout << " NAME " << name << std::endl;
-    if (name.find(kEgoCarName + "_simple_car") != std::string::npos) {
-      SetSimpleCarState(diagram, *car, ego_coefficients, coeff_context.get());
-    } else if ((name.find(kLaneChangerName) != std::string::npos) &&
-               (name.find("simple_car") != std::string::npos)) {
-      SetSimpleCarState(diagram, *car, all_lc_coefficients,
-                        coeff_context.get());
-      std::cout << "  coeff "
-		<< coeff_context->get_continuous_state_vector().CopyToVector()
-		<< std::endl;
-    }
-  }
+  // Assumes we have two types of cars: one ego car and several ado cars.
+  // TODO(jadecastro) This is fragile to kNumLaneChangingCars.
+  std::vector<std::unique_ptr<systems::Context<double>>> coeff_contexts;
+  PopulateCoeffContexts(kNumLaneChangingCars, diagram, systems,
+                        &coeff_contexts);
 
   // Create an inequality constraint of the form Ax <= b.
   // coeff_context->get_continuous_state_vector().get
 
-  // Begin with a reasonable spacing between cars.
-  // -- Traffic Car 3 (left lane)
-  prog.AddLinearConstraint(prog.initial_state()(0) >= vect0(0));
-  //prog.initial_state()(4));  // x traffic2
-  //prog.AddLinearConstraint(prog.initial_state()(0) <= kDragwayLength);
-  // x traffic2
-  prog.AddLinearConstraint(prog.initial_state()(1) == kLaneWidth + delta_y);
-  // y traffic2
-  prog.AddLinearConstraint(prog.initial_state()(2) == vect0(2));  // heading
-  // traffic2
-  prog.AddLinearConstraint(prog.initial_state()(3) >= vect0(3));
-  // velocity traffic2
-  // -- Traffic Car 2 (left lane)
-  prog.AddLinearConstraint(prog.initial_state()(4) >= vect0(4));
-  prog.AddLinearConstraint(prog.initial_state()(4) <= vect0(4) + 5.);
-  prog.AddLinearConstraint(prog.initial_state()(5) == vect0(5));
-  // -- Traffic Car 1 (middle lane)
-  // prog.AddLinearConstraint(prog.initial_state()(4) + 5. <=
-  //                          prog.initial_state()(8));  // s traffic1
-  // prog.AddLinearConstraint(prog.initial_state()(4) <= 47.5);  // s traffic1
-  //prog.AddLinearConstraint(prog.initial_state()(5) <= 5.);// s_dot traffic1
-  prog.AddLinearConstraint(prog.initial_state()(6) >= vect0(6));
-  prog.AddLinearConstraint(prog.initial_state()(6) <= vect0(6) + 5.);
-  prog.AddLinearConstraint(prog.initial_state()(7) >= vect0(7));
-  // s_dot traffic1
-  // -- Traffic Car 0 (right lane)
-  prog.AddLinearConstraint(prog.initial_state()(8) >= vect0(8));
-  // s traffic0
-  prog.AddLinearConstraint(prog.initial_state()(8) <= vect0(8) + 5.);
-  prog.AddLinearConstraint(prog.initial_state()(9) == vect0(9));
-  // s_dot traffic0
-  // -- Ego Car (right lane)
-  prog.AddLinearConstraint(prog.initial_state()(10) == vect0(10));  // x ego
-  prog.AddLinearConstraint(prog.initial_state()(11) ==
-                           -1. * kLaneWidth + delta_y);  // y ego
-  prog.AddLinearConstraint(prog.initial_state()(12) == vect0(12));
-  // heading ego
-  prog.AddLinearConstraint(prog.initial_state()(13) == vect0(13));
-  // velocity ego
+  // Parse the initial conditions.
 
-  // Set state constaints for all time steps.
-  for (int i{0}; i < kNumTimeSamples; ++i) {
-    // -- Traffic Car 3 (moving to the middle lane)
-    prog.AddLinearConstraint(prog.state(i)(0) >= 20.);
-    // x traffic2
-    //prog.AddLinearConstraint(prog.state(i)(0) <= kDragwayLength);
-    // x traffic2
-    prog.AddLinearConstraint(prog.state(i)(1) <= kLaneWidth + delta_y);
-    // y traffic2
-    //prog.AddLinearConstraint(prog.state(i)(2) >= 0.);  // heading traffic2
-    prog.AddLinearConstraint(prog.state(i)(3) <= 15.);  // velocity traffic2
-    prog.AddLinearConstraint(prog.state(i)(3) >= 4.);  // velocity traffic2
-
-    // -- Traffic Car 2 (left lane)
-    prog.AddLinearConstraint(prog.state(i)(4) >= 20.);  // s traffic1
-    prog.AddLinearConstraint(prog.state(i)(5) >= 5.);  // s_dot traffic1
-
-    // -- Traffic Car 1 (middle lane)
-    //prog.AddLinearConstraint(prog.state(i)(4) + 3. <= prog.state(i)(8));
-    // s traffic1
-    //prog.AddLinearConstraint(prog.state(i)(5) <= 5.);  // s_dot traffic1
-    prog.AddLinearConstraint(prog.state(i)(6) >= 70.);  // s traffic1
-    prog.AddLinearConstraint(prog.state(i)(7) >= 5.);  // s_dot traffic1
-    // -- Traffic Car 0 (right lane)
-    prog.AddLinearConstraint(prog.state(i)(8) >= 40.);  // s traffic0
-    prog.AddLinearConstraint(prog.state(i)(9) == 5.);  // s_dot traffic0
-    // -- Ego Car (moving to the middle lane)
-    prog.AddLinearConstraint(prog.state(i)(10) >= 30.);  // x ego
-    prog.AddLinearConstraint(prog.state(i)(11) >= -kLaneWidth + delta_y);
-    // y ego
-    //prog.AddLinearConstraint(prog.state(i)(10) >= 0.);  // heading ego
-    prog.AddLinearConstraint(prog.state(i)(13) <= 7.);  // velocity ego
-    prog.AddLinearConstraint(prog.state(i)(13) >= 4.);  // velocity ego
+  // TODO: Reverse the ordering to match Dircol's decision vars?
+  // TODO(jadecastro) Dircol strips the context, so the ordering here is a
+  // extremely fragile.  Perhaps Dircol should keep a mapping of DVs to
+  // continuous states?
+  const systems::VectorBase<double>& initial_states =
+      initial_context->get_continuous_state_vector();
+  for (int i{0}; i < initial_states.size(); ++i) {
+    prog.AddLinearConstraint(prog.initial_state()(i) ==
+                             initial_states.GetAtIndex(i));
   }
 
-  // Unsafe criterion: Find a collision with Traffic Car 2 merging into the
-  // middle lane.  Assume for now that, irrespective of its orientation, the
-  // traffic car occupies a lane-aligned bounding box.
+  // Solve a collision with one of the cars, in this case, Traffic Car 2 merging
+  // into the middle lane.  Assume for now that, irrespective of its
+  // orientation, the traffic car occupies a lane-aligned bounding box.
 
-  // y ego >= y traffic 2 - 0.5 * kLaneWidth && x ego <= x traffic2 + 2.5 &&
-  // x ego >= x traffic2 - 2.5
-  prog.AddLinearConstraint(prog.final_state()(11) >=
-                           //-0.51 * kLaneWidth + delta_y);
-                           prog.final_state()(1) - 0.5 * kLaneWidth);
-  prog.AddLinearConstraint(prog.final_state()(10) >=
-                           prog.final_state()(0) - 2.5);
-  prog.AddLinearConstraint(prog.final_state()(10) <=
-                           prog.final_state()(0) + 2.5);
+  // TODO: Package these loops into function calls or use a lambdas?
+  // TODO(jadecastro) As above, this assumes the ordering of the context. Update
+  // Dircol to make this less fragile.
+  const int x_index = SimpleCarStateIndices::kX;
+  const int y_index = SimpleCarStateIndices::kY;
+  int ego_index{0};
+  int ado_index{0};
+  for (const auto& system : systems) {
+    std::string name = system->get_name();
+    if (name.find(kEgoCarName + "_simple_car") != std::string::npos) {
+      break;
+    }
+    if (name.find("simple_car") != std::string::npos) {
+      ego_index += SimpleCarStateIndices::kNumCoordinates;
+    }
+  }
+
+  for (const auto& system : systems) {
+    std::string name = system->get_name();
+    if ((name.find(kLaneChangerName) != std::string::npos) &&
+        (name.find("_2_") != std::string::npos) &&
+        (name.find("simple_car") != std::string::npos)) {
+      std::cout << " ego index " << ego_index << std::endl;
+      std::cout << " ado index " << ado_index << std::endl;
+      // Assumes the footprint is a full lane-width wide by 5-m long.
+      prog.AddLinearConstraint(prog.final_state()(ado_index + y_index) >=
+                               prog.final_state()(ego_index + y_index)
+                               - 0.5 * kLaneWidth);
+      prog.AddLinearConstraint(prog.final_state()(ado_index + x_index) >=
+                               prog.final_state()(ego_index + x_index) - 2.5);
+      prog.AddLinearConstraint(prog.final_state()(ado_index + x_index) <=
+                               prog.final_state()(ego_index + x_index) + 2.5);
+    }
+    if (name.find("simple_car") != std::string::npos) {
+      ado_index += SimpleCarStateIndices::kNumCoordinates;
+    }
+  }
 
   // Add a cost to encourage solutions that minimize the distance to a crash.
   //prog.AddRunningCost((prog.state()(4) - prog.state()(0)) *
@@ -299,13 +326,13 @@ int DoMain(void) {
   //                    (prog.state()(5) - (-0.5 * kLaneWidth + delta_y)) *
   //                    (prog.state()(5) - (-0.5 * kLaneWidth + delta_y)));
 
-  systems::BasicVector<double> x0(vect0);
-  systems::BasicVector<double> xf(vectf);
-  auto guess_state_trajectory = PiecewisePolynomial<double>::FirstOrderHold(
-      {0, guess_duration}, {x0.get_value(), xf.get_value()});
+  // systems::BasicVector<double> x0 = ;
+  // systems::BasicVector<double> xf(vectf);
+  // auto guess_state_trajectory = PiecewisePolynomial<double>::FirstOrderHold(
+  //     {0, guess_duration}, {x0.get_value(), xf.get_value()});
 
-  prog.SetInitialTrajectory(PiecewisePolynomial<double>(),
-                            guess_state_trajectory);
+  // prog.SetInitialTrajectory(PiecewisePolynomial<double>(),
+  //                           guess_state_trajectory);
 
   const auto result = prog.Solve();
 
