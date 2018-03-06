@@ -516,6 +516,21 @@ drake_cc_binary(
     ],
 )
 
+drake_cc_binary(
+    name = "mhdm_falsifier",
+    srcs = ["mhdm_falsifier.cc"],
+    deps = [
+        "//automotive:automotive_simulator",
+        "//automotive:create_trajectory_params",
+        "//automotive:simple_car",
+        "//automotive/maliput/api",
+        "//automotive/maliput/dragway",
+        "//common/proto:call_python",
+        "//drake/common:text_logging_gflags",
+        "//systems/trajectory_optimization:direct_collocation",
+    ],
+)
+
 drake_py_binary(
     name = "steering_command_driver",
     srcs = ["steering_command_driver.py"],
