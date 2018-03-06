@@ -5,6 +5,7 @@
 
 #include "drake/automotive/maliput/api/lane.h"
 #include "drake/common/autodiff.h"
+#include "drake/common/autodiffxd_make_coherent.h"
 #include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/symbolic.h"
@@ -55,10 +56,21 @@ const GeoPositionT<T> PurePursuit<T>::ComputeGoalPoint(
     const PoseVector<T>& pose) {
   const Lane* const lane = lane_direction.lane;
   const bool with_s = lane_direction.with_s;
+
+  // Make z coherent.
+  auto translation = pose.get_translation();
+  const T x = translation.x();
+  const T y = translation.y();
+  T z = translation.z();
+  autodiffxd_make_coherent(x, &z);
+  PoseVector<T> new_pose;
+  new_pose.set_translation(Eigen::Translation<T, 3>{x, y, z});
+  new_pose.set_rotation(pose.get_rotation());
+
   const LanePositionT<T> position =
-      lane->ToLanePositionT<T>({pose.get_isometry().translation().x(),
-                                pose.get_isometry().translation().y(),
-                                pose.get_isometry().translation().z()},
+      lane->ToLanePositionT<T>({new_pose.get_translation().x(),
+                                new_pose.get_translation().y(),
+                                new_pose.get_translation().z()},
                                nullptr, nullptr);
   const T s_new =
       with_s ? position.s() + s_lookahead : position.s() - s_lookahead;
