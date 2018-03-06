@@ -149,7 +149,6 @@ void PopulateContext(
 
 int DoMain(void) {
   const int kNumLanes = 3;  // Number of lanes in the scenario.
-  //  const int kNumLaneChangingCars = 3;  // Number of ado cars in this scenario.
 
   std::unique_ptr<maliput::api::RoadGeometry> road = MakeRoad(kNumLanes);
   const maliput::api::Segment* segment = road->junction(0)->segment(0);
@@ -164,6 +163,8 @@ int DoMain(void) {
   goal_lanes.push_back(goal_lane_car1);
   goal_lanes.push_back(goal_lane_car2);
   goal_lanes.push_back(goal_lane_car3);
+
+  const int num_ado_cars = goal_lanes.size();
 
   auto simulator = SetupSimulator(false /* is_playback_mode */, kNumLanes,
                                   std::move(road), goal_lanes);
@@ -274,7 +275,7 @@ int DoMain(void) {
             << final_context->get_continuous_state_vector().CopyToVector()
             << std::endl;
 
-  // Bounding box on all decision variables.
+  // Generous bounding box on all decision variables.
   prog.AddBoundingBoxConstraint(-100, 100, prog.decision_variables());
 
   // Parse the initial conditions.
@@ -283,6 +284,44 @@ int DoMain(void) {
   prog.AddLinearConstraint(prog.initial_state() ==
                            initial_states.CopyToVector());
 
+
+  // Getters for the subsystem (SimpleCar) states.
+  // TODO: I wonder if this is horribly inefficient.
+  auto ego_indices = [systems]() {
+    int index{0};
+    auto result = std::vector<int>(SimpleCarStateIndices::kNumCoordinates);
+    for (const auto& system : systems) {
+      std::string name = system->get_name();
+      if (name.find(kEgoCarName + "_simple_car") != std::string::npos) {
+        std::iota(std::begin(result), std::end(result), index);
+        break;
+      }
+      if (name.find("simple_car") != std::string::npos) {
+        index += SimpleCarStateIndices::kNumCoordinates;
+      }
+    }
+    return result;
+  };
+
+  auto ado_indices = [systems](int ado_car_index) {
+    int index{0};
+    auto result = std::vector<int>(SimpleCarStateIndices::kNumCoordinates);
+    for (const auto& system : systems) {
+      std::string name = system->get_name();
+      if ((name.find(kLaneChangerName) != std::string::npos) &&
+          (name.find("_" + std::to_string(ado_car_index) + "_") !=
+           std::string::npos) &&
+          (name.find("simple_car") != std::string::npos)) {
+        std::iota(std::begin(result), std::end(result), index);
+        break;
+      }
+      if (name.find("simple_car") != std::string::npos) {
+        index += SimpleCarStateIndices::kNumCoordinates;
+      }
+    }
+    return result;
+  };
+
   // Solve a collision with one of the cars, in this case, Traffic Car 2 merging
   // into the middle lane.  Assume for now that, irrespective of its
   // orientation, the traffic car occupies a lane-aligned bounding box.
@@ -290,43 +329,15 @@ int DoMain(void) {
   // TODO: Package these loops into function calls or use a lambdas?
   // TODO(jadecastro) As above, this assumes the ordering of the context. Update
   // Dircol to make this less fragile.
-  /*
-  int ego_index{0};
-  int ado_index{0};
-  // Get the ego index.
-  for (const auto& system : systems) {
-    std::string name = system->get_name();
-    if (name.find(kEgoCarName + "_simple_car") != std::string::npos) {
-      break;
-    }
-    if (name.find("simple_car") != std::string::npos) {
-      ego_index += SimpleCarStateIndices::kNumCoordinates;
-    }
-  }
-
-  const int kXIndex = SimpleCarStateIndices::kX;
-  const int kYIndex = SimpleCarStateIndices::kY;
-  for (const auto& system : systems) {
-    std::string name = system->get_name();
-    if ((name.find(kLaneChangerName) != std::string::npos) &&
-        (name.find("_2_") != std::string::npos) &&
-        (name.find("simple_car") != std::string::npos)) {
-      std::cout << " ego index " << ego_index << std::endl;
-      std::cout << " ado index " << ado_index << std::endl;
-      // Assumes the footprint is a full lane-width wide by 5-m long.
-      prog.AddLinearConstraint(prog.final_state()(ado_index + kYIndex) >=
-                               prog.final_state()(ego_index + kYIndex)
-                               - 0.5 * kLaneWidth);
-      prog.AddLinearConstraint(prog.final_state()(ado_index + kXIndex) >=
-                               prog.final_state()(ego_index + kXIndex) - 2.5);
-      prog.AddLinearConstraint(prog.final_state()(ado_index + kXIndex) <=
-                               prog.final_state()(ego_index + kXIndex) + 2.5);
-    }
-    if (name.find("simple_car") != std::string::npos) {
-      ado_index += SimpleCarStateIndices::kNumCoordinates;
-    }
-  }
-  */
+  const int kX = SimpleCarStateIndices::kX;
+  const int kY = SimpleCarStateIndices::kY;
+  prog.AddLinearConstraint(prog.final_state()(ado_indices(2).at(kY)) >=
+                           prog.final_state()(ego_indices().at(kY))
+                           - 0.5 * kLaneWidth);
+  prog.AddLinearConstraint(prog.final_state()(ado_indices(2).at(kX)) >=
+                           prog.final_state()(ego_indices().at(kX)) - 2.5);
+  prog.AddLinearConstraint(prog.final_state()(ado_indices(2).at(kX)) <=
+                           prog.final_state()(ego_indices().at(kX)) + 2.5);
 
   // Add a cost to encourage solutions that minimize the distance to a crash.
   //prog.AddRunningCost((prog.state()(4) - prog.state()(0)) *
@@ -351,45 +362,30 @@ int DoMain(void) {
   Eigen::MatrixXd inputs = prog.GetInputSamples();
   Eigen::MatrixXd states = prog.GetStateSamples();
   Eigen::VectorXd times_out = prog.GetSampleTimes();
-  const Eigen::VectorXd s0 = states.row(0);
-  const Eigen::VectorXd s1 = states.row(1);
-  //const Eigen::VectorXd s10 = states.row(10);
-  //const Eigen::VectorXd s11 = states.row(11);
-  std::cout << " states.row(0) " << states.row(0) << std::endl;
-  std::cout << " states.row(1) " << states.row(1) << std::endl;
-  /*
-  if (kNumLanes == 3) {
-    CallPython("figure", 1);
+  Eigen::VectorXd ego_x = states.row(ego_indices().at(kX));
+  Eigen::VectorXd ego_y = states.row(ego_indices().at(kY));
+  std::cout << " ego x " << ego_x << std::endl;
+  std::cout << " ego y " << ego_y << std::endl;
+  CallPython("figure", 1);
+  CallPython("clf");
+  CallPython("plot", ego_x, ego_y);
+  CallPython("setvars", "ego_x", ego_x, "ego_y", ego_y);
+  CallPython("plt.xlabel", "ego car x (m)");
+  CallPython("plt.ylabel", "ego car y (m)");
+  CallPython("plt.show");
+  for (int i{0}; i < num_ado_cars; ++i) {
+    Eigen::VectorXd ado_x = states.row(ado_indices(i).at(kX));
+    Eigen::VectorXd ado_y = states.row(ado_indices(i).at(kY));
+    CallPython("figure", i+2);
     CallPython("clf");
-    CallPython("plot", s10, s11);
-    CallPython("setvars", "s10", s10, "s11", s11);
-    CallPython("plt.xlabel", "x ego (m)");
-    CallPython("plt.ylabel", "y ego (m)");
-    CallPython("figure", 2);
-    CallPython("clf");
-    CallPython("plot", s0, s1);
-    CallPython("setvars", "s0", s0, "s1", s1);
-    CallPython("plt.xlabel", "x traffic2 (m)");
-    CallPython("plt.ylabel", "y traffic2 (m)");
-  } else if (kNumLanes == 2) {
-    CallPython("figure", 1);
-    CallPython("clf");
-    CallPython("plot", states.row(4), states.row(5));
-    CallPython("plt.xlabel", "x ego (m)");
-    CallPython("plt.ylabel", "y ego (m)");
-    CallPython("figure", 2);
-    CallPython("clf");
-    CallPython("plot", states.row(0), states.row(2));
-    CallPython("plt.xlabel", "x traffic1 (m)");
-    CallPython("plt.ylabel", "x traffic0 (m)");
-  } else if (kNumLanes == 1) {
-    CallPython("figure", 1);
-    CallPython("clf");
-    CallPython("plot", states.row(0), states.row(0) - states.row(2));
-    CallPython("plt.xlabel", "s lead (m)");
-    CallPython("plt.ylabel", "s lead - s ego (m)");
+    CallPython("plot", ado_x, ado_y);
+    CallPython("setvars", "ado_x_" + std::to_string(i), ado_x,
+               "ado_y_" + std::to_string(i), ado_y);
+    CallPython("plt.xlabel", "ado car "+ std::to_string(i) +" x (m)");
+    CallPython("plt.ylabel", "ado car "+ std::to_string(i) +" y (m)");
+    CallPython("plt.show");
   }
-  */
+
   // Dump the entire solution result to the screen.
   // for (int i{0}; i < states.size(); ++i) {
   //   std::cout << " states(" << i << ") " << states(i) << std::endl;
