@@ -67,7 +67,8 @@ PYBIND11_MODULE(rendering, m) {
     .def("AddSingleInput", &PoseAggregator<T>::AddSingleInput,
          py_reference_internal)
     .def("AddSinglePoseAndVelocityInput",
-         &PoseAggregator<T>::AddSinglePoseAndVelocityInput)
+         &PoseAggregator<T>::AddSinglePoseAndVelocityInput,
+         py_reference_internal)
     .def("AddBundleInput", &PoseAggregator<T>::AddBundleInput,
          py_reference_internal);
 
