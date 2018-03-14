@@ -12,6 +12,7 @@
 #include "drake/common/proto/call_python.h"
 #include "drake/common/symbolic.h"
 #include "drake/lcm/drake_lcm.h"
+#include "drake/systems/analysis/simulator.h"
 #include "drake/systems/trajectory_optimization/direct_collocation.h"
 
 DEFINE_double(simulation_sec, std::numeric_limits<double>::infinity(),
@@ -23,6 +24,7 @@ namespace {
 
 using common::CallPython;
 using systems::trajectory_optimization::DirectCollocation;
+using trajectories::PiecewisePolynomial;
 
 // Road parameters -- Assume fixed for now.
 static constexpr double kLaneWidth = 3.;
@@ -39,16 +41,18 @@ std::unique_ptr<maliput::api::RoadGeometry> MakeRoad(int num_dragway_lanes) {
       std::numeric_limits<double>::epsilon() /* angular_tolerance */);
 }
 
-static std::unique_ptr<AutomotiveSimulator<double>>
+std::pair<std::unique_ptr<AutomotiveSimulator<double>>, std::vector<int>>
 SetupSimulator(bool is_playback_mode, int num_dragway_lanes,
                std::unique_ptr<maliput::api::RoadGeometry> road,
                const std::vector<const maliput::api::Lane*>& goal_lanes) {
   DRAKE_DEMAND(num_dragway_lanes > 0);
+  std::vector<int> ids{};
 
+  const int num_cars = goal_lanes.size() + 1 /* ego + ado cars */;
   auto simulator = (is_playback_mode)
       ? std::make_unique<AutomotiveSimulator<double>>(
-          std::make_unique<lcm::DrakeLcm>())
-      : std::make_unique<AutomotiveSimulator<double>>(nullptr);
+          std::make_unique<lcm::DrakeLcm>(), num_cars)
+      : std::make_unique<AutomotiveSimulator<double>>(nullptr, num_cars);
 
   auto simulator_road = simulator->SetRoadGeometry(std::move(road));
   auto dragway_road_geometry =
@@ -76,12 +80,11 @@ SetupSimulator(bool is_playback_mode, int num_dragway_lanes,
   ego_initial_state.set_heading(0.);
   ego_initial_state.set_velocity(start_speed_ego);
 
-  simulator->AddIdmControlledCar(kEgoCarName,
-                                 true /* move along the "s"-direction */,
-                                 ego_initial_state, ego_goal_lane,
-                                 ScanStrategy::kPath,
-                                 RoadPositionStrategy::kExhaustiveSearch,
-                                 0. /* (unused) */);
+  const int ego_id = simulator->AddIdmControlledCar(
+      kEgoCarName, true /* move along the "s"-direction */,
+      ego_initial_state, ego_goal_lane, ScanStrategy::kPath,
+      RoadPositionStrategy::kExhaustiveSearch, 0. /* (unused) */);
+  ids.emplace_back(ego_id);
 
   int i{0};
   for (const auto goal_lane : goal_lanes) {
@@ -99,14 +102,15 @@ SetupSimulator(bool is_playback_mode, int num_dragway_lanes,
     lc_initial_state.set_velocity(start_speed_lc);
 
     // All lane changers move into the ego car's lane.
-    simulator->AddIdmControlledCar(kLaneChangerName + "_" + std::to_string(i++),
-                                   true /* move along the "s"-direction */,
-                                   lc_initial_state, goal_lane,
-                                   ScanStrategy::kPath,
-                                   RoadPositionStrategy::kExhaustiveSearch,
-                                   0. /* (unused) */);
+    const int ado_id = simulator->AddIdmControlledCar(
+        kLaneChangerName + "_" + std::to_string(i++),
+        true /* move along the "s"-direction */, lc_initial_state, goal_lane,
+        ScanStrategy::kPath, RoadPositionStrategy::kExhaustiveSearch,
+        0. /* (unused) */);
+    ids.emplace_back(ado_id);
   }
-  return std::unique_ptr<AutomotiveSimulator<double>>(simulator.release());
+  return std::make_pair(
+      std::unique_ptr<AutomotiveSimulator<double>>(simulator.release()), ids);
 }
 
 template <typename T>
@@ -166,8 +170,10 @@ int DoMain(void) {
 
   const int num_ado_cars = goal_lanes.size();
 
-  auto simulator = SetupSimulator(false /* is_playback_mode */, kNumLanes,
-                                  std::move(road), goal_lanes);
+  std::unique_ptr<AutomotiveSimulator<double>> simulator;
+  std::vector<int> ids;
+  std::tie(simulator, ids) = SetupSimulator(
+      false /* is_playback_mode */, kNumLanes, std::move(road), goal_lanes);
 
   simulator->BuildAndInitialize();
 
@@ -326,7 +332,6 @@ int DoMain(void) {
   // into the middle lane.  Assume for now that, irrespective of its
   // orientation, the traffic car occupies a lane-aligned bounding box.
 
-  // TODO: Package these loops into function calls or use a lambdas?
   // TODO(jadecastro) As above, this assumes the ordering of the context. Update
   // Dircol to make this less fragile.
   const int kX = SimpleCarStateIndices::kX;
@@ -345,6 +350,7 @@ int DoMain(void) {
   //                    (prog.state()(5) - (-0.5 * kLaneWidth + delta_y)) *
   //                    (prog.state()(5) - (-0.5 * kLaneWidth + delta_y)));
 
+
   const Eigen::VectorXd x0 =
       initial_context->get_continuous_state_vector().CopyToVector();
   const Eigen::VectorXd xf =
@@ -353,6 +359,15 @@ int DoMain(void) {
       {0, guess_duration}, {x0, xf});
   prog.SetInitialTrajectory(PiecewisePolynomial<double>(),
                             guess_state_trajectory);
+
+  // Add a log-probability cost representing the deviation of the commands from
+  // a deterministic evolution of IDM/PurePursuit (nominal policy).  We assume
+  // that the policy has zero-mean Gaussian distribution.
+  symbolic::Expression running_cost;
+  for (int i{0}; i < prog.input().size(); ++i) {
+    running_cost += prog.input()(i) * prog.input()(i);
+  }
+  prog.AddRunningCost(running_cost);
 
   const auto result = prog.Solve();
 
