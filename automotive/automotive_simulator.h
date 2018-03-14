@@ -24,6 +24,7 @@
 #include "drake/systems/framework/diagram.h"
 #include "drake/systems/framework/diagram_builder.h"
 #include "drake/systems/lcm/lcm_publisher_system.h"
+#include "drake/systems/primitives/demultiplexer.h"
 #include "drake/systems/rendering/pose_aggregator.h"
 #include "drake/systems/rendering/pose_bundle.h"
 #include "drake/systems/rendering/pose_bundle_to_draw_message.h"
@@ -51,8 +52,21 @@ class AutomotiveSimulator {
   AutomotiveSimulator();
 
   /// A constructor that configures this object to use a DrakeLcmInterface
-  /// instance. If nullptr, no visualization is produced.
-  explicit AutomotiveSimulator(std::unique_ptr<lcm::DrakeLcmInterface> lcm);
+  /// instance.
+  ///
+  /// @param lcm If nullptr, no visualization is produced. Otherwise, uses the
+  /// specified LCM instance.
+  ///
+  /// @param num_inputs If > 0, then adds an input that adds a delta to the
+  /// DrivingCommand input provided by IdmController & PurePursuitController
+  /// for each registered system.
+  /// N.B. This option only supports cars added via AddIdmControlledCar().
+  ///
+  /// @return The ID of the car that was just added to the simulation.
+  //
+  // TODO(jadecastro) Remove the default value.
+  AutomotiveSimulator(std::unique_ptr<lcm::DrakeLcmInterface> lcm,
+                      int num_inputs = 0);
 
   ~AutomotiveSimulator();
 
@@ -408,6 +422,12 @@ class AutomotiveSimulator {
   // For simulation.
   std::unique_ptr<systems::Diagram<T>> diagram_{};
   std::unique_ptr<systems::Simulator<T>> simulator_{};
+
+  // Do we have an additional input?
+  const int num_inputs_{};
+
+  // Adds a Demultiplexer.
+  systems::Demultiplexer<T>* demux_{};
 };
 
 }  // namespace automotive

@@ -30,6 +30,7 @@
 #include "drake/systems/framework/system.h"
 #include "drake/systems/lcm/lcm_subscriber_system.h"
 #include "drake/systems/lcm/lcmt_drake_signal_translator.h"
+#include "drake/systems/primitives/adder.h"
 #include "drake/systems/primitives/constant_value_source.h"
 #include "drake/systems/rendering/render_pose_to_geometry_pose.h"
 
@@ -58,11 +59,17 @@ AutomotiveSimulator<T>::AutomotiveSimulator()
 
 template <typename T>
 AutomotiveSimulator<T>::AutomotiveSimulator(
-    std::unique_ptr<lcm::DrakeLcmInterface> lcm)
-    : lcm_(std::move(lcm)) {
+    std::unique_ptr<lcm::DrakeLcmInterface> lcm, int num_inputs)
+    : lcm_(std::move(lcm)), num_inputs_(num_inputs) {
   aggregator_ =
       builder_->template AddSystem<systems::rendering::PoseAggregator<T>>();
   aggregator_->set_name("pose_aggregator");
+  const int input_size = DrivingCommandIndices::kNumCoordinates * num_inputs_;
+  demux_ = builder_->template AddSystem<systems::Demultiplexer<T>>(
+      input_size, DrivingCommandIndices::kNumCoordinates);
+  demux_->set_name("demux");
+  // TODO(jadecastro) It would be nice if demux had a dynamic add capability
+  // like PoseAggregator rather than having to be explicit about port count.
 
   if (lcm_) {
     scene_graph_ = builder_->template AddSystem<geometry::SceneGraph>();
@@ -191,6 +198,7 @@ int AutomotiveSimulator<T>::AddPriusSimpleCar(
     const std::string& channel_name,
     const SimpleCarState<T>& initial_state) {
   DRAKE_DEMAND(!has_started());
+  DRAKE_DEMAND(num_inputs_ == 0);
   DRAKE_DEMAND(aggregator_ != nullptr);
   CheckNameUniqueness(name);
   const int id = allocate_vehicle_number();
@@ -222,6 +230,7 @@ int AutomotiveSimulator<T>::AddMobilControlledSimpleCar(
     RoadPositionStrategy road_position_strategy, double period_sec,
     const SimpleCarState<T>& initial_state) {
   DRAKE_DEMAND(!has_started());
+  DRAKE_DEMAND(num_inputs_ == 0);
   DRAKE_DEMAND(aggregator_ != nullptr);
   CheckNameUniqueness(name);
   if (road_ == nullptr) {
@@ -293,6 +302,7 @@ int AutomotiveSimulator<T>::AddPriusTrajectoryCar(
     double speed,
     double start_position) {
   DRAKE_DEMAND(!has_started());
+  DRAKE_DEMAND(num_inputs_ == 0);
   DRAKE_DEMAND(aggregator_ != nullptr);
   CheckNameUniqueness(name);
   const int id = allocate_vehicle_number();
@@ -376,7 +386,19 @@ int AutomotiveSimulator<T>::AddIdmControlledCar(
                     mux->steering_input());
   builder_->Connect(idm_controller->acceleration_output(),
                     mux->acceleration_input());
-  builder_->Connect(mux->get_output_port(0), simple_car->get_input_port(0));
+
+  if (num_inputs_ > 0) {  // Connect mux to an adder before passing to
+                          // simple_car.
+    // TODO(jadecastro) For now, we don't need a model vector ctor for Adder,
+    // but *will* need it once AutoDiff with named vectors is resolved.
+    auto adder = builder_->template AddSystem<systems::Adder<T>>(2, 2);
+    builder_->Connect(mux->get_output_port(0), adder->get_input_port(0));
+    builder_->Connect(adder->get_output_port(), simple_car->get_input_port(0));
+    std::cout << " ID " << id << std::endl;
+    builder_->Connect(demux_->get_output_port(id), adder->get_input_port(1));
+  } else {  // Connect idm_controller, pursuit directly to simple_car (via mux).
+    builder_->Connect(mux->get_output_port(0), simple_car->get_input_port(0));
+  }
 
   ConnectCarOutputsAndPriusVis(id, simple_car->pose_output(),
                                simple_car->velocity_output());
@@ -394,6 +416,7 @@ int AutomotiveSimulator<T>::AddPriusMaliputRailcar(
     const MaliputRailcarParams<T>& params,
     const MaliputRailcarState<T>& initial_state) {
   DRAKE_DEMAND(!has_started());
+  DRAKE_DEMAND(num_inputs_ == 0);
   DRAKE_DEMAND(aggregator_ != nullptr);
   CheckNameUniqueness(name);
   if (road_ == nullptr) {
@@ -434,6 +457,10 @@ int AutomotiveSimulator<T>::AddIdmControlledPriusMaliputRailcar(
     RoadPositionStrategy road_position_strategy, double period_sec,
     const MaliputRailcarParams<T>& params,
     const MaliputRailcarState<T>& initial_state) {
+  DRAKE_DEMAND(!has_started());
+  DRAKE_DEMAND(num_inputs_ == 0);
+  DRAKE_DEMAND(aggregator_ != nullptr);
+  CheckNameUniqueness(name);
   const int id = AddPriusMaliputRailcar(name, initial_lane_direction, params,
                                         initial_state);
   const MaliputRailcar<T>* railcar =
@@ -611,6 +638,9 @@ void AutomotiveSimulator<T>::Build() {
 
   pose_bundle_output_port_ =
       builder_->ExportOutput(aggregator_->get_output_port(0));
+  if (num_inputs_ > 0) {
+    builder_->ExportInput(demux_->get_input_port(0));
+  }
 
   diagram_ = builder_->Build();
   diagram_->set_name("AutomotiveSimulator");
