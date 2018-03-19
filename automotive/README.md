@@ -19,25 +19,25 @@ $ bazel run automotive:DEMO_NAME_HERE
 
 The following demos are available:
 
- * One `SimpleCar` under user control and one `TrajectoryCar` driving around in
-   a figure eight on an open plane:
+ * One `SimpleCar` under user control and one `PathFollowingCar` driving around
+   in a figure eight on an open plane:
 
    ```
    bazel run automotive:demo -- --num_simple_car=1 \
-       --driving_command_gui_names=0 --num_trajectory_car=1
+       --driving_command_gui_names=0 --num_path_following_car=1
    ```
 
    This will show one _ado_ car driving in a fixed trajectory, and one _ego_
    car which can be driven anywhere on the infinite plane.  (See "Driving
    the Prius" below to make it go.)
 
- * A 3-lane dragway with four `TrajectoryCar` vehicles traveling down each lane
-   at different speeds plus one `SimpleCar` and one `MaliputRailcar`:
+ * A 3-lane dragway with four `PathFollowingCar` vehicles traveling down each
+   lane at different speeds plus one `SimpleCar` and one `MaliputRailcar`:
 
    ```
    bazel run automotive:demo -- \
        --num_dragway_lanes=3 \
-       --num_trajectory_car=12 \
+       --num_path_following_car=12 \
        --num_maliput_railcar=1
    ```
 

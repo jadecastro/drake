@@ -4,7 +4,7 @@
 
 #include <gtest/gtest.h>
 
-#include "drake/automotive/create_trajectory_params.h"
+#include "drake/automotive/create_path_params.h"
 #include "drake/automotive/curve2.h"
 #include "drake/automotive/lane_direction.h"
 #include "drake/automotive/maliput/api/lane.h"
@@ -221,8 +221,8 @@ GTEST_TEST(AutomotiveSimulatorTest, TestMobilControlledSimpleCar) {
   EXPECT_GE(mobil_y, -2.);
 }
 
-// Cover AddTrajectoryCar (and thus AddPublisher).
-GTEST_TEST(AutomotiveSimulatorTest, TestPriusTrajectoryCar) {
+// Cover AddPathFollowingCar (and thus AddPublisher).
+GTEST_TEST(AutomotiveSimulatorTest, TestPriusPathFollowingCar) {
   typedef Curve2<double> Curve2d;
   typedef Curve2d::Point2 Point2d;
   const std::vector<Point2d> waypoints{
@@ -230,13 +230,13 @@ GTEST_TEST(AutomotiveSimulatorTest, TestPriusTrajectoryCar) {
   };
   const Curve2d curve{waypoints};
 
-  // Set up a basic simulation with a couple Prius TrajectoryCars. Both cars
+  // Set up a basic simulation with a couple Prius PathFollowingCars. Both cars
   // start at position zero; the first has a speed of 1 m/s, while the other is
   // stationary. They both follow a straight 100 m long line.
   auto simulator = std::make_unique<AutomotiveSimulator<double>>(
       std::make_unique<lcm::DrakeMockLcm>());
-  const int id1 = simulator->AddPriusTrajectoryCar("alice", curve, 1.0, 0.0);
-  const int id2 = simulator->AddPriusTrajectoryCar("bob", curve, 0.0, 0.0);
+  const int id1 = simulator->AddPriusPathFollowingCar("alice", curve, 1.0, 0.0);
+  const int id2 = simulator->AddPriusPathFollowingCar("bob", curve, 0.0, 0.0);
   EXPECT_EQ(id1, 0);
   EXPECT_EQ(id2, 1);
 
@@ -415,9 +415,9 @@ std::unique_ptr<AutomotiveSimulator<double>> MakeWithIdmCarAndDecoy(
   const double traffic_s(6.);
   const double traffic_speed(0.);
   const auto& traffic_params =
-      CreateTrajectoryParamsForDragway(*dragway, kStartLaneIndex, traffic_speed,
-                                       0. /* start time */);
-  const int id_decoy = simulator->AddPriusTrajectoryCar(
+      CreatePathParamsForDragway(*dragway, kStartLaneIndex, traffic_speed,
+                                 0. /* start time */);
+  const int id_decoy = simulator->AddPriusPathFollowingCar(
       "decoy", std::get<0>(traffic_params), traffic_speed, traffic_s);
   EXPECT_EQ(id_decoy, 1);
 
@@ -460,7 +460,7 @@ GTEST_TEST(AutomotiveSimulatorTest, TestIdmControlledSimpleCarLcmDisabled) {
 
 // Check that AddIdmControlledCar produces a diagram that is AutoDiff-
 // convertible.  Note that the subsystems in both AddIdmControlledCar and
-// AddPriusTrajectoryCar must be AutoDiff supported.
+// AddPriusPathFollowingCar must be AutoDiff supported.
 //
 // TODO(jadecastro) Consider checking the autodiff derivatives of the autodiff-
 // converted diagram.
@@ -598,9 +598,9 @@ GTEST_TEST(AutomotiveSimulatorTest, TestLcmOutput) {
   typedef Curve2d::Point2 Point2d;
   const std::vector<Point2d> waypoints{Point2d{0, 0}, Point2d{1, 0}};
   const Curve2d curve{waypoints};
-  simulator->AddPriusTrajectoryCar("alice", curve, 1 /* speed */,
+  simulator->AddPriusPathFollowingCar("alice", curve, 1 /* speed */,
                                    0 /* start time */);
-  simulator->AddPriusTrajectoryCar("bob", curve, 1 /* speed */,
+  simulator->AddPriusPathFollowingCar("bob", curve, 1 /* speed */,
                                    0 /* start time */);
 
   simulator->Start();
@@ -646,12 +646,12 @@ GTEST_TEST(AutomotiveSimulatorTest, TestDuplicateVehicleNameException) {
   const std::vector<Point2d> waypoints{Point2d{0, 0}, Point2d{1, 0}};
   const Curve2d curve{waypoints};
 
-  EXPECT_NO_THROW(simulator->AddPriusTrajectoryCar(
+  EXPECT_NO_THROW(simulator->AddPriusPathFollowingCar(
       "alice", curve, 1 /* speed */, 0 /* start time */));
-  EXPECT_THROW(simulator->AddPriusTrajectoryCar("alice", curve, 1 /* speed */,
+  EXPECT_THROW(simulator->AddPriusPathFollowingCar("alice", curve, 1 /* speed */,
                                                 0 /* start time */),
                std::runtime_error);
-  EXPECT_THROW(simulator->AddPriusTrajectoryCar("Model1", curve, 1 /* speed */,
+  EXPECT_THROW(simulator->AddPriusPathFollowingCar("Model1", curve, 1 /* speed */,
                                                 0 /* start time */),
                std::runtime_error);
 

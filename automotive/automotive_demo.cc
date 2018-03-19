@@ -29,7 +29,7 @@ DEFINE_int32(num_mobil_car, 0,
              "currently only applied when the road network is a dragway. "
              "MOBIL-controlled vehicles are placed behind any idm-controlled "
              "railcars and any fixed-speed railcars.");
-DEFINE_int32(num_trajectory_car, 0, "Number of TrajectoryCar vehicles. This "
+DEFINE_int32(num_path_following_car, 0, "Number of PathFollowingCar vehicles. This "
              "option is currently only applied when the road network is a flat "
              "plane or a dragway.");
 DEFINE_int32(num_idm_controlled_maliput_railcar, 0, "Number of IDM-controlled "
@@ -197,7 +197,7 @@ void AddSimpleCars(AutomotiveSimulator<double>* simulator) {
 }
 
 // Initializes the provided `simulator` with user-specified numbers of
-// `SimpleCar` vehicles and `TrajectoryCar` vehicles. If parameter
+// `SimpleCar` vehicles and `PathFollowingCar` vehicles. If parameter
 // `road_network_type` equals `RoadNetworkType::dragway`, the provided
 // `road_geometry` parameter must not be `nullptr`.
 void AddVehicles(RoadNetworkType road_network_type,
@@ -210,7 +210,7 @@ void AddVehicles(RoadNetworkType road_network_type,
     const maliput::dragway::RoadGeometry* dragway_road_geometry =
         dynamic_cast<const maliput::dragway::RoadGeometry*>(road_geometry);
     DRAKE_DEMAND(dragway_road_geometry != nullptr);
-    for (int i = 0; i < FLAGS_num_trajectory_car; ++i) {
+    for (int i = 0; i < FLAGS_num_path_following_car; ++i) {
       const int lane_index = i % FLAGS_num_dragway_lanes;
       const double speed = FLAGS_dragway_base_speed +
           lane_index * FLAGS_dragway_lane_speed_delta;
@@ -218,7 +218,7 @@ void AddVehicles(RoadNetworkType road_network_type,
            FLAGS_dragway_vehicle_spacing;
       const auto& params = CreateTrajectoryParamsForDragway(
           *dragway_road_geometry, lane_index, speed, start_position);
-      simulator->AddPriusTrajectoryCar("TrajectoryCar" + std::to_string(i),
+      simulator->AddPriusPathFollowingCar("PathFollowingCar" + std::to_string(i),
                                        std::get<0>(params),
                                        std::get<1>(params),
                                        std::get<2>(params));
@@ -290,9 +290,9 @@ void AddVehicles(RoadNetworkType road_network_type,
           lane_direction, params, state);
     }
   } else {
-    for (int i = 0; i < FLAGS_num_trajectory_car; ++i) {
-      const auto& params = CreateTrajectoryParams(i);
-      simulator->AddPriusTrajectoryCar("TrajectoryCar" + std::to_string(i),
+    for (int i = 0; i < FLAGS_num_path_following_car; ++i) {
+      const auto& params = CreatePathParams(i);
+      simulator->AddPriusPathFollowingCar("PathFollowingCar" + std::to_string(i),
                                        std::get<0>(params),
                                        std::get<1>(params),
                                        std::get<2>(params));

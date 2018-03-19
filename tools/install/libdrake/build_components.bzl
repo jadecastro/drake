@@ -39,6 +39,7 @@ LIBDRAKE_COMPONENTS = [
     "//automotive:maliput_railcar",
     "//automotive:mobil_planner",
     "//automotive:monolane_onramp_merge",
+    "//automotive:path_following_car",
     "//automotive:pose_selector",
     "//automotive:prius_vis",
     "//automotive:pure_pursuit",

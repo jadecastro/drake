@@ -9,7 +9,7 @@
 #include "drake/automotive/car_vis_applicator.h"
 #include "drake/automotive/curve2.h"
 #include "drake/automotive/gen/maliput_railcar_state.h"
-#include "drake/automotive/gen/trajectory_car_state.h"
+#include "drake/automotive/gen/path_following_car_state.h"
 #include "drake/automotive/idm_controller.h"
 #include "drake/automotive/lane_direction.h"
 #include "drake/automotive/maliput/api/road_geometry.h"
@@ -17,7 +17,7 @@
 #include "drake/automotive/mobil_planner.h"
 #include "drake/automotive/pure_pursuit_controller.h"
 #include "drake/automotive/simple_car.h"
-#include "drake/automotive/trajectory_car.h"
+#include "drake/automotive/path_following_car.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/lcm/drake_lcm_interface.h"
 #include "drake/lcmt_viewer_load_robot.hpp"
@@ -118,21 +118,21 @@ class AutomotiveSimulator {
       RoadPositionStrategy road_position_strategy, double period_sec,
       const SimpleCarState<T>& initial_state = SimpleCarState<T>());
 
-  /// Adds a TrajectoryCar to this simulation visualized as a Toyota Prius.
+  /// Adds a PathFollowingCar to this simulation visualized as a Toyota Prius.
   ///
   /// @pre Start() has NOT been called.
   ///
   /// @param name The car's name, which must be unique among all cars. Otherwise
   /// a std::runtime_error will be thrown.
   ///
-  /// @param curve See documentation of TrajectoryCar::TrajectoryCar.
+  /// @param curve See documentation of PathFollowingCar::PathFollowingCar.
   ///
-  /// @param speed See documentation of TrajectoryCar::TrajectoryCar.
+  /// @param speed See documentation of PathFollowingCar::PathFollowingCar.
   ///
-  /// @param start_time See documentation of TrajectoryCar::TrajectoryCar.
+  /// @param start_time See documentation of PathFollowingCar::PathFollowingCar.
   ///
   /// @return The ID of the car that was just added to the simulation.
-  int AddPriusTrajectoryCar(const std::string& name,
+  int AddPriusPathFollowingCar(const std::string& name,
                             const Curve2<double>& curve, double speed,
                             double start_time);
 
@@ -356,7 +356,7 @@ class AutomotiveSimulator {
 
   // Adds an LCM publisher for the given @p system.
   // @pre Start() has NOT been called.
-  void AddPublisher(const TrajectoryCar<T>& system, int vehicle_number);
+  void AddPublisher(const PathFollowingCar<T>& system, int vehicle_number);
 
   // Generates the URDF model of the road network and loads it into the
   // `RigidBodyTree`. Member variable `road_` must be set prior to calling this
@@ -369,7 +369,7 @@ class AutomotiveSimulator {
 
   void SendLoadRobotMessage(const lcmt_viewer_load_robot& message);
 
-  void InitializeTrajectoryCars();
+  void InitializePathFollowingCars();
   void InitializeSimpleCars();
   void InitializeMaliputRailcars();
 
@@ -383,10 +383,10 @@ class AutomotiveSimulator {
   std::unique_ptr<systems::DiagramBuilder<T>> builder_{
       std::make_unique<systems::DiagramBuilder<T>>()};
 
-  // Holds the desired initial states of each TrajectoryCar. It is used to
+  // Holds the desired initial states of each PathFollowingCar. It is used to
   // initialize the simulation's diagram's state.
-  std::map<const TrajectoryCar<T>*, TrajectoryCarState<T>>
-      trajectory_car_initial_states_;
+  std::map<const PathFollowingCar<T>*, PathFollowingCarState<T>>
+      path_following_car_initial_states_;
 
   // Holds the desired initial states of each SimpleCar. It is used to
   // initialize the simulation's diagram's state.

@@ -31,7 +31,7 @@ _LCM_ENABLED_NAMED_VECTORS = [
     "driving_command.named_vector",
     "maliput_railcar_state.named_vector",
     "simple_car_state.named_vector",
-    "trajectory_car_state.named_vector",
+    "path_following_car_state.named_vector",
 ]
 
 drake_cc_vector_gen_library(
@@ -43,7 +43,7 @@ drake_cc_vector_gen_library(
         "mobil_planner_parameters.named_vector",
         "pure_pursuit_params.named_vector",
         "simple_car_params.named_vector",
-        "trajectory_car_params.named_vector",
+        "path_following_car_params.named_vector",
     ] + _LCM_ENABLED_NAMED_VECTORS,
 )
 
@@ -104,12 +104,12 @@ drake_cc_library(
 )
 
 drake_cc_library(
-    name = "create_trajectory_params",
-    srcs = ["create_trajectory_params.cc"],
-    hdrs = ["create_trajectory_params.h"],
+    name = "create_path_params",
+    srcs = ["create_path_params.cc"],
+    hdrs = ["create_path_params.h"],
     deps = [
         ":curve2",
-        ":trajectory_car",
+        ":path_following_car",
         "//automotive/maliput/api",
         "//automotive/maliput/dragway",
         "//common:symbolic",
@@ -348,15 +348,28 @@ drake_cc_library(
 )
 
 drake_cc_library(
-    name = "trajectory_car",
-    srcs = ["trajectory_car.cc"],
-    hdrs = ["trajectory_car.h"],
+    name = "path_following_car",
+    srcs = ["path_following_car.cc"],
+    hdrs = ["path_following_car.h"],
     deps = [
         ":calc_smooth_acceleration",
         ":curve2",
         ":generated_vectors",
         "//common:autodiff",
         "//common:extract_double",
+        "//systems/framework:leaf_system",
+        "//systems/rendering:frame_velocity",
+        "//systems/rendering:pose_vector",
+    ],
+)
+
+drake_cc_library(
+    name = "trajectory_car",
+    srcs = ["trajectory_car.cc"],
+    hdrs = ["trajectory_car.h"],
+    deps = [
+        ":generated_vectors",
+        "//common/trajectories:piecewise_polynomial",
         "//systems/framework:leaf_system",
         "//systems/rendering:frame_velocity",
         "//systems/rendering:pose_vector",
@@ -378,7 +391,7 @@ drake_cc_library(
         ":prius_vis",
         ":pure_pursuit_controller",
         ":simple_car",
-        ":trajectory_car",
+        ":path_following_car",
         "//automotive/maliput/api",
         "//automotive/maliput/utility",
         "//lcm",
@@ -404,7 +417,7 @@ drake_cc_binary(
     ],
     deps = [
         ":automotive_simulator",
-        ":create_trajectory_params",
+        ":create_path_params",
         ":monolane_onramp_merge",
         "//automotive/maliput/dragway",
         "//common:text_logging_gflags",
@@ -490,7 +503,7 @@ drake_cc_googletest(
     local = 1,
     deps = [
         "//automotive:automotive_simulator",
-        "//automotive:create_trajectory_params",
+        "//automotive:create_path_params",
         "//automotive/maliput/dragway",
         "//lcm:mock",
     ],
@@ -665,10 +678,10 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
-    name = "trajectory_car_test",
+    name = "path_following_car_test",
     deps = [
         "//automotive:autodiff_test_utilities",
-        "//automotive:trajectory_car",
+        "//automotive:path_following_car",
         "//common:extract_double",
         "//systems/analysis:simulator",
         "//systems/framework/test_utilities",

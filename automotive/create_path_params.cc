@@ -1,4 +1,4 @@
-#include "drake/automotive/create_trajectory_params.h"
+#include "drake/automotive/create_path_params.h"
 
 #include <algorithm>
 #include <vector>
@@ -59,7 +59,7 @@ Curve2<double> MakeCurve(double radius, double inset) {
 }
 }  // anonymous namespace
 
-std::tuple<Curve2<double>, double, double> CreateTrajectoryParams(int index) {
+std::tuple<Curve2<double>, double, double> CreatePathParams(int index) {
   // The possible curves to trace (lanes).
   static const std::vector<Curve2<double>> curves{
     MakeCurve(40.0, 0.0),  // BR
@@ -74,7 +74,7 @@ std::tuple<Curve2<double>, double, double> CreateTrajectoryParams(int index) {
   return std::make_tuple(curve, kSpeed, start_time);
 }
 
-std::tuple<Curve2<double>, double, double> CreateTrajectoryParamsForDragway(
+std::tuple<Curve2<double>, double, double> CreatePathParamsForDragway(
     const maliput::dragway::RoadGeometry& road_geometry, int index,
     double speed, double start_time) {
   const maliput::api::Segment* segment = road_geometry.junction(0)->segment(0);
