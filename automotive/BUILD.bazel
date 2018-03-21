@@ -250,6 +250,7 @@ drake_cc_library(
         ":generated_vectors",
         ":lane_direction",
         "//automotive/maliput/api",
+        "//common:autodiffxd_make_coherent",
         "//common:symbolic",
         "//math:saturate",
         "//systems/rendering:pose_vector",
