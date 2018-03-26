@@ -51,6 +51,7 @@ drake_pybind_library(
     name = "framework_py",
     cc_deps = [
         ":systems_pybind",
+        "//bindings/pydrake:autodiff_types_pybind",
         "//bindings/pydrake/util:drake_optional_pybind",
         "//bindings/pydrake/util:eigen_pybind",
         "//bindings/pydrake/util:type_safe_index_pybind",
@@ -205,6 +206,7 @@ drake_py_unittest(
     name = "general_test",
     size = "small",
     deps = [
+        "//bindings/pydrake:autodiffutils_py",
         ":analysis_py",
         ":framework_py",
         ":primitives_py",

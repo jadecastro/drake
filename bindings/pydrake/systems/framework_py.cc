@@ -4,6 +4,7 @@
 #include "pybind11/pybind11.h"
 #include "pybind11/stl.h"
 
+#include "drake/bindings/pydrake/autodiff_types_pybind.h"
 #include "drake/bindings/pydrake/pydrake_pybind.h"
 #include "drake/bindings/pydrake/systems/systems_pybind.h"
 #include "drake/bindings/pydrake/util/drake_optional_pybind.h"
@@ -22,6 +23,7 @@
 #include "drake/systems/framework/system.h"
 #include "drake/systems/framework/vector_system.h"
 
+using Eigen::AutoDiffScalar;
 using std::make_unique;
 using std::string;
 using std::unique_ptr;
@@ -239,6 +241,8 @@ PYBIND11_MODULE(framework, m) {
 
   m.doc() = "Bindings for the core Systems framework.";
 
+  py::module::import("pydrake.autodiffutils");
+
   // TODO(eric.cousineau): Resolve `str_py` workaround.
   auto str_py = py::eval("str");
 
@@ -432,6 +436,8 @@ PYBIND11_MODULE(framework, m) {
 
   py::class_<LeafContext<T>, Context<T>>(m, "LeafContext");
 
+  py::class_<Diagram<AutoDiffXd>, System<AutoDiffXd>>(m, "DiagramAutoDiff");
+
   py::class_<Diagram<T>, System<T>>(m, "Diagram")
     .def("GetMutableSubsystemState",
         [](Diagram<T>* self, const System<T>& arg1, Context<T>* arg2)
@@ -447,7 +453,11 @@ PYBIND11_MODULE(framework, m) {
           return self->GetMutableSubsystemContext(arg1, arg2);
         }, py_reference,
         // Keep alive, ownership: `return` keeps `Context` alive.
-        py::keep_alive<0, 3>());
+        py::keep_alive<0, 3>())
+      .def("ToAutoDiffXd",
+           [](Diagram<T>* self) -> std::unique_ptr<System<AutoDiffXd>> {
+             return self->ToAutoDiffXd();
+           }, py_reference);
 
   // Event mechanisms.
   py::class_<Event<T>>(m, "Event");

@@ -7,6 +7,8 @@ import copy
 import unittest
 import numpy as np
 
+from pydrake.autodiffutils import AutoDiffXd
+
 from pydrake.systems.analysis import (
     Simulator,
     )
@@ -14,6 +16,7 @@ from pydrake.systems.framework import (
     BasicVector,
     Diagram,
     DiagramBuilder,
+    DiagramAutoDiff,
     )
 from pydrake.systems.primitives import (
     Adder,
@@ -93,6 +96,7 @@ class TestGeneral(unittest.TestCase):
         builder.ExportOutput(integrator.get_output_port(0))
 
         diagram = builder.Build()
+        diagram_ad = diagram.ToAutoDiffXd()
         # TODO(eric.cousineau): Figure out unicode handling if needed.
         # See //systems/framework/test/diagram_test.cc:349 (sha: bc84e73)
         # for an example name.
