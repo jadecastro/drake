@@ -23,6 +23,9 @@ using systems::rendering::PoseVector;
 
 namespace automotive {
 
+static constexpr int kSteeringIndex = DrivingCommandIndices::kSteeringAngle;
+static constexpr int kAccelIndex = DrivingCommandIndices::kAcceleration;
+
 namespace {  // Local helper function.
 
 // Obtain our continuous state from a context.
@@ -179,18 +182,19 @@ void SimpleCar<T>::ImplCalcTimeDerivatives(const SimpleCarParams<T>& params,
   using std::sin;
 
   // Sanity check our input.
-  DRAKE_DEMAND(abs(input.GetAtIndex(0)) < M_PI);
+  DRAKE_DEMAND(abs(input.GetAtIndex(kSteeringIndex)) < M_PI);
 
   // Compute the smooth acceleration that the vehicle actually executes.
   // TODO(jwnimmer-tri) We should saturate to params.max_acceleration().
-  const T desired_acceleration = input.GetAtIndex(1);
+  const T desired_acceleration = input.GetAtIndex(kAccelIndex);
   const T smooth_acceleration =
       calc_smooth_acceleration(desired_acceleration, params.max_velocity(),
                                params.velocity_limit_kp(), state.velocity());
 
   // Determine steering.
   const T saturated_steering_angle =
-      math::saturate(input.GetAtIndex(0), -params.max_abs_steering_angle(),
+      math::saturate(input.GetAtIndex(kAccelIndex),
+                     -params.max_abs_steering_angle(),
                      params.max_abs_steering_angle());
   const T curvature = tan(saturated_steering_angle) / params.wheelbase();
 
@@ -203,15 +207,16 @@ void SimpleCar<T>::ImplCalcTimeDerivatives(const SimpleCarParams<T>& params,
   rates->set_velocity(smooth_acceleration);
 }
 
-// params.max_abs_steering_angle - input.GetAtIndex(0) ≥ 0.
-// params.max_abs_steering_angle + input.GetAtIndex(0) ≥ 0.
+// params.max_abs_steering_angle - input.steering_angle ≥ 0.
+// params.max_abs_steering_angle + input.steering_angle ≥ 0.
 template <typename T>
 void SimpleCar<T>::CalcSteeringAngleConstraint(
     const systems::Context<T>& context, VectorX<T>* value) const {
   const BasicVector<T>& input = get_input(this, context);
   const SimpleCarParams<T>& params = get_params(context);
-  *value = Vector2<T>(params.max_abs_steering_angle() - input.GetAtIndex(0),
-                      params.max_abs_steering_angle() + input.GetAtIndex(0));
+  *value = Vector2<T>(
+      params.max_abs_steering_angle() - input.GetAtIndex(kSteeringIndex),
+      params.max_abs_steering_angle() + input.GetAtIndex(kSteeringIndex));
 }
 
 // params.max_acceleration - input.acceleration ≥ 0,
@@ -221,8 +226,9 @@ void SimpleCar<T>::CalcAccelerationConstraint(
     const systems::Context<T>& context, VectorX<T>* value) const {
   const BasicVector<T>& input = get_input(this, context);
   const SimpleCarParams<T>& params = get_params(context);
-  *value = Vector2<T>(params.max_acceleration() - input.GetAtIndex(1),
-                      params.max_acceleration() + input.GetAtIndex(1));
+  *value = Vector2<T>(
+      params.max_acceleration() - input.GetAtIndex(kAccelIndex),
+      params.max_acceleration() + input.GetAtIndex(kAccelIndex));
 }
 
 // params.max_velocity - state.velocity ≥ 0,
