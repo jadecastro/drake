@@ -62,6 +62,7 @@ void DirectCollocationConstraint::dynamics(const AutoDiffVecXd& state,
   context_->get_mutable_continuous_state().SetFromVector(state);
   system_->CalcTimeDerivatives(*context_, derivatives_.get());
   *xdot = derivatives_->CopyToVector();
+  std::cout << "      CalcTimeDerivatives " << std::endl;
 }
 
 void DirectCollocationConstraint::DoEval(
