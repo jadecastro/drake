@@ -6,6 +6,7 @@
 #include <cstring>
 #include <limits>
 #include <map>
+#include <thread>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -288,7 +289,9 @@ void EvaluateNonlinearConstraints(
     snopt::doublereal G[], size_t* constraint_index, size_t* grad_index,
     const Eigen::VectorXd& xvec) {
   Eigen::VectorXd this_x;
+  int index{0};
   for (const auto& binding : constraint_list) {
+    std::cout << " NL Constraint " << index++ << std::endl;
     const auto& c = binding.evaluator();
     int num_constraints = SingleNonlinearConstraintSize(*c);
 
