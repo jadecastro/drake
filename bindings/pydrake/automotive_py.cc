@@ -1,6 +1,7 @@
 #include <pybind11/eigen.h>
 #include <pybind11/pybind11.h>
 
+#include "drake/automotive/autodiff_simulator.h"
 #include "drake/automotive/calc_ongoing_road_position.h"
 #include "drake/automotive/gen/driving_command.h"
 #include "drake/automotive/idm_controller.h"
@@ -26,6 +27,31 @@ PYBIND11_MODULE(automotive, m) {
   py::module::import("pydrake.systems.rendering");
 
   using T = double;
+
+  py::class_<AutodiffSimulator>(m, "AutodiffSimulator")
+      .def(py::init<const systems::Diagram<T>&>(), py::arg("system"))
+      .def("FixInputPort",
+           py::overload_cast<int, std::unique_ptr<BasicVector<AutoDiffXd>>>(
+               &AutodiffSimulator::FixInputPort),
+           // Keep alive, ownership: `BasicVector` keeps `self` alive.
+           py::keep_alive<3, 1>())
+      .def("FixInputPort",
+           py::overload_cast<int, std::unique_ptr<AbstractValue>>(
+               &AutodiffSimulator::FixInputPort),
+           // Keep alive, ownership: `AbstractValue` keeps `self` alive.
+           py::keep_alive<3, 1>())
+      .def("SetSubsystemState", &AutodiffSimulator::SetSubsystemState)
+      .def("SetState", &AutodiffSimulator::SetState)
+      .def("GetSubsystemState",
+           [](const AutodiffSimulator* self, int index)
+           -> const std::vector<AutoDiffXd> {
+             return self->GetSubsystemState(index);
+           })
+      .def("GetState",
+           [](const AutodiffSimulator* self) -> const std::vector<AutoDiffXd> {
+             return self->GetState();
+           })
+      .def("StepTo", &AutodiffSimulator::StepTo);
 
   py::enum_<RoadPositionStrategy>(m, "RoadPositionStrategy")
       .value("kCache", RoadPositionStrategy::kCache)

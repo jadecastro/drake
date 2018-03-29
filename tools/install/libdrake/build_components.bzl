@@ -25,6 +25,7 @@ LIBDRAKE_COMPONENTS = [
     "//automotive/maliput/simplerulebook:simplerulebook",
     "//automotive/maliput/simplerulebook:yaml_io",
     "//automotive/maliput/utility:utility",
+    "//automotive:autodiff_simulator",
     "//automotive:automotive_simulator",
     "//automotive:bicycle_car",
     "//automotive:box_car_vis",

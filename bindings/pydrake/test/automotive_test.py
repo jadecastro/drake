@@ -1,4 +1,5 @@
 from pydrake.automotive import (
+    AutodiffSimulator,
     DrivingCommand,
     IdmController,
     LaneDirection,
@@ -14,6 +15,7 @@ import unittest
 import numpy as np
 
 import pydrake.systems.framework as framework
+from pydrake.autodiffutils import AutoDiffXd
 from pydrake.maliput.api import (
     LanePosition,
     RoadGeometryId,
@@ -27,8 +29,12 @@ from pydrake.multibody.multibody_tree.math import (
 from pydrake.systems.analysis import (
     Simulator,
 )
+from pydrake.systems.primitives import (
+    Multiplexer,
+    )
 from pydrake.systems.rendering import (
     FrameVelocity,
+    PoseAggregator,
     PoseBundle,
     PoseVector,
 )
@@ -191,3 +197,128 @@ class TestAutomotive(unittest.TestCase):
         velocity_value = output.get_vector_data(velocity_index)
         self.assertIsInstance(velocity_value, FrameVelocity)
         self.assertTrue(velocity_value.get_velocity().translational()[0] > 0.)
+
+    def test_autodiff_simulator(self):
+        # Instantiate a two-lane straight road.
+        rg_id = RoadGeometryId("two-lane road")
+        rg = create_dragway(rg_id, 2, 100., 4., 0., 1., 1e-6, 1e-6)
+        segment = rg.junction(0).segment(0)
+        lane_0 = segment.lane(0)
+        lane_1 = segment.lane(1)
+
+        # Build a diagram with the IDM car placed in lane 0.
+        builder = framework.DiagramBuilder()
+
+        # Car 1's subsystems.
+        idm1 = builder.AddSystem(IdmController(
+            rg, ScanStrategy.kPath, RoadPositionStrategy.kExhaustiveSearch, 0.))
+        car1 = builder.AddSystem(SimpleCar())
+        pursuit1 = builder.AddSystem(PurePursuitController())
+        mux1 = builder.AddSystem(Multiplexer(DrivingCommand()))
+
+        # Car 2's subsystems.
+        idm2 = builder.AddSystem(IdmController(
+            rg, ScanStrategy.kPath, RoadPositionStrategy.kExhaustiveSearch, 0.))
+        car2 = builder.AddSystem(SimpleCar())
+        pursuit2 = builder.AddSystem(PurePursuitController())
+        mux2 = builder.AddSystem(Multiplexer(DrivingCommand()))
+
+        aggregator = builder.AddSystem(PoseAggregator())
+        ports1 = aggregator.AddSinglePoseAndVelocityInput("car1", 0)
+        ports2 = aggregator.AddSinglePoseAndVelocityInput("car2", 0)
+
+        builder.Connect(car1.pose_output(), idm1.ego_pose_input())
+        builder.Connect(car1.velocity_output(), idm1.ego_velocity_input())
+        builder.Connect(car1.pose_output(), pursuit1.ego_pose_input())
+        builder.Connect(pursuit1.steering_command_output(), mux1.get_input_port(0))
+        builder.Connect(idm1.acceleration_output(), mux1.get_input_port(1))
+        builder.Connect(mux1.get_output_port(0), car1.get_input_port(0))
+        builder.Connect(car1.pose_output(), ports1.pose_descriptor)
+        builder.Connect(car1.velocity_output(), ports1.velocity_descriptor)
+        builder.Connect(aggregator.get_output_port(0), idm1.traffic_input())
+
+        builder.Connect(car2.pose_output(), idm2.ego_pose_input())
+        builder.Connect(car2.velocity_output(), idm2.ego_velocity_input())
+        builder.Connect(car2.pose_output(), pursuit2.ego_pose_input())
+        builder.Connect(pursuit1.steering_command_output(), mux2.get_input_port(0))
+        builder.Connect(idm2.acceleration_output(), mux2.get_input_port(1))
+        builder.Connect(mux2.get_output_port(0), car2.get_input_port(0))
+        builder.Connect(car2.pose_output(), ports2.pose_descriptor)
+        builder.Connect(car2.velocity_output(), ports2.velocity_descriptor)
+        builder.Connect(aggregator.get_output_port(0), idm2.traffic_input())
+
+        builder.ExportOutput(aggregator.get_output_port(0))
+        port1 = builder.ExportInput(pursuit1.lane_input())
+        port2 = builder.ExportInput(pursuit2.lane_input())
+
+        diagram = builder.Build()
+
+        # Instantiate an Autodiff-friendly simulator.
+        ad_simulator = AutodiffSimulator(diagram)
+
+        # Keep record of the system IDs, so that we can access by ID later.
+        car1_index = diagram.GetSystemIndexOrAbort(car1)
+        car2_index = diagram.GetSystemIndexOrAbort(car2)
+
+        # Set the initial conditions.
+        car1_pos = lane_0.ToGeoPosition(LanePosition(0., 0., 0.))
+        car1_state = ad_simulator.GetSubsystemState(car1_index)
+        ad_simulator.SetSubsystemState(
+            car1_index, [AutoDiffXd(car1_pos.xyz()[0], car1_state[0].derivatives()),
+                         AutoDiffXd(car1_pos.xyz()[1], car1_state[1].derivatives()),
+                         AutoDiffXd(0., car1_state[2].derivatives()),
+                         AutoDiffXd(0., car1_state[3].derivatives())])
+        car2_pos = lane_1.ToGeoPosition(LanePosition(0., 0., 0.))
+        car2_state = ad_simulator.GetSubsystemState(car2_index)
+        ad_simulator.SetSubsystemState(
+            car2_index, [AutoDiffXd(car2_pos.xyz()[0], car2_state[0].derivatives()),
+                         AutoDiffXd(car2_pos.xyz()[1], car2_state[1].derivatives()),
+                         AutoDiffXd(0., car2_state[2].derivatives()),
+                         AutoDiffXd(0., car2_state[3].derivatives())])
+
+        # Fix the lane inputs for the cars.
+        value1 = framework.AbstractValue.Make(LaneDirection(lane_0, True))
+        value2 = framework.AbstractValue.Make(LaneDirection(lane_1, True))
+        ad_simulator.FixInputPort(port1, value1)
+        ad_simulator.FixInputPort(port2, value2)
+
+        def print_state(state):
+            for i, s in enumerate(state):
+                print("state " + str(i) + " value: " + str(s.value()))
+                print("state " + str(i) + " derivatives: " + str(s.derivatives()))
+
+        # Get the state.
+        car1_state = ad_simulator.GetSubsystemState(car1_index)
+        print_state(car1_state)
+
+        car2_state = ad_simulator.GetSubsystemState(car2_index)
+        print_state(car2_state)
+
+        state = ad_simulator.GetState()
+
+        # Set the state.
+        ad_simulator.SetState(state)
+
+        # Step a certain amount into the future.
+        ad_simulator.StepTo(0.1)
+
+        # Get the state.
+        state = ad_simulator.GetState()
+
+        car1_state = ad_simulator.GetSubsystemState(car1_index)
+        print_state(car1_state)
+
+        car2_state = ad_simulator.GetSubsystemState(car2_index)
+        print_state(car1_state)
+
+        # Step a certain amount into the future.
+        ad_simulator.StepTo(5.)
+
+        # Get the state.
+        state = ad_simulator.GetState()
+
+        car1_state = ad_simulator.GetSubsystemState(car1_index)
+        print_state(car1_state)
+
+        car2_state = ad_simulator.GetSubsystemState(car2_index)
+        print_state(car1_state)

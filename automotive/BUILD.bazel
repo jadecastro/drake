@@ -365,6 +365,17 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "autodiff_simulator",
+    srcs = ["autodiff_simulator.cc"],
+    hdrs = ["autodiff_simulator.h"],
+    deps = [
+        ":generated_vectors",
+        ":lane_direction",
+        "//common:autodiff",
+    ],
+)
+
+drake_cc_library(
     name = "automotive_simulator",
     srcs = ["automotive_simulator.cc"],
     hdrs = ["automotive_simulator.h"],
@@ -472,6 +483,17 @@ drake_py_binary(
 )
 
 # === test/ ===
+
+drake_cc_googletest(
+    name = "autodiff_simulator_test",
+    deps = [
+        "//automotive:autodiff_simulator",
+        "//automotive:automotive_simulator",
+        "//automotive:create_trajectory_params",
+        "//automotive/maliput/dragway",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
 
 drake_cc_library(
     name = "autodiff_test_utilities",

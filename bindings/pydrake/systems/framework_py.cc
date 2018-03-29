@@ -449,7 +449,8 @@ PYBIND11_MODULE(framework, m) {
           return self->GetMutableSubsystemContext(arg1, arg2);
         }, py_reference,
         // Keep alive, ownership: `return` keeps `Context` alive.
-        py::keep_alive<0, 3>());
+        py::keep_alive<0, 3>())
+    .def("GetSystemIndexOrAbort", &Diagram<T>::GetSystemIndexOrAbort);
 
   // Event mechanisms.
   py::class_<Event<T>>(m, "Event");
