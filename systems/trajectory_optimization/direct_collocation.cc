@@ -56,10 +56,12 @@ DirectCollocationConstraint::DirectCollocationConstraint(
 void DirectCollocationConstraint::dynamics(const AutoDiffVecXd& state,
                                            const AutoDiffVecXd& input,
                                            AutoDiffVecXd* xdot) const {
+  std::lock_guard<std::mutex> guard(context_mutex_);
   if (context_->get_num_input_ports() > 0) {
     input_port_value_->GetMutableVectorData<AutoDiffXd>()->SetFromVector(input);
   }
   context_->get_mutable_continuous_state().SetFromVector(state);
+  std::cout << "      state " << state << std::endl;
   system_->CalcTimeDerivatives(*context_, derivatives_.get());
   *xdot = derivatives_->CopyToVector();
   std::cout << "      CalcTimeDerivatives " << std::endl;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 
 #include "drake/common/drake_copyable.h"
 #include "drake/solvers/constraint.h"
@@ -108,6 +109,8 @@ class DirectCollocationConstraint : public solvers::Constraint {
   std::unique_ptr<Context<AutoDiffXd>> context_;
   FreestandingInputPortValue* input_port_value_{nullptr};
   std::unique_ptr<ContinuousState<AutoDiffXd>> derivatives_;
+
+  mutable std::mutex context_mutex_;
 
   const int num_states_{0};
   const int num_inputs_{0};

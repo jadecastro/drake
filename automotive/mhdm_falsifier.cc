@@ -182,7 +182,7 @@ int DoMain(void) {
 
   // Set up a direct-collocation feasibility problem.
   const double guess_duration = 5.;  // seconds
-  const int kNumTimeSamples = 31;
+  const int kNumTimeSamples = 21;
   const double kMinTimeStep = 0.5 * guess_duration / (kNumTimeSamples - 1);
   const double kMaxTimeStep = 2. * guess_duration / (kNumTimeSamples - 1);
 
