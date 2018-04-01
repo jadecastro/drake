@@ -322,29 +322,17 @@ void EvaluateNonlinearConstraints(
     const std::vector<Binding<C>>& constraint_list, snopt::doublereal F[],
     snopt::doublereal G[], size_t* constraint_index, size_t* grad_index,
     const Eigen::VectorXd& xvec) {
-  if (true) {
-    std::thread workers[constraint_list.size()];
-    int index{0};
-    for (const auto& binding : constraint_list) {
-      std::cout << " Thread Constraint # " << index << std::endl;
-      std::vector<int> decision_variable_indices =
-          prog.FindDecisionVariableIndices(binding.variables());
-      workers[index++] =
-          std::thread(DoStuff<C>, decision_variable_indices, F, G,
-                      constraint_index, grad_index, xvec, binding);
-    }
-    for (int i{0}; i < static_cast<int>(constraint_list.size()); ++i) {
-      workers[i].join();
-    }
-  } else {
-    int index{0};
-    for (const auto& binding : constraint_list) {
-      std::cout << " Constraint # " << index++ << std::endl;
-      std::vector<int> decision_variable_indices =
-          prog.FindDecisionVariableIndices(binding.variables());
-      DoStuff<C>(decision_variable_indices, F, G, constraint_index,
-                 grad_index, xvec, binding);
-    }
+  std::thread workers[constraint_list.size()];
+  int index{0};
+  for (const auto& binding : constraint_list) {
+    std::vector<int> decision_variable_indices =
+        prog.FindDecisionVariableIndices(binding.variables());
+    workers[index++] =
+        std::thread(DoStuff<C>, decision_variable_indices, F, G,
+                    constraint_index, grad_index, xvec, binding);
+  }
+  for (int i{0}; i < static_cast<int>(constraint_list.size()); ++i) {
+    workers[i].join();
   }
   // throw std::runtime_error("Stopping");
 }
