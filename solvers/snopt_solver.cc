@@ -323,48 +323,48 @@ void EvaluateNonlinearConstraints(
     const std::vector<Binding<C>>& constraint_list, snopt::doublereal F[],
     snopt::doublereal G[], size_t* constraint_index, size_t* grad_index,
     const Eigen::VectorXd& xvec) {
-  size_t _constraint_index = *constraint_index;
-  size_t _grad_index = *grad_index;
+  std::vector<size_t> constraint_indices(constraint_list.size()+1);
+  std::vector<size_t> grad_indices(constraint_list.size()+1);
+  constraint_indices[0] = *constraint_index;
+  grad_indices[0] = *grad_index;
+  for (int i{0}; i < static_cast<int>(constraint_list.size()); i++) {
+    const auto& c = constraint_list[i].evaluator();
+    const int num_constraints = SingleNonlinearConstraintSize(*c);
+    const int num_v_variables = constraint_list[i].GetNumElements();
+    // Probably defective, but meh...
+    constraint_indices[i+1] += num_constraints;
+    grad_indices[i+1] += num_constraints * num_v_variables;
+  }
+  *constraint_index = constraint_indices.back();
+  *grad_index = grad_indices.back();
+
   if (true) {
     std::thread workers[constraint_list.size()];
-    int index{0};
+    int i{0};
     for (const auto& binding : constraint_list) {
-      std::cout << " Thread Constraint # " << index << std::endl;
+      std::cout << " Thread Constraint # " << i << std::endl;
       std::vector<int> decision_variable_indices =
           prog.FindDecisionVariableIndices(binding.variables());
-      const auto& c = binding.evaluator();
-      const int num_constraints = SingleNonlinearConstraintSize(*c);
-      const int num_v_variables = binding.GetNumElements();
-
-      workers[index++] =
+      workers[i] =
           std::thread(DoStuff<C>, decision_variable_indices, F, G,
-                      _constraint_index, _grad_index, xvec, binding);
+                      constraint_indices[i], grad_indices[i], xvec, binding);
+      i++;
+    }
+    for (int j{0}; j < static_cast<int>(constraint_list.size()); ++j) {
+      workers[j].join();
+    }
 
-      _constraint_index += num_constraints;
-      _grad_index += num_constraints * num_v_variables;
-    }
-    for (int i{0}; i < static_cast<int>(constraint_list.size()); ++i) {
-      workers[i].join();
-    }
   } else {
-    int index{0};
+    int i{0};
     for (const auto& binding : constraint_list) {
-      std::cout << " Constraint # " << index++ << std::endl;
+      std::cout << " Constraint # " << i << std::endl;
       std::vector<int> decision_variable_indices =
           prog.FindDecisionVariableIndices(binding.variables());
-      const auto& c = binding.evaluator();
-      const int num_constraints = SingleNonlinearConstraintSize(*c);
-      const int num_v_variables = binding.GetNumElements();
-
-      DoStuff<C>(decision_variable_indices, F, G, _constraint_index,
-                 _grad_index, xvec, binding);
-
-      _constraint_index += num_constraints;
-      _grad_index += num_constraints * num_v_variables;
+      DoStuff<C>(decision_variable_indices, F, G, constraint_indices[i],
+                 grad_indices[i], xvec, binding);
+      i++;
     }
   }
-  *constraint_index = _constraint_index;
-  *grad_index = _grad_index;
   // throw std::runtime_error("Stopping");
 }
 
