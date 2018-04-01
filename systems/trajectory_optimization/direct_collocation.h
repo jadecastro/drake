@@ -107,6 +107,7 @@ class DirectCollocationConstraint : public solvers::Constraint {
 
   std::unique_ptr<System<AutoDiffXd>> system_;
   std::unique_ptr<Context<AutoDiffXd>> context_;
+  std::unique_ptr<Context<double>> contextd_;
   FreestandingInputPortValue* input_port_value_{nullptr};
   std::unique_ptr<ContinuousState<AutoDiffXd>> derivatives_;
 

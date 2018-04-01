@@ -529,7 +529,7 @@ drake_cc_binary(
         "//automotive/maliput/api",
         "//automotive/maliput/dragway",
         "//common/proto:call_python",
-        "//drake/common:text_logging_gflags",
+        "//common:text_logging_gflags",
         "//systems/trajectory_optimization:direct_collocation",
     ],
 )

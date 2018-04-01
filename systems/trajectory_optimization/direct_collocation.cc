@@ -35,6 +35,7 @@ DirectCollocationConstraint::DirectCollocationConstraint(
       context_(system_->CreateDefaultContext()),
       // Don't allocate the input port until we're past the point
       // where we might throw.
+      contextd_(system.CreateDefaultContext()),
       derivatives_(system_->AllocateTimeDerivatives()),
       num_states_(num_states),
       num_inputs_(num_inputs) {
@@ -50,6 +51,8 @@ DirectCollocationConstraint::DirectCollocationConstraint(
     // Allocate the input port and keep an alias around.
     input_port_value_ = &context_->FixInputPort(
         0, system_->AllocateInputVector(system_->get_input_port(0)));
+    contextd_->FixInputPort(
+        0, system.AllocateInputVector(system.get_input_port(0)));
   }
 }
 
@@ -57,6 +60,7 @@ void DirectCollocationConstraint::dynamics(const AutoDiffVecXd& state,
                                            const AutoDiffVecXd& input,
                                            AutoDiffVecXd* xdot) const {
   const auto context = system_->CreateDefaultContext();
+  context->SetTimeStateAndParametersFrom(*contextd_);
   auto derivatives = system_->AllocateTimeDerivatives();
   // std::lock_guard<std::mutex> guard(context_mutex_);
   if (context->get_num_input_ports() > 0) {
