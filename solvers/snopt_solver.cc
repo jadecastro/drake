@@ -6,6 +6,7 @@
 #include <cstring>
 #include <limits>
 #include <map>
+#include <thread>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -267,6 +268,41 @@ void EvaluateSingleNonlinearConstraint<LinearComplementarityConstraint>(
                     constraint.q().cast<AutoDiffXd>());
 }
 
+template <typename C>
+void DoStuff(
+    const std::vector<int> decision_variable_indices, snopt::doublereal F[],
+    snopt::doublereal G[], size_t constraint_index, size_t grad_index,
+    const Eigen::VectorXd& xvec, const Binding<C> binding) {
+  std::cout << " NL Constraint " << std::endl;
+  const auto& c = binding.evaluator();
+  int num_constraints = SingleNonlinearConstraintSize(*c);
+
+  const int num_v_variables = binding.GetNumElements();
+  Eigen::VectorXd this_x;
+  this_x.resize(num_v_variables);
+  for (int i = 0; i < num_v_variables; ++i) {
+    this_x(i) = xvec(decision_variable_indices[i]);
+  }
+
+  AutoDiffVecXd ty;
+  ty.resize(num_constraints);
+  EvaluateSingleNonlinearConstraint(*c, this_x, &ty);
+
+  int c_index = constraint_index;
+  for (snopt::integer i = 0; i < static_cast<snopt::integer>(num_constraints);
+       i++) {
+    F[c_index++] = static_cast<snopt::doublereal>(ty(i).value());
+  }
+
+  int g_index = grad_index;
+  for (snopt::integer i = 0; i < static_cast<snopt::integer>(num_constraints);
+       i++) {
+    for (int j = 0; j < num_v_variables; ++j) {
+      G[g_index++] = static_cast<snopt::doublereal>(ty(i).derivatives()(j));
+    }
+  }
+}
+
 /*
  * Evaluate the value and gradients of nonlinear constraints.
  * The template type Binding is supposed to be a
@@ -287,34 +323,49 @@ void EvaluateNonlinearConstraints(
     const std::vector<Binding<C>>& constraint_list, snopt::doublereal F[],
     snopt::doublereal G[], size_t* constraint_index, size_t* grad_index,
     const Eigen::VectorXd& xvec) {
-  Eigen::VectorXd this_x;
-  for (const auto& binding : constraint_list) {
-    const auto& c = binding.evaluator();
-    int num_constraints = SingleNonlinearConstraintSize(*c);
+  size_t _constraint_index = *constraint_index;
+  size_t _grad_index = *grad_index;
+  if (true) {
+    std::thread workers[constraint_list.size()];
+    int index{0};
+    for (const auto& binding : constraint_list) {
+      std::cout << " Thread Constraint # " << index << std::endl;
+      std::vector<int> decision_variable_indices =
+          prog.FindDecisionVariableIndices(binding.variables());
+      const auto& c = binding.evaluator();
+      const int num_constraints = SingleNonlinearConstraintSize(*c);
+      const int num_v_variables = binding.GetNumElements();
 
-    int num_v_variables = binding.GetNumElements();
-    this_x.resize(num_v_variables);
-    for (int i = 0; i < num_v_variables; ++i) {
-      this_x(i) = xvec(prog.FindDecisionVariableIndex(binding.variables()(i)));
+      workers[index++] =
+          std::thread(DoStuff<C>, decision_variable_indices, F, G,
+                      _constraint_index, _grad_index, xvec, binding);
+
+      _constraint_index += num_constraints;
+      _grad_index += num_constraints * num_v_variables;
     }
-
-    AutoDiffVecXd ty;
-    ty.resize(num_constraints);
-    EvaluateSingleNonlinearConstraint(*c, this_x, &ty);
-
-    for (snopt::integer i = 0; i < static_cast<snopt::integer>(num_constraints);
-         i++) {
-      F[(*constraint_index)++] = static_cast<snopt::doublereal>(ty(i).value());
+    for (int i{0}; i < static_cast<int>(constraint_list.size()); ++i) {
+      workers[i].join();
     }
+  } else {
+    int index{0};
+    for (const auto& binding : constraint_list) {
+      std::cout << " Constraint # " << index++ << std::endl;
+      std::vector<int> decision_variable_indices =
+          prog.FindDecisionVariableIndices(binding.variables());
+      const auto& c = binding.evaluator();
+      const int num_constraints = SingleNonlinearConstraintSize(*c);
+      const int num_v_variables = binding.GetNumElements();
 
-    for (snopt::integer i = 0; i < static_cast<snopt::integer>(num_constraints);
-         i++) {
-      for (int j = 0; j < num_v_variables; ++j) {
-        G[(*grad_index)++] =
-            static_cast<snopt::doublereal>(ty(i).derivatives()(j));
-      }
+      DoStuff<C>(decision_variable_indices, F, G, _constraint_index,
+                 _grad_index, xvec, binding);
+
+      _constraint_index += num_constraints;
+      _grad_index += num_constraints * num_v_variables;
     }
   }
+  *constraint_index = _constraint_index;
+  *grad_index = _grad_index;
+  // throw std::runtime_error("Stopping");
 }
 
 /*
