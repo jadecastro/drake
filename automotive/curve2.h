@@ -13,8 +13,53 @@
 namespace drake {
 namespace automotive {
 
+/// 
+template <typename T, typename Result, typename Point>
+class Curve {
+ public:
+  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(Curve)
+
+  explicit Curve(double path_length) : path_length_(path_length) {}
+
+  virtual ~Curve() = default;
+
+  Result GetWaypoint(const T& path_distance) {
+    Result result;
+    result = DoGetWaypoint(path_distance, waypoint_index_);
+    return DoGetWaypoint(path_distance);
+  }
+
+  /// @return the length of this curve (the total distance traced).
+  double path_length() const { return path_length_; }
+
+  /// @return the waypoints associated with this curve.
+  const std::vector<Point>& waypoints() const { return waypoints_; }
+
+  int get_waypoint_index() const { return waypoint_index_; }
+
+ private:
+  virtual Result DoGetWaypoint(
+      const T& path_distance, int waypoint_index) const = 0;
+
+  std::vector<Point> waypoints_;
+  double path_length_{};
+  int waypoint_index_{};
+};
+
+typedef Eigen::Matrix<double, 2, 1, Eigen::DontAlign> Point2;
+
+/// A result type for the GetWaypoint method.
+template <typename T>
+struct PositionResultT {
+  // *** Make this read Point2T.
+  Eigen::Matrix<T, 2, 1, Eigen::DontAlign> position{
+    Eigen::Matrix<T, 2, 1, Eigen::DontAlign>::Zero()};
+  Eigen::Matrix<T, 2, 1, Eigen::DontAlign> position_dot{
+    Eigen::Matrix<T, 2, 1, Eigen::DontAlign>::Zero()};
+};
+
 /// Curve2 represents a path through two-dimensional Cartesian space. Given a
-/// list of waypoints, it traces a path between them.
+/// list of waypoints, it linearly interpolates between them.
 ///
 /// Instantiated templates for the following kinds of T's are provided:
 /// - double
@@ -28,34 +73,23 @@ namespace automotive {
 /// are traversing between the waypoints.
 ///
 template <typename T>
-class Curve2 {
+class Curve2 : public Curve<T, PositionResultT<T>, Point2> {
  public:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(Curve2)
 
-  /// A two-dimensional Cartesian point that is alignment-safe.
-  typedef Eigen::Matrix<double, 2, 1, Eigen::DontAlign> Point2;
   typedef Eigen::Matrix<T, 2, 1, Eigen::DontAlign> Point2T;
+  /// A two-dimensional Cartesian point that is alignment-safe.
+  typedef PositionResultT<T> PositionResult;
 
   /// Constructor that traces through the given @p waypoints in order.
   /// Throws an error if @p waypoints.size() == 1.
   explicit Curve2(const std::vector<Point2>& waypoints)
-      : waypoints_(waypoints), path_length_(GetLength(waypoints_)) {
+      : Curve<T, PositionResult, Point2>(GetLength(waypoints)),
+        waypoints_(waypoints) {
     // TODO(jwnimmer-tri) We should reject duplicate adjacent
     // waypoints (derivative problems); this will probably come for
     // free as part of the spline refactoring.
   }
-
-  /// @return the waypoints associated with this curve.
-  const std::vector<Point2>& waypoints() const { return waypoints_; }
-
-  /// @return the length of this curve (the total distance traced).
-  double path_length() const { return path_length_; }
-
-  /// A result type for the GetPosition method.
-  struct PositionResult {
-    Point2T position = Point2T{Point2T::Zero()};
-    Point2T position_dot = Point2T{Point2T::Zero()};
-  };
 
   /// Returns the Curve's @p PositionResult::position at @p path_distance,
   /// as well as its first derivative @p PositionResult::position_dot with
@@ -72,7 +106,8 @@ class Curve2 {
   /// that neighbor the waypoint.  (At the first and last waypoints, there
   /// is only one neighboring segment.)  TODO(jwnimmer-tri) This will no
   /// longer be true once this class uses a spline.
-  PositionResult GetPosition(const T& path_distance) const {
+  PositionResult DoGetWaypoint(const T& path_distance, int waypoint_index)
+      const override {
     using std::max;
 
     // TODO(jwnimmer-tri) This implementation is slow (linear search)
@@ -80,6 +115,7 @@ class Curve2 {
     // for now, until we get a 2d spline code in C++.
 
     PositionResult result;
+    current_waypoint_ = waypoints_.begin();
 
     // We need at least one segment.  If not, we're just zero.
     if (waypoints_.size() < 2) {
@@ -99,6 +135,7 @@ class Curve2 {
         Point2T position_dot = relative_step / length;
         MakePointCoherent(path_distance, &position_dot);
         result.position_dot.head(2) = position_dot;
+        current_waypoint_index_ = point0;
         return result;
       }
       remaining_distance -= length;
@@ -119,6 +156,7 @@ class Curve2 {
       result.position_dot.head(2) = position_dot;
     }
 
+    current_waypoint_ = waypoints_.end();
     return result;
   }
 
@@ -147,9 +185,70 @@ class Curve2 {
     autodiffxd_make_coherent(donor, &(*point2)(0));
     autodiffxd_make_coherent(donor, &(*point2)(1));
   }
+};
 
-  std::vector<Point2> waypoints_;
-  double path_length_;
+typedef Eigen::Matrix<double, 3, 1, Eigen::DontAlign> Point3;
+
+/// A result type for the GetWaypoint method.
+template <typename T>
+struct PositionVelocityResultT : PositionResultT {
+  T velocity{0.};
+};
+
+/// Curve3 represents a path through two-dimensional Cartesian space annotated
+/// with velocities. Given a list of waypoints, it linearly interpolates between
+/// them.
+///
+/// Instantiated templates for the following kinds of T's are provided:
+/// - double
+/// - drake::AutoDiffXd
+///
+/// They are already available to link against in the containing library.
+///
+/// TODO(jwnimmer-tri) We will soon trace the path using a spline, but
+/// for now it's easiest to just interpolate straight segments, as a
+/// starting point.  Callers should not yet rely on <em>how</em> we
+/// are traversing between the waypoints.
+///
+template <typename T>
+class Curve3 : public Curve<T, PositionVelocityResultT<T>, Point3> {
+ public:
+  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(Curve3)
+
+  typedef Eigen::Matrix<T, 3, 1, Eigen::DontAlign> Point3T;
+  /// A two-dimensional Cartesian point that is alignment-safe.
+  typedef PositionVelocityResultT<T> PositionVelocityResult;
+
+  /// Constructor that traces through the given @p waypoints in order.
+  /// Throws an error if @p waypoints.size() == 1.
+  explicit Curve3(const std::vector<Point3>& waypoints)
+      : Curve<T, PositionVelocityResult, Point3>(GetLength(waypoints)),
+        waypoints_(waypoints),
+        curve2_(waypoints) {}
+
+  /// Returns the Curve's @p PositionResult::position at @p path_distance,
+  /// as well as its first derivative @p PositionResult::position_dot with
+  /// respect to @p path_distance.
+  ///
+  /// The @p path_distance is clipped to the ends of the curve:
+  /// - A negative @p path_distance is interpreted as a @p path_distance
+  ///   of zero.
+  /// - A @p path_distance that exceeds the @p path_length() of the curve
+  ///   is interpreted as a @p path_distance equal to the @p path_length().
+  ///
+  /// The @p position_dot derivative, when evaluated exactly at a waypoint,
+  /// will be congruent with the direction of one of the (max two) segments
+  /// that neighbor the waypoint.  (At the first and last waypoints, there
+  /// is only one neighboring segment.)  TODO(jwnimmer-tri) This will no
+  /// longer be true once this class uses a spline.
+  PositionVelocityResult DoGetWaypoint(
+      const T& path_distance, int waypoint_index) const override {
+    
+  }
+
+ private:
+  std::vector<Point3> waypoints_;
+  Curve2 curve2_;
 };
 
 }  // namespace automotive

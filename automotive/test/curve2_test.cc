@@ -10,7 +10,7 @@ namespace automotive {
 namespace {
 
 typedef Curve2<double> Curve2d;
-typedef Curve2d::Point2 Point2d;
+typedef Point2 Point2d;
 
 // An empty curve.
 GTEST_TEST(Curve2Test, EmptyTest) {
@@ -21,8 +21,9 @@ GTEST_TEST(Curve2Test, EmptyTest) {
 
 // A single waypoint.
 GTEST_TEST(Curve2Test, SingleWaypointTest) {
+  const Point2d point{1.0, 2.0};
   const std::vector<Point2d> single_waypoint{
-    Point2d{1.0, 2.0},
+    point,
   };
   EXPECT_THROW(Curve2d{single_waypoint}, std::exception);
 }
