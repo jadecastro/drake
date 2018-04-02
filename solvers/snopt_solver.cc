@@ -190,7 +190,7 @@ struct SNOPTRun {
 
   SNOPTData& D;
 
-  snopt::integer iPrint = -1;
+  snopt::integer iPrint = 1;
   snopt::integer iSumm = -1;
 
   // The `opt` is non-const, because snopt wants a non-const char*.
