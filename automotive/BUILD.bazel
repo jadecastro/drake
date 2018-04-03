@@ -528,6 +528,7 @@ drake_cc_googletest(
     name = "curve2_test",
     deps = [
         "//automotive:curve2",
+        "//common/test_utilities:eigen_matrix_compare",
     ],
 )
 

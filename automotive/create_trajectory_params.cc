@@ -19,8 +19,7 @@ Curve2<double> MakeCurve(double radius, double inset) {
   // proper splines.  Don't try too hard to understand it.  Run the
   // demo to see it first, and only then try to understand the code.
 
-  typedef Curve2<double>::Point2 Point2d;
-  std::vector<Point2d> waypoints;
+  std::vector<Waypoint> waypoints;
 
   // Start (0, +i).
   // Straight right to (+r, +i).
@@ -31,9 +30,9 @@ Curve2<double> MakeCurve(double radius, double inset) {
     const Point2d center{radius, radius};
     const double theta = theta_deg * M_PI / 180.0;
     const Point2d direction{std::cos(theta), std::sin(theta)};
-    waypoints.push_back(center + (direction * (radius - inset)));
+    waypoints.push_back(Waypoint{center + (direction * (radius - inset))});
   }
-  waypoints.push_back({inset, 0.0});
+  waypoints.push_back(Waypoint{inset, 0.0});
 
   // Start (+i, 0).
   // Straight down to (+i, -r).
@@ -43,7 +42,7 @@ Curve2<double> MakeCurve(double radius, double inset) {
     const Point2d center{-radius, -radius};
     const double theta = theta_deg * M_PI / 180.0;
     const Point2d direction{std::cos(theta), std::sin(theta)};
-    waypoints.push_back(center + (direction * (radius + inset)));
+    waypoints.push_back(Waypoint{center + (direction * (radius + inset))});
   }
 
   // Many copies.
@@ -86,9 +85,9 @@ std::tuple<Curve2<double>, double, double> CreateTrajectoryParamsForDragway(
   const maliput::api::GeoPosition end_geo_position =
       lane->ToGeoPosition(maliput::api::LanePosition(
           lane->length() /* s */, 0 /* r */, 0 /* h */));
-  std::vector<Curve2<double>::Point2> waypoints;
-  waypoints.push_back({start_geo_position.x(), start_geo_position.y()});
-  waypoints.push_back({end_geo_position.x(), end_geo_position.y()});
+  std::vector<Waypoint> waypoints;
+  waypoints.push_back(Waypoint{start_geo_position.x(), start_geo_position.y()});
+  waypoints.push_back(Waypoint{end_geo_position.x(), end_geo_position.y()});
   Curve2<double> curve(waypoints);
   return std::make_tuple(curve, speed, start_time);
 }
