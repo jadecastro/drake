@@ -1,4 +1,4 @@
-#include "drake/automotive/trajectory_car.h"
+#include "drake/automotive/path_following_agent.h"
 
 #include <stdexcept>
 #include <vector>
@@ -17,6 +17,7 @@ namespace {
 
 typedef Curve2<double> Curve2d;
 typedef Curve2d::Point2 Point2d;
+typedef AgentData::AgentType AgentType;
 
 using systems::rendering::FrameVelocity;
 using systems::rendering::PoseVector;
@@ -24,7 +25,7 @@ using test::CheckDerivatives;
 using test::SetDerivatives;
 
 template <typename T>
-void SetAcceleration(const TrajectoryCar<T>& car_dut,
+void SetAcceleration(const PathFollowingAgent<T>& car_dut,
                      const T& acceleration_input,
                      systems::Context<T>* context) {
   context->FixInputPort(car_dut.command_input().get_index(),
@@ -32,22 +33,22 @@ void SetAcceleration(const TrajectoryCar<T>& car_dut,
 }
 
 // Empty curves are rejected.
-GTEST_TEST(TrajectoryCarTest, StationaryTest) {
+GTEST_TEST(PathFollowingAgentTest, StationaryTest) {
   const std::vector<Point2d> empty_waypoints{};
   const Curve2d empty_curve{empty_waypoints};
-  EXPECT_THROW((TrajectoryCar<double>{empty_curve}), std::exception);
+  EXPECT_THROW((PathFollowingAgent<double>{{AgentType::kCar}, empty_curve}), std::exception);
 }
 
 template <typename T>
-class TrajectoryCarTest : public ::testing::Test {};
+class PathFollowingAgentTest : public ::testing::Test {};
 
 typedef ::testing::Types<double, AutoDiffXd> Implementations;
-TYPED_TEST_CASE(TrajectoryCarTest, Implementations);
+TYPED_TEST_CASE(PathFollowingAgentTest, Implementations);
 
 // Check the car's progress along some simple paths.  We just want to test our
 // ImplCalcFoo() methods.  We can assume that Curve2 is correct, because it has
 // its own unit test.
-TYPED_TEST(TrajectoryCarTest, ConstantSpeedTest) {
+TYPED_TEST(PathFollowingAgentTest, ConstantSpeedTest) {
   using T = TypeParam;
 
   struct Case {
@@ -92,7 +93,7 @@ TYPED_TEST(TrajectoryCarTest, ConstantSpeedTest) {
     const Curve2d curve{waypoints};
 
     // The "device under test".
-    const TrajectoryCar<T> car_dut{curve};
+    const PathFollowingAgent<T> car_dut{{AgentType::kCar}, curve};
 
     // Check that the systems' outputs are correct over the entire duration of
     // the trajectory.
@@ -107,7 +108,7 @@ TYPED_TEST(TrajectoryCarTest, ConstantSpeedTest) {
         car_dut.AllocateOutput(context);
 
     // Specify the initial position and speed.
-    auto car_state = dynamic_cast<TrajectoryCarState<T>*>(
+    auto car_state = dynamic_cast<PathFollowingAgentState<T>*>(
         &context.get_mutable_continuous_state_vector());
     ASSERT_NE(nullptr, car_state);
 
@@ -230,7 +231,7 @@ TYPED_TEST(TrajectoryCarTest, ConstantSpeedTest) {
 }
 
 // Tests the derivatives when a non-zero acceleration is provided as an input.
-TYPED_TEST(TrajectoryCarTest, AccelerationInputTest) {
+TYPED_TEST(PathFollowingAgentTest, AccelerationInputTest) {
   using std::abs;
   using T = TypeParam;
 
@@ -240,17 +241,17 @@ TYPED_TEST(TrajectoryCarTest, AccelerationInputTest) {
   const std::vector<Point2d> waypoints{{10., 20.},  // BR
                                        {10., 30.}};
   const Curve2d curve{waypoints};
-  const TrajectoryCar<T> dut{curve};  // The device under test.
+  const PathFollowingAgent<T> dut{{AgentType::kCar}, curve};  // The device under test.
 
   auto context = dut.CreateDefaultContext();
   auto derivatives = dut.AllocateTimeDerivatives();
-  auto car_derivatives = dynamic_cast<const TrajectoryCarState<T>*>(
+  auto car_derivatives = dynamic_cast<const PathFollowingAgentState<T>*>(
       &derivatives->get_mutable_vector());
   ASSERT_NE(nullptr, car_derivatives);
-  const TrajectoryCarParams<T> default_params;
+  const PathFollowingAgentParams<T> default_params;
 
   // Set the initial position and speed.
-  auto car_state = dynamic_cast<TrajectoryCarState<T>*>(
+  auto car_state = dynamic_cast<PathFollowingAgentState<T>*>(
       &context->get_mutable_continuous_state_vector());
   ASSERT_NE(nullptr, car_state);
   car_state->set_position(kInitialPathPosition);
@@ -280,7 +281,7 @@ TYPED_TEST(TrajectoryCarTest, AccelerationInputTest) {
 
 // Tests the derivatives when the car's speed is beyond the specified saturation
 // bounds.
-TYPED_TEST(TrajectoryCarTest, SaturatingSpeedTest) {
+TYPED_TEST(PathFollowingAgentTest, SaturatingSpeedTest) {
   using T = TypeParam;
 
   T kInitialPathPosition = 0.;
@@ -288,17 +289,17 @@ TYPED_TEST(TrajectoryCarTest, SaturatingSpeedTest) {
   const std::vector<Point2d> waypoints{{10., 20.},  // BR
                                        {10., 30.}};
   const Curve2d curve{waypoints};
-  const TrajectoryCar<T> dut{curve};  // The device under test.
+  const PathFollowingAgent<T> dut{{AgentType::kCar}, curve};  // The device under test.
 
   auto context = dut.CreateDefaultContext();
   auto derivatives = dut.AllocateTimeDerivatives();
-  auto car_derivatives = dynamic_cast<const TrajectoryCarState<T>*>(
+  auto car_derivatives = dynamic_cast<const PathFollowingAgentState<T>*>(
       &derivatives->get_mutable_vector());
   ASSERT_NE(nullptr, car_derivatives);
-  const TrajectoryCarParams<T> default_params;
+  const PathFollowingAgentParams<T> default_params;
 
   // Set the initial position and speed.
-  auto car_state = dynamic_cast<TrajectoryCarState<T>*>(
+  auto car_state = dynamic_cast<PathFollowingAgentState<T>*>(
       &context->get_mutable_continuous_state_vector());
   ASSERT_NE(nullptr, car_state);
   car_state->set_position(kInitialPathPosition);
@@ -339,11 +340,11 @@ TYPED_TEST(TrajectoryCarTest, SaturatingSpeedTest) {
   CheckDerivatives(car_derivatives->speed(), Vector1d{0.});
 }
 
-GTEST_TEST(TrajectoryCarTest, ToAutoDiff) {
+GTEST_TEST(PathFollowingAgentTest, ToAutoDiff) {
   const std::vector<Point2d> waypoints{{10., 20.},  // BR
                                        {10., 30.}};
   const Curve2d curve{waypoints};
-  const TrajectoryCar<double> dut{curve};
+  const PathFollowingAgent<double> dut{{AgentType::kCar}, curve};
 
   EXPECT_TRUE(is_autodiffxd_convertible(dut, [&](const auto& autodiff_dut) {
     auto context = autodiff_dut.CreateDefaultContext();
@@ -360,11 +361,11 @@ GTEST_TEST(TrajectoryCarTest, ToAutoDiff) {
   }));
 }
 
-GTEST_TEST(TrajectoryCarTest, ToSymbolic) {
+GTEST_TEST(PathFollowingAgentTest, ToSymbolic) {
   const std::vector<Point2d> waypoints{{10., 20.},  // BR
                                        {10., 30.}};
   const Curve2d curve{waypoints};
-  const TrajectoryCar<double> dut{curve};
+  const PathFollowingAgent<double> dut{{AgentType::kCar}, curve};
 
   // We do not support symbolic form.
   EXPECT_EQ(dut.ToSymbolicMaybe(), nullptr);

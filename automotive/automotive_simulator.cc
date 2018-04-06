@@ -212,7 +212,7 @@ int AutomotiveSimulator<T>::AddMobilControlledSimpleCar(
 }
 
 template <typename T>
-int AutomotiveSimulator<T>::AddPriusTrajectoryCar(
+int AutomotiveSimulator<T>::AddPriusPathFollowingAgent(
     const std::string& name,
     const Curve2<double>& curve,
     double speed,
@@ -223,11 +223,11 @@ int AutomotiveSimulator<T>::AddPriusTrajectoryCar(
   const int id = allocate_vehicle_number();
 
   auto trajectory_car =
-      builder_->template AddSystem<TrajectoryCar<T>>(curve);
+      builder_->template AddSystem<PathFollowingAgent<T>>(curve);
   trajectory_car->set_name(name);
   vehicles_[id] = trajectory_car;
 
-  TrajectoryCarState<double> initial_state;
+  PathFollowingAgentState<double> initial_state;
   initial_state.set_position(start_position);
   initial_state.set_speed(speed);
   trajectory_car_initial_states_[trajectory_car].set_value(
@@ -482,7 +482,7 @@ void AutomotiveSimulator<T>::AddPublisher(const SimpleCar<T>& system,
 }
 
 template <typename T>
-void AutomotiveSimulator<T>::AddPublisher(const TrajectoryCar<T>& system,
+void AutomotiveSimulator<T>::AddPublisher(const PathFollowingAgent<T>& system,
                                           int vehicle_number) {
   DRAKE_DEMAND(!has_started());
   DRAKE_DEMAND(lcm_ != nullptr);
@@ -584,7 +584,7 @@ void AutomotiveSimulator<T>::BuildAndInitialize(
   simulator_ = std::make_unique<systems::Simulator<T>>(*diagram_);
 
   if (initial_context == nullptr) {
-    InitializeTrajectoryCars();
+    InitializePathFollowingAgents();
     InitializeSimpleCars();
     InitializeMaliputRailcars();
   } else {
@@ -613,17 +613,17 @@ void AutomotiveSimulator<T>::Start(
 }
 
 template <typename T>
-void AutomotiveSimulator<T>::InitializeTrajectoryCars() {
+void AutomotiveSimulator<T>::InitializePathFollowingAgents() {
   for (const auto& pair : trajectory_car_initial_states_) {
-    const TrajectoryCar<T>* const car = pair.first;
-    const TrajectoryCarState<T>& initial_state = pair.second;
+    const PathFollowingAgent<T>* const car = pair.first;
+    const PathFollowingAgentState<T>& initial_state = pair.second;
 
     systems::VectorBase<T>& context_state =
         diagram_->GetMutableSubsystemContext(*car,
                                              &simulator_->get_mutable_context())
         .get_mutable_continuous_state_vector();
-    TrajectoryCarState<T>* const state =
-        dynamic_cast<TrajectoryCarState<T>*>(&context_state);
+    PathFollowingAgentState<T>* const state =
+        dynamic_cast<PathFollowingAgentState<T>*>(&context_state);
     DRAKE_ASSERT(state);
     state->set_value(initial_state.get_value());
   }

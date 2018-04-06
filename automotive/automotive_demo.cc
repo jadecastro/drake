@@ -30,7 +30,7 @@ DEFINE_int32(num_mobil_car, 0,
              "currently only applied when the road network is a dragway. "
              "MOBIL-controlled vehicles are placed behind any idm-controlled "
              "railcars and any fixed-speed railcars.");
-DEFINE_int32(num_trajectory_car, 0, "Number of TrajectoryCar vehicles. This "
+DEFINE_int32(num_trajectory_car, 0, "Number of PathFollowingAgent vehicles. This "
              "option is currently only applied when the road network is a flat "
              "plane or a dragway.");
 DEFINE_int32(num_idm_controlled_maliput_railcar, 0, "Number of IDM-controlled "
@@ -198,7 +198,7 @@ void AddSimpleCars(AutomotiveSimulator<double>* simulator) {
 }
 
 // Initializes the provided `simulator` with user-specified numbers of
-// `SimpleCar` vehicles and `TrajectoryCar` vehicles. If parameter
+// `SimpleCar` vehicles and `PathFollowingAgent` vehicles. If parameter
 // `road_network_type` equals `RoadNetworkType::dragway`, the provided
 // `road_geometry` parameter must not be `nullptr`.
 void AddVehicles(RoadNetworkType road_network_type,
@@ -219,10 +219,11 @@ void AddVehicles(RoadNetworkType road_network_type,
            FLAGS_dragway_vehicle_spacing;
       const auto& params = CreateTrajectoryParamsForDragway(
           *dragway_road_geometry, lane_index, speed, start_position);
-      simulator->AddPriusTrajectoryCar("TrajectoryCar" + std::to_string(i),
-                                       std::get<0>(params),
-                                       std::get<1>(params),
-                                       std::get<2>(params));
+      simulator->AddPriusPathFollowingAgent(
+          "PathFollowingAgent" + std::to_string(i),
+          std::get<0>(params),
+          std::get<1>(params),
+          std::get<2>(params));
     }
 
     for (int i = 0; i < FLAGS_num_mobil_car; ++i) {
@@ -293,10 +294,11 @@ void AddVehicles(RoadNetworkType road_network_type,
   } else {
     for (int i = 0; i < FLAGS_num_trajectory_car; ++i) {
       const auto& params = CreateTrajectoryParams(i);
-      simulator->AddPriusTrajectoryCar("TrajectoryCar" + std::to_string(i),
-                                       std::get<0>(params),
-                                       std::get<1>(params),
-                                       std::get<2>(params));
+      simulator->AddPriusPathFollowingAgent(
+          "PathFollowingAgent" + std::to_string(i),
+          std::get<0>(params),
+          std::get<1>(params),
+          std::get<2>(params));
     }
   }
 }

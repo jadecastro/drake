@@ -11,8 +11,8 @@
 #include "drake/automotive/calc_smooth_acceleration.h"
 #include "drake/automotive/curve2.h"
 #include "drake/automotive/gen/simple_car_state.h"
-#include "drake/automotive/gen/trajectory_car_params.h"
-#include "drake/automotive/gen/trajectory_car_state.h"
+#include "drake/automotive/gen/path_following_agent_params.h"
+#include "drake/automotive/gen/path_following_agent_state.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/systems/framework/leaf_system.h"
 #include "drake/systems/framework/vector_base.h"
@@ -22,21 +22,31 @@
 namespace drake {
 namespace automotive {
 
-/// TrajectoryCar models a car that follows a pre-established trajectory.  Note
-/// that TrajectoryCar can move forward (up to a given "soft" speed limit) but
+/// Container with static data for the agent model.
+struct AgentData {
+  enum class AgentType { kCar, kBicycle, kPedestrian };
+  // TODO(jadecastro) Add more types as necessary.
+
+  AgentData(const AgentType& t) : type(t) {}
+
+  AgentType type{AgentType::kCar};
+};
+
+/// PathFollowingAgent models a car that follows a pre-established trajectory.  Note
+/// that PathFollowingAgent can move forward (up to a given "soft" speed limit) but
 /// cannot travel in reverse.
 ///
 /// parameters:
 /// * uses systems::Parameters wrapping a TrajectoryCarParams
 ///
 /// state vector:
-/// * A TrajectoryCarState, consisting of a position and speed along the given
+/// * A PathFollowingAgentState, consisting of a position and speed along the given
 ///   curve, provided as the constructor parameter.
 ///
 /// input vector:
 /// * desired acceleration, a systems::BasicVector of size 1 (optional input).
 ///   If left unconnected, the trajectory car will travel at a constant speed
-///   specified in the TrajectoryCarState.
+///   specified in the PathFollowingAgentState.
 ///
 /// output port 0:
 /// * position: x, y, heading;
@@ -59,33 +69,36 @@ namespace automotive {
 ///
 /// @ingroup automotive_plants
 template <typename T>
-class TrajectoryCar final : public systems::LeafSystem<T> {
+class PathFollowingAgent final : public systems::LeafSystem<T> {
  public:
   typedef typename Curve2<T>::Point2T Point2;
 
-  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(TrajectoryCar)
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(PathFollowingAgent)
 
-  /// Constructs a TrajectoryCar system that traces a given two-dimensional @p
+  /// Constructs a PathFollowingAgent system that traces a given two-dimensional @p
   /// curve.  Throws an error if the curve is empty (has a zero @p path_length).
-  explicit TrajectoryCar(const Curve2<double>& curve)
+  explicit PathFollowingAgent(
+      const AgentData agent_data, const Curve2<double>& curve)
       : systems::LeafSystem<T>(
-            systems::SystemTypeTag<automotive::TrajectoryCar>{}),
-            curve_(curve.waypoints()) {
+            systems::SystemTypeTag<automotive::PathFollowingAgent>{}),
+        agent_data_(agent_data),
+        curve_(curve.waypoints()) {
     if (curve_.path_length() == 0.0) {
       throw std::invalid_argument{"empty curve"};
     }
     this->DeclareInputPort(systems::kVectorValued, 1 /* single-valued input */);
-    this->DeclareVectorOutputPort(&TrajectoryCar::CalcStateOutput);
-    this->DeclareVectorOutputPort(&TrajectoryCar::CalcPoseOutput);
-    this->DeclareVectorOutputPort(&TrajectoryCar::CalcVelocityOutput);
-    this->DeclareContinuousState(TrajectoryCarState<T>());
-    this->DeclareNumericParameter(TrajectoryCarParams<T>());
+    this->DeclareVectorOutputPort(&PathFollowingAgent::CalcStateOutput);
+    this->DeclareVectorOutputPort(&PathFollowingAgent::CalcPoseOutput);
+    this->DeclareVectorOutputPort(&PathFollowingAgent::CalcVelocityOutput);
+    this->DeclareContinuousState(PathFollowingAgentState<T>());
+    this->DeclareNumericParameter(PathFollowingAgentParams<T>());
   }
 
   /// Scalar-converting copy constructor.  See @ref system_scalar_conversion.
   template <typename U>
-  explicit TrajectoryCar(const TrajectoryCar<U>& other)
-      : TrajectoryCar<T>(Curve2<double>(other.curve_.waypoints())) {}
+  explicit PathFollowingAgent(const PathFollowingAgent<U>& other)
+      : PathFollowingAgent<T>(
+            other.agent_data_, Curve2<double>(other.curve_.waypoints())) {}
 
   /// The command input port (optional).
   const systems::InputPortDescriptor<T>& command_input() const {
@@ -113,7 +126,7 @@ class TrajectoryCar final : public systems::LeafSystem<T> {
 
   void CalcStateOutput(const systems::Context<T>& context,
                        SimpleCarState<T>* output_vector) const {
-    const TrajectoryCarState<T>& state = GetState(context);
+    const PathFollowingAgentState<T>& state = GetState(context);
     const auto raw_pose = CalcRawPose(state);
     ImplCalcOutput(raw_pose, state, output_vector);
   }
@@ -127,7 +140,7 @@ class TrajectoryCar final : public systems::LeafSystem<T> {
   void CalcVelocityOutput(
       const systems::Context<T>& context,
       systems::rendering::FrameVelocity<T>* velocity) const {
-    const TrajectoryCarState<T>& state = GetState(context);
+    const PathFollowingAgentState<T>& state = GetState(context);
     const auto raw_pose = CalcRawPose(state);
     ImplCalcVelocity(raw_pose, state, velocity);
   }
@@ -136,12 +149,12 @@ class TrajectoryCar final : public systems::LeafSystem<T> {
       const systems::Context<T>& context,
       systems::ContinuousState<T>* derivatives) const override {
     // Obtain the parameters.
-    const TrajectoryCarParams<T>& params =
-        this->template GetNumericParameter<TrajectoryCarParams>(context, 0);
+    const PathFollowingAgentParams<T>& params =
+        this->template GetNumericParameter<PathFollowingAgentParams>(context, 0);
 
     // Obtain the state.
-    const TrajectoryCarState<T>* const state =
-        dynamic_cast<const TrajectoryCarState<T>*>(
+    const PathFollowingAgentState<T>* const state =
+        dynamic_cast<const PathFollowingAgentState<T>*>(
             &context.get_continuous_state_vector());
     DRAKE_ASSERT(state);
 
@@ -161,18 +174,18 @@ class TrajectoryCar final : public systems::LeafSystem<T> {
     DRAKE_ASSERT(derivatives != nullptr);
     systems::VectorBase<T>& vector_derivatives =
         derivatives->get_mutable_vector();
-    TrajectoryCarState<T>* const rates =
-        dynamic_cast<TrajectoryCarState<T>*>(&vector_derivatives);
+    PathFollowingAgentState<T>* const rates =
+        dynamic_cast<PathFollowingAgentState<T>*>(&vector_derivatives);
     DRAKE_ASSERT(rates);
 
     ImplCalcTimeDerivatives(params, *state, *input, rates);
   }
 
   // Allow different specializations to access each other's private data.
-  template <typename> friend class TrajectoryCar;
+  template <typename> friend class PathFollowingAgent;
 
   void ImplCalcOutput(const PositionHeading& raw_pose,
-                      const TrajectoryCarState<T>& state,
+                      const PathFollowingAgentState<T>& state,
                       SimpleCarState<T>* output) const {
     // Convert raw pose to output type.
     output->set_x(raw_pose.position[0]);
@@ -192,7 +205,7 @@ class TrajectoryCar final : public systems::LeafSystem<T> {
   }
 
   void ImplCalcVelocity(const PositionHeading& raw_pose,
-                        const TrajectoryCarState<T>& state,
+                        const PathFollowingAgentState<T>& state,
                         systems::rendering::FrameVelocity<T>* velocity) const {
     using std::cos;
     using std::sin;
@@ -210,10 +223,10 @@ class TrajectoryCar final : public systems::LeafSystem<T> {
     velocity->set_velocity(output);
   }
 
-  void ImplCalcTimeDerivatives(const TrajectoryCarParams<T>& params,
-                               const TrajectoryCarState<T>& state,
+  void ImplCalcTimeDerivatives(const PathFollowingAgentParams<T>& params,
+                               const PathFollowingAgentState<T>& state,
                                const systems::BasicVector<T>& input,
-                               TrajectoryCarState<T>* rates) const {
+                               PathFollowingAgentState<T>* rates) const {
     using std::max;
 
     // Create an acceleration profile that caps the maximum speed of the vehicle
@@ -233,9 +246,9 @@ class TrajectoryCar final : public systems::LeafSystem<T> {
   }
 
   // Extract the appropriately-typed state from the context.
-  const TrajectoryCarState<T>& GetState(
+  const PathFollowingAgentState<T>& GetState(
       const systems::Context<T>& context) const {
-    auto state = dynamic_cast<const TrajectoryCarState<T>*>(
+    auto state = dynamic_cast<const PathFollowingAgentState<T>*>(
         &context.get_continuous_state_vector());
     DRAKE_DEMAND(state != nullptr);
     return *state;
@@ -243,7 +256,7 @@ class TrajectoryCar final : public systems::LeafSystem<T> {
 
   // Computes the PositionHeading of the trajectory car based on the car's
   // current position along the curve.
-  const PositionHeading CalcRawPose(const TrajectoryCarState<T>& state) const {
+  const PositionHeading CalcRawPose(const PathFollowingAgentState<T>& state) const {
     using std::atan2;
 
     PositionHeading result;
@@ -251,9 +264,6 @@ class TrajectoryCar final : public systems::LeafSystem<T> {
     // Compute the curve at the current longitudinal (along-curve) position.
     const typename Curve2<T>::PositionResult pose =
         curve_.GetPosition(state.position());
-    // TODO(jadecastro): Now that the curve is a function of position rather
-    // than time, we are not acting on a `trajectory` anymore.  Rename this
-    // System to PathFollowingCar or something similar.
     DRAKE_ASSERT(pose.position_dot.norm() > 0.0);
 
     result.position = pose.position;
@@ -261,6 +271,7 @@ class TrajectoryCar final : public systems::LeafSystem<T> {
     return result;
   }
 
+  const AgentData agent_data_;
   const Curve2<T> curve_;
 };
 
@@ -270,7 +281,7 @@ namespace systems {
 namespace scalar_conversion {
 // Disable symbolic support, because we use ExtractDoubleOrThrow.
 template <>
-struct Traits<automotive::TrajectoryCar> : public NonSymbolicTraits {};
+struct Traits<automotive::PathFollowingAgent> : public NonSymbolicTraits {};
 }  // namespace scalar_conversion
 }  // namespace systems
 
