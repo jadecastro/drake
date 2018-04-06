@@ -236,8 +236,9 @@ TYPED_TEST(TrajectoryCarTest, AccelerationInputTest) {
   T kInitialPathPosition = 0.;
   T kInitialSpeed = 20.;
 
-  const std::vector<Waypoint> waypoints{Waypoint{{10., 20.}},  // BR
-                                        Waypoint{{10., 30.}}};
+  // Instantiate waypoints with speeds (should be ignored).
+  const std::vector<Waypoint> waypoints{Waypoint{{10., 20.}, 42.},  // BR
+                                        Waypoint{{10., 30.}, 43.}};
   const Curve2d curve{waypoints};
   const TrajectoryCar<T> dut{curve};  // The device under test.
 
@@ -336,6 +337,46 @@ TYPED_TEST(TrajectoryCarTest, SaturatingSpeedTest) {
   // Check that the AutoDiff derivatives survive.
   CheckDerivatives(car_derivatives->position(), Vector1d{0.});
   CheckDerivatives(car_derivatives->speed(), Vector1d{0.});
+}
+
+// Tests that, when Curve2 contains zeroed-out speeds, Context takes precedence
+// when the input is unconnected.
+GTEST_TEST(TrajectoryCarTest, ZeroSpeedWaypoint) {
+  // Set the waypoint velocities to zero.
+  const std::vector<Waypoint> waypoints{Waypoint{{10., 20.}, 0.},  // BR
+                                        Waypoint{{10., 30.}, 0.}};
+  const Curve2d curve{waypoints};
+  const TrajectoryCar<double> dut{curve};  // The device under test.
+
+  auto context = dut.CreateDefaultContext();
+  auto derivatives = dut.AllocateTimeDerivatives();
+
+  dut.CalcTimeDerivatives(*context, derivatives.get());
+  auto car_derivatives = dynamic_cast<const TrajectoryCarState<double>*>(
+      &derivatives->get_mutable_vector());
+
+  // Expect the initial acceleration be zero.
+  EXPECT_EQ(0., car_derivatives->speed());
+}
+
+// Tests that, when Curve2 contains non-zeroed speeds, Curve2 takes precedence
+// when the input is unconnected.
+GTEST_TEST(TrajectoryCarTest, NonZeroSpeedWaypoint) {
+  // Set the waypoint velocities to non-zero.
+  const std::vector<Waypoint> waypoints{Waypoint{{10., 20.}, 42.},  // BR
+                                        Waypoint{{10., 30.}, 43.}};
+  const Curve2d curve{waypoints};
+  const TrajectoryCar<double> dut{curve};  // The device under test.
+
+  auto context = dut.CreateDefaultContext();
+  auto derivatives = dut.AllocateTimeDerivatives();
+
+  dut.CalcTimeDerivatives(*context, derivatives.get());
+  auto car_derivatives = dynamic_cast<const TrajectoryCarState<double>*>(
+      &derivatives->get_mutable_vector());
+
+  // Expect the initial acceleration to come from the curve.
+  EXPECT_LT(0., car_derivatives->speed());
 }
 
 GTEST_TEST(TrajectoryCarTest, ToAutoDiff) {

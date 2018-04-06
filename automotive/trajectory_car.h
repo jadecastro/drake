@@ -26,6 +26,15 @@ namespace automotive {
 /// that TrajectoryCar can move forward (up to a given "soft" speed limit) but
 /// cannot travel in reverse.
 ///
+/// Note that if the Curve2 @p curve contains waypoints with all zero speeds,
+/// then the car will travel at a constant speed equal to that set in its
+/// Context.  Otherwise, the car will follow an acceleration profile that
+/// matches the speeds provided in @p curve, the default speed set on the basis
+/// of Curve2 taken at the position in the default Context.  If the
+/// input is wired externally, then it takes precedence to all stored Curve2
+/// speed_dot settings.  Whatever the source of the acceleration, it will be
+/// clipped according to the limits in TrajectoryCarParams.
+///
 /// parameters:
 /// * uses systems::Parameters wrapping a TrajectoryCarParams
 ///
@@ -68,7 +77,7 @@ class TrajectoryCar final : public systems::LeafSystem<T> {
   explicit TrajectoryCar(const Curve2<double>& curve)
       : systems::LeafSystem<T>(
             systems::SystemTypeTag<automotive::TrajectoryCar>{}),
-            curve_(curve.waypoints()) {
+        curve_(curve.waypoints()) {
     if (curve_.path_length() == 0.0) {
       throw std::invalid_argument{"empty curve"};
     }
@@ -78,6 +87,11 @@ class TrajectoryCar final : public systems::LeafSystem<T> {
     this->DeclareVectorOutputPort(&TrajectoryCar::CalcVelocityOutput);
     this->DeclareContinuousState(TrajectoryCarState<T>());
     this->DeclareNumericParameter(TrajectoryCarParams<T>());
+
+    if (std::any_of(curve_.waypoints().begin(), curve_.waypoints().end(),
+                    [](const auto& point) { return point.speed != 0.; })) {
+      use_curve_speeds_ = true;
+    }
   }
 
   /// Scalar-converting copy constructor.  See @ref system_scalar_conversion.
@@ -147,8 +161,12 @@ class TrajectoryCar final : public systems::LeafSystem<T> {
     const systems::BasicVector<T>* input =
         this->template EvalVectorInput<systems::BasicVector>(context, 0);
 
-    // If the input is null, then apply a default acceleration of zero.
-    const auto default_input = systems::BasicVector<T>::Make(0.);
+    // If the input is null, then apply a default acceleration of either zero or
+    // the speed_dot value in curve_.  Otherwise pass the input through.
+    const auto default_input = systems::BasicVector<T>::Make(
+        (!use_curve_speeds_)
+            ? 0.
+            : curve_.CalcPositionResult(state->position()).speed_dot);
     if (input == nullptr) {
       input = default_input.get();
     }
@@ -167,7 +185,8 @@ class TrajectoryCar final : public systems::LeafSystem<T> {
   }
 
   // Allow different specializations to access each other's private data.
-  template <typename> friend class TrajectoryCar;
+  template <typename>
+  friend class TrajectoryCar;
 
   void ImplCalcOutput(const PositionHeading& raw_pose,
                       const TrajectoryCarState<T>& state,
@@ -214,11 +233,13 @@ class TrajectoryCar final : public systems::LeafSystem<T> {
                                TrajectoryCarState<T>* rates) const {
     using std::max;
 
+    // TODO(jadecastro) Use caching to avoid the gratuitous calls to
+    // Curve2::CalcPositionResult().
+    const T desired_acceleration = input.GetAtIndex(0);
     // Create an acceleration profile that caps the maximum speed of the vehicle
     // as it approaches or exceeds the `params.max_speed()` limit, passing the
     // input acceleration through when away from the limit.  Note that
     // accelerations of zero are passed through unaffected.
-    const T desired_acceleration = input.GetAtIndex(0);
     const T smooth_acceleration =
         calc_smooth_acceleration(desired_acceleration, params.max_speed(),
                                  params.speed_limit_kp(), state.speed());
@@ -254,11 +275,27 @@ class TrajectoryCar final : public systems::LeafSystem<T> {
     DRAKE_ASSERT(pose.position_deriv.norm() > 0.0);
 
     result.position = pose.position;
-    result.heading = atan2(pose.position_prime[1], pose.position_prime[0]);
+    result.heading = atan2(pose.position_deriv[1], pose.position_deriv[0]);
     return result;
   }
 
+  /// Given a @p position, sets the TrajectoryCarState::speed in the @p context
+  /// to a value consistent with the waypoint path if and only if the curve
+  /// contains nonzero speeds.
+  void SetDefaultState(const systems::Context<T>& context,
+                       systems::State<T>* new_state) const override {
+    if (use_curve_speeds_) {
+      const TrajectoryCarState<T>& state = GetState(context);
+      const PositionResult<T> result =
+          curve_.CalcPositionResult(state.position());
+      auto& new_xc = dynamic_cast<TrajectoryCarState<T>&>(
+          new_state->get_mutable_continuous_state().get_mutable_vector());
+      new_xc.set_speed(result.speed);
+    }
+  }
+
   const Curve2<T> curve_;
+  bool use_curve_speeds_{false};
 };
 
 }  // namespace automotive
