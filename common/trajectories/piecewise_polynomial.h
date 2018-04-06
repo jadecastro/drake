@@ -411,7 +411,7 @@ class PiecewisePolynomial final : public PiecewiseTrajectory<T> {
   double segmentValueAtGlobalAbscissa(int segment_index, double t,
                                       Eigen::Index row, Eigen::Index col) const;
 
-  static constexpr T kSlopeEpsilon = 1e-10;
+  static constexpr double kSlopeEpsilon = 1e-10;
 
   // a PolynomialMatrix for each piece (segment)
   std::vector<PolynomialMatrix> polynomials_;
