@@ -68,7 +68,8 @@ class TrajectoryAgent final : public systems::LeafSystem<T> {
                            const AgentTrajectory& trajectory)
       : systems::LeafSystem<T>(
             systems::SystemTypeTag<automotive::TrajectoryAgent>{}),
-        agent_data_(agent_data), trajectory_(trajectory) {
+        agent_data_(agent_data),
+        trajectory_(trajectory) {
     if (trajectory_.empty()) {
       throw std::invalid_argument{"empty trajectory"};
     }
@@ -113,41 +114,42 @@ class TrajectoryAgent final : public systems::LeafSystem<T> {
   }
 
   // Allow different specializations to access each other's private data.
-  template <typename> friend class TrajectoryAgent;
+  template <typename>
+  friend class TrajectoryAgent;
 
   void ImplCalcOutput(const TrajectoryAgentValues& values,
                       SimpleCarState<T>* output) const {
     // Convert TrajectoryAgentValues into a SimpleCarState.
     // *** Need to convert x, y, below to Body frame ***
-    output->set_x(values.pose<T>().get_translation().x());
-    output->set_y(values.pose<T>().get_translation().y());
-    // TODO(jadecastro) Enable Autodiff support for math::QuaternionToSpaceXYZ().
-    const Eigen::Vector4d vector{
-      ExtractDoubleOrThrow(values.pose<T>().get_rotation().w()),
-          ExtractDoubleOrThrow(values.pose<T>().get_rotation().x()),
-          ExtractDoubleOrThrow(values.pose<T>().get_rotation().y()),
-          ExtractDoubleOrThrow(values.pose<T>().get_rotation().z())};
+    output->set_x(T{values.pose().get_translation().x()});
+    output->set_y(T{values.pose().get_translation().y()});
+    // TODO(jadecastro) Enable Autodiff support for
+    // math::QuaternionToSpaceXYZ().
+    const Eigen::Vector4d vector{T{values.pose().get_rotation().w()},
+                                 T{values.pose().get_rotation().x()},
+                                 T{values.pose().get_rotation().y()},
+                                 T{values.pose().get_rotation().z()}};
     output->set_heading(math::QuaternionToSpaceXYZ(vector).z());
     output->set_velocity(
-        values.velocity<T>().get_velocity().translational().norm());
+        T{values.velocity().get_velocity().translational().norm()});
   }
 
   void ImplCalcPose(const TrajectoryAgentValues& values,
                     systems::rendering::PoseVector<T>* pose) const {
     // Convert the TrajectoryAgentValues into a pose vector.
-    pose->set_translation(values.pose<T>().get_translation());
-    pose->set_rotation(values.pose<T>().get_rotation());
+    pose->set_translation(T{values.pose().get_translation()});
+    pose->set_rotation(T{values.pose().get_rotation()});
   }
 
   void ImplCalcVelocity(const TrajectoryAgentValues& values,
                         systems::rendering::FrameVelocity<T>* velocity) const {
     // Convert the TrajectoryAgentValues into a spatial velocity.
-    velocity->set_velocity(values.velocity<T>().get_velocity());
+    velocity->set_velocity(
+        SpatialVelocity<T>{values.velocity().get_velocity()});
   }
 
   // Extract the appropriately-typed state from the context.
-  TrajectoryAgentValues GetValues(
-      const systems::Context<T>& context) const {
+  TrajectoryAgentValues GetValues(const systems::Context<T>& context) const {
     return trajectory_.value(ExtractDoubleOrThrow(context.get_time()));
   }
 

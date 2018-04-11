@@ -23,49 +23,77 @@ class AgentTrajectory;
 /// Wrapper for the raw trajectory values.
 class TrajectoryAgentValues {
  public:
-  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(TrajectoryAgentValues)
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(TrajectoryAgentValues)
 
   ///
   TrajectoryAgentValues(const PoseVector<double>& pose,
-                        const FrameVelocity<double>& velocity) {
-    values_.resize(PoseVector<double>::kSize + FrameVelocity<double>::kSize);
-    values_.head(PoseVector<double>::kSize) = pose.CopyToVector();
-    values_.tail(FrameVelocity<double>::kSize) = velocity.CopyToVector();
+                        const FrameVelocity<double>& velocity)
+   {
+    // ** TODO ** Compare against storing just an Eigen::VectorXd of values.  Is
+    // this too memory hungry?
   }
 
-  template <typename T>
-  PoseVector<T> pose6() const {
-    return {Eigen::Quaternion<T>{T{values_(0)}, T{values_(1)}, T{values_(2)},
-                                 T{values_(3)}},
-            Eigen::Translation<T, 3>{values_.segment(4, 3)}};
-  }
+  /// Create a 6D pose with respect to the world frame.
+  // ** TODO ** Body- vs. World-frame notation.
+  PoseVector<double>& pose6_WA() const { return *pose_; }
 
-  template <typename T>
-  Eigen::Vector3<T> pose3() const {
-    
+  // ** TODO ** Body- vs. World-frame notation.
+  /*
+  const Eigen::Vector3d pose3_WA() const {
+    Eigen::Vector2d planar_pose{pose6_WA().get_translation().x(),
+          pose6_WA().get_translation().y()};
+    double w_z = pose6_WA().get_rotation().z();
+    return Eigen::Vector3d{0., 1., 2.};
   }
+  */
 
-  template <typename T>
-  FrameVelocity<T> velocity6() const {
-    return FrameVelocity<T>{
-        SpatialVelocity<T>{values_.tail(PoseVector<double>::kSize)}};
+  // ** TODO ** Body- vs. World-frame notation.
+  FrameVelocity<double>& velocity6_WA() const { return *velocity_; }
+
+  // ** TODO ** Body- vs. World-frame notation.
+  /*
+  Eigen::Vector3d velocity3_WA() const {
+    const Eigen::Vector2d planar_velocity =
+        velocity6_WA().get_velocity().translational().head(2);
+    return {velocity6_WA().get_velocity().rotational().z(), planar_velocity};
   }
+  */
 
-  template <typename T>
-  T speed() const {
-    
+  // ** TODO ** Do we need accessors in body frame also/instead?
+
+  double speed() const {
+    return velocity6_WA().get_velocity().translational().norm();
   }
 
  private:
-  explicit TrajectoryAgentValues(const Eigen::VectorXd& values)
-      : values_(values) {
-    DRAKE_DEMAND(values_.size() ==
+  // Values are expected to be in the following order:
+  // {x, y, z, qw, qx, qy, qz, ωx, ωy, ωz, vx, vy, vz}
+  // ** TODO ** Split this up into four params?
+  explicit TrajectoryAgentValues(const Eigen::VectorXd& values) {
+    DRAKE_DEMAND(values.size() ==
                  PoseVector<double>::kSize + FrameVelocity<double>::kSize);
+    pose_->set_translation(Eigen::Translation<double, 3>(values.head(3)));
+    const Eigen::Vector4d q = values.segment(3, 4);
+    pose_->set_rotation(Eigen::Quaternion<double>(q(0), q(1), q(2), q(3)));
+    const Eigen::Vector3d w = values.segment(PoseVector<double>::kSize, 3);
+    const Eigen::Vector3d v = values.tail(3);
+    const SpatialVelocity<double> velocity(w, v);
+    velocity_->set_velocity(velocity);
     // TODO: Make the quaternion ordering explicit w,x,y,z vs. x,y,z,w ?? (it's
-    // resolved in TrajectoryAgent).
+    // resolved in TrajectoryAgent, but document above).
   }
 
-  Eigen::VectorXd values_;
+  // Values populate VectorXd as per the following order:
+  // {x, y, z, qw, qx, qy, qz, ωx, ωy, ωz, vx, vy, vz}
+  Eigen::VectorXd values() const {
+    Eigen::VectorXd vector;
+    vector << pose_->CopyToVector();
+    vector << velocity_->CopyToVector();
+    return vector;
+  }
+
+  std::unique_ptr<PoseVector<double>> pose_;
+  std::unique_ptr<FrameVelocity<double>> velocity_;
 
   friend class AgentTrajectory;
 };
@@ -96,9 +124,10 @@ class AgentTrajectory {
     DRAKE_DEMAND(times.size() == velocities.size());
     std::vector<Eigen::MatrixXd> knots(times.size());
     for (int i{0}; i < static_cast<int>(times.size()); ++i) {
+      // ** TODO ** Re-think this part.  Perhaps a make_knot() in
+      // TrajectoryAgentValues?
       const TrajectoryAgentValues values(poses[i], velocities[i]);
-      knots.emplace_back(
-          values.values_);  // ** TODO: Is private member field access kosher?
+      knots.emplace_back(values.values());
     }
     return std::make_unique<AgentTrajectory>(
         PiecewisePolynomial<double>::Cubic(times, knots));
