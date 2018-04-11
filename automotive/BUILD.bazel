@@ -353,12 +353,9 @@ drake_cc_library(
     srcs = ["agent_trajectory.cc"],
     hdrs = ["agent_trajectory.h"],
     deps = [
-        "//common:autodiff",
         "//common/trajectories:piecewise_polynomial",
         "//math:geometric_transform",
         "//multibody/multibody_tree/math:spatial_velocity",
-        "//systems/rendering:frame_velocity",
-        "//systems/rendering:pose_vector",
     ],
 )
 
@@ -695,7 +692,14 @@ drake_cc_googletest(
     ],
 )
 
-
+drake_cc_googletest(
+    name = "agent_trajectory_test",
+    deps = [
+        "//automotive:agent_trajectory",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//systems/framework/test_utilities",
+    ],
+)
 
 drake_cc_googletest(
     name = "trajectory_car_test",
