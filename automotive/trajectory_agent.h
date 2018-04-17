@@ -13,6 +13,8 @@
 namespace drake {
 namespace automotive {
 
+// ** Place these into .cc file...
+using multibody::SpatialVelocity;
 using systems::rendering::FrameVelocity;
 using systems::rendering::PoseVector;
 
@@ -36,6 +38,7 @@ struct CarAgent : AgentData {
 };
 
 /// TrajectoryAgent models an agent that follows a pre-established trajectory.
+/// It samples the trajectory at the user-defined samping time.
 ///
 /// output port 0:
 /// * position: x, y, heading;
@@ -64,15 +67,19 @@ class TrajectoryAgent final : public systems::LeafSystem<T> {
 
   /// Constructs a TrajectoryAgent system that traces a given two-dimensional @p
   /// curve.  Throws an error if the curve is empty (has a zero @p path_length).
-  explicit TrajectoryAgent(const AgentData& agent_data,
-                           const AgentTrajectory& trajectory)
+  ///
+  /// @param agent_data an AgentData structure defining the nature of the agent.
+  /// @param trajectory an AgentTrajectory collecting the trajectory.
+  /// @param sampling_time_sec the requested sampling time (in sec) for this
+  /// system.  @default 0.01.
+  TrajectoryAgent(const AgentData& agent_data,
+                  const AgentTrajectory& trajectory,
+                  double sampling_time_sec = 0.01)
       : systems::LeafSystem<T>(
             systems::SystemTypeTag<automotive::TrajectoryAgent>{}),
         agent_data_(agent_data),
         trajectory_(trajectory) {
-    if (trajectory_.empty()) {
-      throw std::invalid_argument{"empty trajectory"};
-    }
+    this->DeclarePeriodicUnrestrictedUpdate(sampling_time_sec, 0.);
     this->DeclareVectorOutputPort(&TrajectoryAgent::CalcStateOutput);
     this->DeclareVectorOutputPort(&TrajectoryAgent::CalcPoseOutput);
     this->DeclareVectorOutputPort(&TrajectoryAgent::CalcVelocityOutput);
@@ -117,39 +124,35 @@ class TrajectoryAgent final : public systems::LeafSystem<T> {
   template <typename>
   friend class TrajectoryAgent;
 
-  void ImplCalcOutput(const TrajectoryAgentValues& values,
+  // Converts PoseVelocity into a SimpleCarState output.
+  void ImplCalcOutput(const PoseVelocity& values,
                       SimpleCarState<T>* output) const {
-    // Convert TrajectoryAgentValues into a SimpleCarState.
-    // *** Need to convert x, y, below to Body frame ***
-    output->set_x(T{values.pose().get_translation().x()});
-    output->set_y(T{values.pose().get_translation().y()});
-    // TODO(jadecastro) Enable Autodiff support for
-    // math::QuaternionToSpaceXYZ().
-    const Eigen::Vector4d vector{T{values.pose().get_rotation().w()},
-                                 T{values.pose().get_rotation().x()},
-                                 T{values.pose().get_rotation().y()},
-                                 T{values.pose().get_rotation().z()}};
-    output->set_heading(math::QuaternionToSpaceXYZ(vector).z());
-    output->set_velocity(
-        T{values.velocity().get_velocity().translational().norm()});
+    output->set_x(T{values.pose3().x()});
+    output->set_y(T{values.pose3().y()});
+    output->set_heading(T{values.pose3().z()});
+    output->set_velocity(T{values.speed()});
   }
 
-  void ImplCalcPose(const TrajectoryAgentValues& values,
+  // Converts the PoseVelocity into a PoseVector output.
+  void ImplCalcPose(const PoseVelocity& values,
                     systems::rendering::PoseVector<T>* pose) const {
-    // Convert the TrajectoryAgentValues into a pose vector.
-    pose->set_translation(T{values.pose().get_translation()});
-    pose->set_rotation(T{values.pose().get_rotation()});
+    pose->set_translation(
+        Eigen::Translation<T, 3>{values.translation()});
+    const Eigen::Quaternion<double>& q = math::RotationMatrix<double>(
+        values.rotation()).ToQuaternion();
+    pose->set_rotation(Eigen::Quaternion<T>{q});
   }
 
-  void ImplCalcVelocity(const TrajectoryAgentValues& values,
+  // Converts the PoseVelocity into a FrameVelocity output.
+  void ImplCalcVelocity(const PoseVelocity& values,
                         systems::rendering::FrameVelocity<T>* velocity) const {
-    // Convert the TrajectoryAgentValues into a spatial velocity.
-    velocity->set_velocity(
-        SpatialVelocity<T>{values.velocity().get_velocity()});
+    const Eigen::Vector3d& v = values.velocity().translational();
+    const Eigen::Vector3d& w = values.velocity().rotational();
+    velocity->set_velocity(SpatialVelocity<T>{Vector3<T>{w}, Vector3<T>{v}});
   }
 
   // Extract the appropriately-typed state from the context.
-  TrajectoryAgentValues GetValues(const systems::Context<T>& context) const {
+  PoseVelocity GetValues(const systems::Context<T>& context) const {
     return trajectory_.value(ExtractDoubleOrThrow(context.get_time()));
   }
 
@@ -158,13 +161,4 @@ class TrajectoryAgent final : public systems::LeafSystem<T> {
 };
 
 }  // namespace automotive
-
-namespace systems {
-namespace scalar_conversion {
-// Disable symbolic support, because we use ExtractDoubleOrThrow.
-template <>
-struct Traits<automotive::TrajectoryAgent> : public NonSymbolicTraits {};
-}  // namespace scalar_conversion
-}  // namespace systems
-
 }  // namespace drake
