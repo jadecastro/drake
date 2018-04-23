@@ -51,6 +51,7 @@ void TrajectoryAgent<T>::CalcVelocityOutput(const systems::Context<T>& context,
   const Eigen::Vector3d& v = values.velocity().translational();
   const Eigen::Vector3d& w = values.velocity().rotational();
   velocity->set_velocity(SpatialVelocity<T>{Vector3<T>{w}, Vector3<T>{v}});
+  std::cout << " Speed " << v.norm() << std::endl;
 }
 
 template <typename T>
