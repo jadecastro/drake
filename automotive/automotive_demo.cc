@@ -5,6 +5,7 @@
 
 #include <gflags/gflags.h>
 
+#include "drake/automotive/agent_trajectory.h"
 #include "drake/automotive/automotive_simulator.h"
 #include "drake/automotive/create_trajectory_params.h"
 #include "drake/automotive/gen/maliput_railcar_params.h"
@@ -33,6 +34,9 @@ DEFINE_int32(num_mobil_car, 0,
 DEFINE_int32(num_trajectory_car, 0, "Number of TrajectoryCar vehicles. This "
              "option is currently only applied when the road network is a flat "
              "plane or a dragway.");
+DEFINE_int32(num_trajectory_agent, 0, "Number of TrajectoryAgent vehicles. "
+             "This option is currently only applied when the road network is a "
+             "flat plane or a dragway.");
 DEFINE_int32(num_idm_controlled_maliput_railcar, 0, "Number of IDM-controlled "
              "MaliputRailcar vehicles. This option is currently only applied "
              "when the road network is a dragway. These cars are added after "
@@ -224,6 +228,17 @@ void AddVehicles(RoadNetworkType road_network_type,
                                        std::get<1>(params),
                                        std::get<2>(params));
     }
+    for (int i = 0; i < FLAGS_num_trajectory_agent; ++i) {
+      const int lane_index = i % FLAGS_num_dragway_lanes;
+      const double speed = FLAGS_dragway_base_speed +
+          lane_index * FLAGS_dragway_lane_speed_delta;
+      const double start_position = i / FLAGS_num_dragway_lanes *
+           FLAGS_dragway_vehicle_spacing;
+      const AgentTrajectory trajectory = CreateAgentTrajectoryForDragway(
+          *dragway_road_geometry, lane_index, speed, start_position);
+      simulator->AddPriusTrajectoryAgent("TrajectoryAgent" + std::to_string(i),
+                                         trajectory);
+    }
 
     for (int i = 0; i < FLAGS_num_mobil_car; ++i) {
       const int lane_index = i % FLAGS_num_dragway_lanes;
@@ -297,6 +312,12 @@ void AddVehicles(RoadNetworkType road_network_type,
                                        std::get<0>(params),
                                        std::get<1>(params),
                                        std::get<2>(params));
+    }
+    for (int i = 0; i < FLAGS_num_trajectory_agent; ++i) {
+      throw std::runtime_error("Not yet implemented.");
+      // const AgentTrajectory trajectory = CreateAgentTrajectory(i);
+      // simulator->AddPriusTrajectoryAgent("TrajectoryAgent" + std::to_string(i),
+      //                                    trajectory);
     }
   }
 }

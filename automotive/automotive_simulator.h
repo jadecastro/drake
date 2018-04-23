@@ -17,6 +17,7 @@
 #include "drake/automotive/mobil_planner.h"
 #include "drake/automotive/pure_pursuit_controller.h"
 #include "drake/automotive/simple_car.h"
+#include "drake/automotive/trajectory_agent.h"
 #include "drake/automotive/trajectory_car.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/lcm/drake_lcm_interface.h"
@@ -129,12 +130,26 @@ class AutomotiveSimulator {
   ///
   /// @param speed See documentation of TrajectoryCar::TrajectoryCar.
   ///
-  /// @param start_time See documentation of TrajectoryCar::TrajectoryCar.
+  /// @param start_position The starting .
   ///
   /// @return The ID of the car that was just added to the simulation.
   int AddPriusTrajectoryCar(const std::string& name,
                             const Curve2<double>& curve, double speed,
-                            double start_time);
+                            double start_position);
+
+  /// Adds a TrajectoryAgent to this simulation visualized as a Toyota Prius.
+  ///
+  /// @pre Start() has NOT been called.
+  ///
+  /// @param name The car's name, which must be unique among all cars. Otherwise
+  /// a std::runtime_error will be thrown.
+  ///
+  /// @param trajectory The trajectory for this car. See documentation of
+  /// TrajectoryAgent.
+  ///
+  /// @return The ID of the car that was just added to the simulation.
+  int AddPriusTrajectoryAgent(const std::string& name,
+                              const AgentTrajectory& trajectory);
 
   /// Adds a lane-following SimpleCar with IdmController and
   /// PurePursuitController to this simulation that takes as input a constant
@@ -357,6 +372,10 @@ class AutomotiveSimulator {
   // Adds an LCM publisher for the given @p system.
   // @pre Start() has NOT been called.
   void AddPublisher(const TrajectoryCar<T>& system, int vehicle_number);
+
+  // Adds an LCM publisher for the given @p system.
+  // @pre Start() has NOT been called.
+  void AddPublisher(const TrajectoryAgent<T>& system, int vehicle_number);
 
   // Generates the URDF model of the road network and loads it into the
   // `RigidBodyTree`. Member variable `road_` must be set prior to calling this

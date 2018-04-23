@@ -119,6 +119,7 @@ drake_cc_library(
     srcs = ["create_trajectory_params.cc"],
     hdrs = ["create_trajectory_params.h"],
     deps = [
+        ":agent_trajectory",
         ":curve2",
         ":trajectory_car",
         "//automotive/maliput/api",
@@ -404,6 +405,7 @@ drake_cc_library(
         ":prius_vis",
         ":pure_pursuit_controller",
         ":simple_car",
+        ":trajectory_agent",
         ":trajectory_car",
         "//automotive/maliput/api",
         "//automotive/maliput/utility",
@@ -430,6 +432,7 @@ drake_cc_binary(
         "//automotive/models:prod_models",
     ],
     deps = [
+        ":agent_trajectory",
         ":automotive_simulator",
         ":create_trajectory_params",
         ":monolane_onramp_merge",

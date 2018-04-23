@@ -6,6 +6,7 @@
 #include <memory>
 #include <tuple>
 
+#include "drake/automotive/agent_trajectory.h"
 #include "drake/automotive/curve2.h"
 #include "drake/automotive/maliput/api/road_geometry.h"
 #include "drake/automotive/maliput/dragway/road_geometry.h"
@@ -41,6 +42,26 @@ std::tuple<Curve2<double>, double, double> CreateTrajectoryParams(int index);
 std::tuple<Curve2<double>, double, double> CreateTrajectoryParamsForDragway(
     const maliput::dragway::RoadGeometry& road_geometry, int index,
     double speed, double start_time);
+
+/**
+ * Creates TrajectoryAgent constructor demo arguments for a vehicle on a dragway.
+ * The details of the trajectory are not documented / promised by this API.
+ *
+ * @param road_geometry The dragway upon which the TrajectoryCar will travel.
+ *
+ * @param index The lane index within the provided `road_geometry`.
+ *
+ * @param speed The vehicle speed.
+ *
+ * @param start_position The s-position along the dragway from which the vehicle
+ * will start.
+ *
+ * @return An AgentTrajectory containing vehicle pose and velocity as functions
+ * of time.
+ */
+AgentTrajectory CreateAgentTrajectoryForDragway(
+    const maliput::dragway::RoadGeometry& road_geometry, int index,
+    double speed, double start_position);
 
 }  // namespace automotive
 }  // namespace drake

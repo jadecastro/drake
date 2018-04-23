@@ -93,5 +93,24 @@ std::tuple<Curve2<double>, double, double> CreateTrajectoryParamsForDragway(
   return std::make_tuple(curve, speed, start_time);
 }
 
+AgentTrajectory CreateAgentTrajectoryForDragway(
+    const maliput::dragway::RoadGeometry& road_geometry, int index,
+    double speed, double start_position) {
+  const maliput::api::Segment* segment = road_geometry.junction(0)->segment(0);
+  DRAKE_DEMAND(index < segment->num_lanes());
+  const maliput::api::Lane* lane = segment->lane(index);
+  const maliput::api::GeoPosition start_geo_position =
+      lane->ToGeoPosition(maliput::api::LanePosition(
+          start_position /* s */, 0 /* r */, 0 /* h */));
+  const maliput::api::GeoPosition end_geo_position =
+      lane->ToGeoPosition(maliput::api::LanePosition(
+          lane->length() /* s */, 0 /* r */, 0 /* h */));
+  std::vector<Eigen::Isometry3d> waypoints;
+  waypoints.push_back(Eigen::Isometry3d{Eigen::Translation<double, 3>{start_geo_position.xyz()}});
+  waypoints.push_back(Eigen::Isometry3d{Eigen::Translation<double, 3>{end_geo_position.xyz()}});
+  std::vector<double> speeds{speed, speed};
+  return AgentTrajectory::MakeFromWaypoints(waypoints, speeds);
+}
+
 }  // namespace automotive
 }  // namespace drake
