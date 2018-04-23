@@ -96,9 +96,9 @@ class AgentTrajectoryValues final {
     DRAKE_DEMAND(raw_pose.size() == internal::kIndicesSize);
     DRAKE_DEMAND(raw_velocity.size() == internal::kIndicesSize);
 
-    // ** TODO ** Needed vs. just normalizing? Also: Add unit tests for the case
-    // where quat is unnormalized, or else add this check to all ctors and state
-    // in the documentation that it must be.
+    // ** TODO ** Needed vs. just normalizing outright? Also: Add unit tests for
+    // the case where quat is unnormalized, or else add this check to all ctors
+    // and state in the documentation that it must be.
     DRAKE_DEMAND(math::IsQuaternionValid(
         rotation_, std::numeric_limits<double>::epsilon()));
 
@@ -272,7 +272,7 @@ class AgentTrajectory final {
 
     for (int i{0}; i < static_cast<int>(speeds.size()); i++) {
       DRAKE_DEMAND(speeds[i] >= 0.);
-      if (speeds[i] != speeds.back()) {
+      if (i != static_cast<int>(speeds.size())) {
         // speedₖ == 0. ⇒ speedₖ₊₁ > 0., ∀ k = 0..N-1
         DRAKE_DEMAND((speeds[i + 1] > 0.) || (speeds[i] != 0.));
 

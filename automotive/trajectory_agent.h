@@ -36,6 +36,7 @@ struct CarAgent : AgentData {
 };
 
 /// TrajectoryAgent models an agent that follows a pre-established trajectory.
+/// It samples the trajectory at the user-defined samping time.
 ///
 /// output port 0:
 /// * position: x, y, heading;
@@ -64,12 +65,19 @@ class TrajectoryAgent final : public systems::LeafSystem<T> {
 
   /// Constructs a TrajectoryAgent system that traces a given two-dimensional @p
   /// curve.  Throws an error if the curve is empty (has a zero @p path_length).
+  ///
+  /// @param agent_data an AgentData structure defining the nature of the agent.
+  /// @param trajectory an AgentTrajectory collecting the trajectory.
+  /// @param sampling_time_sec the requested sampling time (in sec) for this
+  /// system.  @default 0.01.
   explicit TrajectoryAgent(const AgentData& agent_data,
-                           const AgentTrajectory& trajectory)
+                           const AgentTrajectory& trajectory,
+                           double sampling_time_sec = 0.01)
       : systems::LeafSystem<T>(
             systems::SystemTypeTag<automotive::TrajectoryAgent>{}),
         agent_data_(agent_data),
         trajectory_(trajectory) {
+    this->DeclarePeriodicUnrestrictedUpdate(sampling_time_sec, 0.);
     this->DeclareVectorOutputPort(&TrajectoryAgent::CalcStateOutput);
     this->DeclareVectorOutputPort(&TrajectoryAgent::CalcPoseOutput);
     this->DeclareVectorOutputPort(&TrajectoryAgent::CalcVelocityOutput);
@@ -114,19 +122,18 @@ class TrajectoryAgent final : public systems::LeafSystem<T> {
   template <typename>
   friend class TrajectoryAgent;
 
+  // Converts AgentTrajectoryValues into a SimpleCarState output.
   void ImplCalcOutput(const AgentTrajectoryValues& values,
                       SimpleCarState<T>* output) const {
-    // Convert AgentTrajectoryValues into a SimpleCarState.
-    // *** Need to convert x, y, below to Body frame ***
     output->set_x(T{values.pose3().x()});
     output->set_y(T{values.pose3().y()});
     output->set_heading(T{values.pose3().z()});
     output->set_velocity(T{values.speed()});
   }
 
+  // Converts the AgentTrajectoryValues into a PoseVector output.
   void ImplCalcPose(const AgentTrajectoryValues& values,
                     systems::rendering::PoseVector<T>* pose) const {
-    // Convert the AgentTrajectoryValues into a pose vector.
     pose->set_translation(
         Eigen::Translation<T, 3>{values.isometry3().translation()});
     const Eigen::Quaternion<double>& q = math::RotationMatrix<double>(
@@ -134,9 +141,9 @@ class TrajectoryAgent final : public systems::LeafSystem<T> {
     pose->set_rotation(Eigen::Quaternion<T>{q});
   }
 
+  // Converts the AgentTrajectoryValues into a FrameVelocity output.
   void ImplCalcVelocity(const AgentTrajectoryValues& values,
                         systems::rendering::FrameVelocity<T>* velocity) const {
-    // Convert the AgentTrajectoryValues into a frame velocity.
     const Eigen::Vector3d& v = values.velocity().translational();
     const Eigen::Vector3d& w = values.velocity().rotational();
     velocity->set_velocity(SpatialVelocity<T>{Vector3<T>{w}, Vector3<T>{v}});
