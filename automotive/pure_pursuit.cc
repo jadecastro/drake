@@ -8,6 +8,7 @@
 #include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/symbolic.h"
+#include "drake/math/quaternion.h"
 #include "drake/math/saturate.h"
 
 namespace drake {
@@ -36,7 +37,7 @@ T PurePursuit<T>::Evaluate(const PurePursuitParams<T>& pp_params,
 
   const T x = pose.get_translation().translation().x();
   const T y = pose.get_translation().translation().y();
-  const T heading = pose.get_rotation().z();
+  const T heading = math::QuaternionToSpaceXYZ<T>(pose.get_rotation()).z();
 
   const T delta_r = -(goal_position.x() - x) * sin(heading) +
                     (goal_position.y() - y) * cos(heading);
@@ -62,6 +63,7 @@ const GeoPositionT<T> PurePursuit<T>::ComputeGoalPoint(
   const T s_new =
       with_s ? position.s() + s_lookahead : position.s() - s_lookahead;
   const T s_goal = math::saturate(s_new, T(0.), T(lane->length()));
+
   // TODO(jadecastro): Add support for locating goal points in ongoing lanes.
   return lane->ToGeoPositionT<T>({s_goal, 0. * position.r(), position.h()});
 }

@@ -263,6 +263,7 @@ drake_cc_library(
         ":lane_direction",
         "//automotive/maliput/api",
         "//common:symbolic",
+        "//math:geometric_transform",
         "//math:saturate",
         "//systems/rendering:pose_vector",
     ],

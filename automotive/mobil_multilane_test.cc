@@ -26,11 +26,11 @@ class Simulator : public AutomotiveSimulator<double> {
     using dmm::LineOffset;
     using dmm::StartReference;
 
-    const double rotation = 0;
-    const double x_start = 0;
-    const double y_start = -20;
-    const double straight_length = 50;  // length of straightaways
-    const double arc_radius = 25;       // radius of arcs
+    const double rotation = 0.;
+    const double x_start = 0.;
+    const double y_start = -20.;
+    const double straight_length = 50.;  // length of straightaways
+    const double arc_radius = 25.;       // radius of arcs
     const double arc_angle = M_PI;
 
     const double kLeftShoulder = 2.;
@@ -87,14 +87,14 @@ int main() {
 
   auto lane = rg->junction(0)->segment(0)->lane(0);
   auto start = lane->ToGeoPosition(dma::LanePosition(0, 0, 0));
-  state.set_x(start.x() + 20);
 
-  state.set_y(start.y() + 1);
-  state.set_velocity(10);
-  state.set_heading(0);
+  state.set_x(start.x() + 20.);
+  state.set_y(start.y() + 1.);
+  state.set_velocity(10.);
+  state.set_heading(0.);
 
-  mali_state.set_s(40);
-  mali_state.set_speed(40);
+  mali_state.set_s(40.);
+  mali_state.set_speed(40.);
 
   simulator.AddIdmControlledPriusMaliputRailcar(
       "RailCar", LaneDirection(lane), ScanStrategy::kBranches,

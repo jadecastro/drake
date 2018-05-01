@@ -287,7 +287,7 @@ Matrix3<typename Derived::Scalar> quat2rotmat(
 **/
 template <typename T>
 Vector3<T> QuaternionToSpaceXYZ(const Eigen::Quaternion<T>& quaternion) {
-  const Eigen::Matrix3d R = RotationMatrix<T>(quaternion).matrix();
+  const Matrix3<T> R = RotationMatrix<T>(quaternion).matrix();
 
   using std::atan2;
   using std::sqrt;
