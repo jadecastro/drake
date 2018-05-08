@@ -182,8 +182,9 @@ void SimpleCar<T>::ImplCalcTimeDerivatives(const SimpleCarParams<T>& params,
   using std::sin;
   using std::tanh;
 
+  std::cout << " simplecar input : " << input.CopyToVector() << std::endl;
   // Sanity check our input.
-  DRAKE_DEMAND(abs(input.GetAtIndex(kSteeringIndex)) < M_PI);
+  // DRAKE_DEMAND(abs(input.GetAtIndex(kSteeringIndex)) < M_PI);
 
   // Compute the smooth acceleration that the vehicle actually executes.
   // TODO(jwnimmer-tri) We should saturate to params.max_acceleration().
@@ -193,15 +194,18 @@ void SimpleCar<T>::ImplCalcTimeDerivatives(const SimpleCarParams<T>& params,
                                params.velocity_limit_kp(), state.velocity());
 
   // Determine steering.
-  // const T saturated_steering_angle =
-  //    math::saturate(input.GetAtIndex(kAccelIndex),
-  //                   -params.max_abs_steering_angle(),
-  //                   params.max_abs_steering_angle());
+  /*
+    const T saturated_steering_angle =
+      math::saturate(input.GetAtIndex(kSteeringIndex),
+                     -params.max_abs_steering_angle(),
+                     params.max_abs_steering_angle());
+  */
   // Soften the saturation limits.
   const T saturated_steering_angle =
-      params.max_abs_steering_angle() * tanh(input.GetAtIndex(kAccelIndex) / params.max_abs_steering_angle());
-  // drake::log()->info(" ** Steering sat : {}\n", params.max_abs_steering_angle());
-  // drake::log()->info(" ** Steering act : {}\n", saturated_steering_angle);
+      params.max_abs_steering_angle() * tanh(input.GetAtIndex(kSteeringIndex) / params.max_abs_steering_angle());
+  drake::log()->info(" ** Steering unsat : {}\n", input.GetAtIndex(kSteeringIndex));
+  drake::log()->info("    Steering sat : {}\n", params.max_abs_steering_angle());
+  drake::log()->info("    Steering act : {}\n", saturated_steering_angle);
   const T curvature = tan(saturated_steering_angle) / params.wheelbase();
 
   // Don't allow small negative velocities to affect position or heading.

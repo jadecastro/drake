@@ -40,11 +40,13 @@ T PurePursuit<T>::Evaluate(const PurePursuitParams<T>& pp_params,
   const T y = pose.get_translation().translation().y();
   const T heading = math::RollPitchYaw<T>(pose.get_rotation()).yaw_angle();
 
+  std::cout << " (goal_position.y() - y) * cos(heading) : " << (goal_position.y() - y) * cos(heading) << std::endl;
   const T delta_r = -(goal_position.x() - x) * sin(heading) +
                     (goal_position.y() - y) * cos(heading);
   const T curvature = 2. * delta_r / pow(pp_params.s_lookahead(), 2.);
 
   // Return the steering angle.
+  std::cout << " atan2(car_params.wheelbase() * curvature, T(1.)) : " << atan2(car_params.wheelbase() * curvature, T(1.)) << std::endl;
   return atan2(car_params.wheelbase() * curvature, T(1.));
   // N.B. atan2(*, 1) is used here in the absence of an atan() autodiff
   // overload.

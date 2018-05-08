@@ -8,6 +8,7 @@
 #include "drake/automotive/maliput/api/road_geometry.h"
 #include "drake/automotive/maliput/api/segment.h"
 #include "drake/automotive/maliput/dragway/road_geometry.h"
+#include "drake/automotive/pure_pursuit.h"
 #include "drake/automotive/simple_car.h"
 #include "drake/common/proto/call_python.h"
 #include "drake/common/symbolic.h"
@@ -152,6 +153,9 @@ void PopulateContext(
 }
 
 int DoMain(void) {
+  using std::log;
+  using std::sqrt;
+
   const int kNumLanes = 3;  // Number of lanes in the scenario.
 
   std::unique_ptr<maliput::api::RoadGeometry> road = MakeRoad(kNumLanes);
@@ -160,13 +164,13 @@ int DoMain(void) {
   const maliput::api::Lane* goal_lane_car0 = segment->lane(0);
   const maliput::api::Lane* goal_lane_car1 = segment->lane(1);
   const maliput::api::Lane* goal_lane_car2 = segment->lane(2);
-  const maliput::api::Lane* goal_lane_car3 = segment->lane(0);
+  //  const maliput::api::Lane* goal_lane_car3 = segment->lane(0);
 
   std::vector<const maliput::api::Lane*> goal_lanes;
   goal_lanes.push_back(goal_lane_car0);
   goal_lanes.push_back(goal_lane_car1);
   goal_lanes.push_back(goal_lane_car2);
-  goal_lanes.push_back(goal_lane_car3);
+  //  goal_lanes.push_back(goal_lane_car3);
 
   const int num_ado_cars = goal_lanes.size();
 
@@ -181,10 +185,10 @@ int DoMain(void) {
   auto context = plant.CreateDefaultContext();
 
   // Set up a direct-collocation feasibility problem.
-  const double guess_duration = 5.;  // seconds
+  const double guess_duration = 10.;  // seconds
   const int kNumTimeSamples = 21;
-  const double kMinTimeStep = 0.5 * guess_duration / (kNumTimeSamples - 1);
-  const double kMaxTimeStep = 2. * guess_duration / (kNumTimeSamples - 1);
+  const double kMinTimeStep = 0.2 * guess_duration / (kNumTimeSamples - 1);
+  const double kMaxTimeStep = 3. * guess_duration / (kNumTimeSamples - 1);
 
   DirectCollocation prog(&plant, *context, kNumTimeSamples,
                          kMinTimeStep, kMaxTimeStep);
@@ -203,7 +207,7 @@ int DoMain(void) {
   ego_initial_conditions.set_x(30.);
   ego_initial_conditions.set_y(-1. * kLaneWidth + delta_y);
   ego_initial_conditions.set_heading(0.);
-  ego_initial_conditions.set_velocity(5.5);
+  ego_initial_conditions.set_velocity(7.);
 
   std::vector<SimpleCarState<double>*> lc_initial_conditions;
   SimpleCarState<double> car0;
@@ -221,7 +225,7 @@ int DoMain(void) {
   lc_initial_conditions.push_back(&car1);
 
   SimpleCarState<double> car2;
-  car2.set_x(30.);
+  car2.set_x(10.);
   car2.set_y(goal_lane_car2->ToGeoPosition({0., 0., 0.}).y());
   car2.set_heading(0.);
   car2.set_velocity(5.);
@@ -232,18 +236,19 @@ int DoMain(void) {
   car3.set_y(1. * kLaneWidth + delta_y);
   car3.set_heading(0.);
   car3.set_velocity(10.);
-  lc_initial_conditions.push_back(&car3);
+  // lc_initial_conditions.push_back(&car3);
 
   std::vector<const systems::System<double>*> systems = diagram.GetSystems();
   auto initial_context = diagram.CreateDefaultContext();
   PopulateContext(diagram, ego_initial_conditions, lc_initial_conditions,
                   systems, initial_context.get());
 
+  // Supply final conditions for the guessed trajectory.
   SimpleCarState<double> ego_final_conditions;
   ego_final_conditions.set_x(40.);
   ego_final_conditions.set_y(-0.6 * kLaneWidth + delta_y);
   ego_final_conditions.set_heading(0.);
-  ego_final_conditions.set_velocity(5.5);
+  ego_final_conditions.set_velocity(5.0);
 
   std::vector<SimpleCarState<double>*> lc_final_conditions;
   car0.set_x(60.);
@@ -261,14 +266,14 @@ int DoMain(void) {
   car2.set_x(40.);
   car2.set_y(goal_lane_car2->ToGeoPosition({0., 0., 0.}).y());
   car2.set_heading(0.);
-  car2.set_velocity(5.);
+  car2.set_velocity(6.);
   lc_final_conditions.push_back(&car2);
 
   car3.set_x(30.);
   car3.set_y(0.4 * kLaneWidth + delta_y);
   car3.set_heading(0.);
   car3.set_velocity(10.);
-  lc_final_conditions.push_back(&car3);
+  // lc_final_conditions.push_back(&car3);
 
   auto final_context = diagram.CreateDefaultContext();
   PopulateContext(diagram, ego_final_conditions, lc_final_conditions,
@@ -328,28 +333,44 @@ int DoMain(void) {
     return result;
   };
 
+  const int kX = SimpleCarStateIndices::kX;
+  const int kY = SimpleCarStateIndices::kY;
+
+  // Constraints keeping the cars on the road.
+  prog.AddConstraintToAllKnotPoints(
+      prog.state()(ego_indices().at(kY)) >= -1.5 * kLaneWidth);
+  prog.AddConstraintToAllKnotPoints(
+      prog.state()(ego_indices().at(kY)) <= 0.5 * kLaneWidth);
+
+  prog.AddConstraintToAllKnotPoints(
+      prog.state()(ado_indices(0).at(kY)) >= -1.5 * kLaneWidth);
+  prog.AddConstraintToAllKnotPoints(
+      prog.state()(ado_indices(0).at(kY)) <= 0.5 * kLaneWidth);
+
+  prog.AddConstraintToAllKnotPoints(
+      prog.state()(ado_indices(1).at(kY)) >= -1.5 * kLaneWidth);
+  prog.AddConstraintToAllKnotPoints(
+      prog.state()(ado_indices(1).at(kY)) <= 0.5 * kLaneWidth);
+
+  // TODO(jadecastro) Infeasible with these active?
+  // prog.AddConstraintToAllKnotPoints(
+  //    prog.state()(ado_indices(2).at(kY)) >= -1.5 * kLaneWidth);
+  // prog.AddConstraintToAllKnotPoints(
+  //    prog.state()(ado_indices(2).at(kY)) <= 0.5 * kLaneWidth);
+
   // Solve a collision with one of the cars, in this case, Traffic Car 2 merging
   // into the middle lane.  Assume for now that, irrespective of its
   // orientation, the traffic car occupies a lane-aligned bounding box.
 
   // TODO(jadecastro) As above, this assumes the ordering of the context. Update
   // Dircol to make this less fragile.
-  const int kX = SimpleCarStateIndices::kX;
-  const int kY = SimpleCarStateIndices::kY;
-  prog.AddLinearConstraint(prog.final_state()(ado_indices(2).at(kY)) >=
+  prog.AddLinearConstraint(prog.final_state()(ado_indices(2).at(kY)) <=
                            prog.final_state()(ego_indices().at(kY))
-                           - 0.5 * kLaneWidth);
+                           + 0.5 * kLaneWidth);
   prog.AddLinearConstraint(prog.final_state()(ado_indices(2).at(kX)) >=
                            prog.final_state()(ego_indices().at(kX)) - 2.5);
   prog.AddLinearConstraint(prog.final_state()(ado_indices(2).at(kX)) <=
                            prog.final_state()(ego_indices().at(kX)) + 2.5);
-
-  // Add a cost to encourage solutions that minimize the distance to a crash.
-  //prog.AddRunningCost((prog.state()(4) - prog.state()(0)) *
-  //                    (prog.state()(4) - prog.state()(0)) +
-  //                    (prog.state()(5) - (-0.5 * kLaneWidth + delta_y)) *
-  //                    (prog.state()(5) - (-0.5 * kLaneWidth + delta_y)));
-
 
   const Eigen::VectorXd x0 =
       initial_context->get_continuous_state_vector().CopyToVector();
@@ -363,11 +384,27 @@ int DoMain(void) {
   // Add a log-probability cost representing the deviation of the commands from
   // a deterministic evolution of IDM/PurePursuit (nominal policy).  We assume
   // that the policy has zero-mean Gaussian distribution.
+  // TODO: Separate out Sigmas for steering and acceleration.
+  const double kSigma = 50.;
+  const double kCoeff = 1. / (2. * kSigma * kSigma);
   symbolic::Expression running_cost;
   for (int i{0}; i < prog.input().size(); ++i) {
-    running_cost += prog.input()(i) * prog.input()(i);
+    std::cout << " prog.input()(i) " << prog.input()(i) << std::endl;
+    running_cost += kCoeff * prog.input()(i) * prog.input()(i);
   }
   prog.AddRunningCost(running_cost);
+
+  // Additionally, provide a chance constraint on drawing the sample path of the
+  // disturbance.
+  const double kSamplePathProb = 0.5;
+  const double kP = 2. * kNumTimeSamples * kSigma * kSigma *
+      log(1. / (sqrt(2. * M_PI) * kSigma)) -
+      2. * kSigma * kSigma * log(kSamplePathProb);
+  drake::unused(kP);
+  for (int i{0}; i < prog.input().size(); ++i) {
+    std::cout << " prog.input()(i) " << prog.input()(i) << std::endl;
+    // prog.AddConstraint(prog.input()(i) * prog.input()(i) >= kP);
+  }
 
   const auto result = prog.Solve();
 
@@ -379,8 +416,11 @@ int DoMain(void) {
   Eigen::VectorXd times_out = prog.GetSampleTimes();
   Eigen::VectorXd ego_x = states.row(ego_indices().at(kX));
   Eigen::VectorXd ego_y = states.row(ego_indices().at(kY));
-  std::cout << " ego x " << ego_x << std::endl;
-  std::cout << " ego y " << ego_y << std::endl;
+  std::cout << " Sample times: " << times_out << std::endl;
+  std::cout << " Inputs for ego car: " << inputs.row(0) << std::endl;
+  std::cout << "                     " << inputs.row(1) << std::endl;
+  // TODO(jadecastro) Transform this cost into a probability distribution.
+  std::cout << " Optimal Cost: " << prog.GetOptimalCost() << std::endl;
   CallPython("figure", 1);
   CallPython("clf");
   CallPython("plot", ego_x, ego_y);

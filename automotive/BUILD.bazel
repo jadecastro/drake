@@ -465,8 +465,8 @@ drake_cc_binary(
 )
 
 drake_cc_binary(
-    name = "mhdm_falsifier",
-    srcs = ["mhdm_falsifier.cc"],
+    name = "crash_finder",
+    srcs = ["crash_finder.cc"],
     deps = [
         "//automotive:automotive_simulator",
         "//automotive:create_trajectory_params",
