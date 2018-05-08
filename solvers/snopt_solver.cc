@@ -325,7 +325,7 @@ void EvaluateNonlinearConstraints(
     const Eigen::VectorXd& xvec) {
   size_t _constraint_index = *constraint_index;
   size_t _grad_index = *grad_index;
-  if (false) {
+  if (true) {
     std::thread workers[constraint_list.size()];
     int index{0};
     for (const auto& binding : constraint_list) {

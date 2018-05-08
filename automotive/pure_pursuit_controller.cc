@@ -93,6 +93,7 @@ void PurePursuitController<T>::CalcSteeringCommand(
   // zero elevation and superelevation.
   (*command)[0] =
       PurePursuit<T>::Evaluate(pp_params, car_params, lane_direction, ego_pose);
+  std::cout << " steering command : " << (*command)[0] << std::endl;
 }
 
 }  // namespace automotive
