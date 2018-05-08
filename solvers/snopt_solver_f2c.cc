@@ -327,7 +327,7 @@ void EvaluateNonlinearConstraints(
     const Eigen::VectorXd& xvec) {
   size_t _constraint_index = *constraint_index;
   size_t _grad_index = *grad_index;
-  if (true) {
+  if (false) {
     std::thread workers[constraint_list.size()];
     int index{0};
     for (const auto& binding : constraint_list) {
@@ -872,7 +872,7 @@ SolutionResult SnoptSolver::Solve(MathematicalProgram& prog) const {
   if (info >= 1 && info <= 6) {
     solution_result = SolutionResult::kSolutionFound;
   } else {
-    drake::log()->debug("Snopt returns code {}\n", info);
+    drake::log()->info("Snopt returns code {}\n", info);
     if (info >= 11 && info <= 16) {
       solution_result = SolutionResult::kInfeasibleConstraints;
     } else if (info >= 20 && info <= 22) {
