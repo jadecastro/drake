@@ -36,6 +36,7 @@ drake_cc_package_library(
         ":curve2",
         ":driving_command_mux",
         ":dynamic_bicycle_car",
+        ":falsifier",
         ":generated_translators",
         ":generated_vectors",
         ":idm_controller",
@@ -159,6 +160,22 @@ drake_cc_library(
     deps = [
         ":generated_vectors",
         "//systems/framework",
+    ],
+)
+
+drake_cc_library(
+    name = "falsifier",
+    srcs = ["falsifier.cc"],
+    hdrs = ["falsifier.h"],
+    deps = [
+        "//automotive:automotive_simulator",
+        "//automotive:create_trajectory_params",
+        "//automotive:simple_car",
+        "//automotive/maliput/api",
+        "//automotive/maliput/dragway",
+        "//common/proto:call_python",
+        "//common:text_logging_gflags",
+        "//systems/trajectory_optimization:direct_collocation",
     ],
 )
 

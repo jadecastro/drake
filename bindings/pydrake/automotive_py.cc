@@ -91,6 +91,11 @@ PYBIND11_MODULE(automotive, m) {
                      doc.LaneDirection.with_s.doc);
   pysystems::AddValueInstantiation<LaneDirection>(m);
 
+  py::class_<Falsifier::InputStateTrajectory>(m, "InputStateTrajectory")
+      .def_readwrite("inputs", &Falsifier::InputStateTrajectory::inputs)
+      .def_readwrite("states", &Falsifier::InputStateTrajectory::states)
+      .def_readwrite("times_out", &Falsifier::InputStateTrajectory::times);
+
   // TODO(eric.cousineau) Bind this named vector automatically (see #8096).
   py::class_<DrivingCommand<T>, BasicVector<T>>(m, "DrivingCommand",
                                                 doc.DrivingCommand.doc)
