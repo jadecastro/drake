@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 import copy
+import gc
 import unittest
 import numpy as np
 
@@ -12,14 +13,17 @@ from pydrake.util.wrap_test_util import (
 
 class TestWrapPybind(unittest.TestCase):
     def test_read_write_keep_alive(self):
-        # Test the containers' constructors and accessors.
-        my_value = MyValue()
-        my_value.value = 42.
-        my_container = MyContainer()
-        my_container.member = my_value
-        print("my_container's value: " + str(my_container.get_value()))
-        print("my_value's value: " + str(my_value.value))
-        my_container.member = None
-        print("my_container's member: " + str(my_container.member))
-        print("my_container's new value: " + str(my_container.member.value))
-        self.assertEqual(my_container.get_value(), 42.)
+        # Original value, don't really care about its life.
+        value_a = MyValue()
+        value_a.value = 42.
+        c = MyContainer()
+        c.member = value_a
+        # Ensure that setter keeps pointee alive.
+        value_b = MyValue()
+        value_b.value = 7.
+        c.member = value_b
+        del value_b
+        gc.collect()
+        # Ensure that we have not lost our value.
+        self.assertTrue(c.member.value == 42.)
+        print("Complete.")
