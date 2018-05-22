@@ -1,421 +1,372 @@
+#include <algorithm>
 #include <memory>
+#include <vector>
 
 #include <gflags/gflags.h>
 
-#include "drake/automotive/automotive_simulator.h"
 #include "drake/automotive/create_trajectory_params.h"
+#include "drake/automotive/idm_controller.h"
+#include "drake/automotive/lane_direction.h"
+#include "drake/automotive/gen/driving_command.h"
 #include "drake/automotive/maliput/api/lane.h"
 #include "drake/automotive/maliput/api/road_geometry.h"
 #include "drake/automotive/maliput/api/segment.h"
 #include "drake/automotive/maliput/dragway/road_geometry.h"
-#include "drake/automotive/pure_pursuit.h"
+#include "drake/automotive/pure_pursuit_controller.h"
 #include "drake/automotive/simple_car.h"
 #include "drake/common/proto/call_python.h"
-#include "drake/common/symbolic.h"
-#include "drake/lcm/drake_lcm.h"
 #include "drake/systems/analysis/simulator.h"
+#include "drake/systems/framework/diagram.h"
+#include "drake/systems/framework/diagram_builder.h"
+#include "drake/systems/primitives/adder.h"
+#include "drake/systems/primitives/demultiplexer.h"
+#include "drake/systems/primitives/multiplexer.h"
+#include "drake/systems/rendering/pose_aggregator.h"
 #include "drake/systems/trajectory_optimization/direct_collocation.h"
-
-DEFINE_double(simulation_sec, std::numeric_limits<double>::infinity(),
-"Number of seconds to simulate.");
 
 namespace drake {
 namespace automotive {
 namespace {
 
 using common::CallPython;
+using maliput::api::Lane;
+using maliput::api::RoadGeometry;
+using systems::Diagram;
+using systems::System;
 using systems::trajectory_optimization::DirectCollocation;
 using trajectories::PiecewisePolynomial;
 
-// Road parameters -- Assume fixed for now.
+static constexpr int kX = SimpleCarStateIndices::kX;
+static constexpr int kY = SimpleCarStateIndices::kY;
+
+// Scenario parameters.
+static constexpr int kNumAdoCars = 3;
+static constexpr int kNumLanes = 3;  // Number of lanes in the scenario.
 static constexpr double kLaneWidth = 3.;
 static constexpr double kDragwayLength = 150.;
-static const std::string kEgoCarName = "ego_car";
-static const std::string kLaneChangerName = "lane_changer";
 
-std::unique_ptr<maliput::api::RoadGeometry> MakeRoad(int num_dragway_lanes) {
+// Diagram wiring details.
+static constexpr int kNoiseInputPort = 0;
+static constexpr int kTrafficInputPort = 1;
+static constexpr int kGoalLaneInputPort = 2;
+
+static constexpr int kPoseOutputPort = 0;
+static constexpr int kVelocityOutputPort = 1;
+
+static constexpr int kEgoPort = 0;  // Identifier for both Demux and PoseAggregator.
+
+// Model parameters.
+static constexpr double kPeriodSec = 0.1;  // For IDM.
+static constexpr ScanStrategy kScanStrategy = ScanStrategy::kPath;
+static constexpr RoadPositionStrategy kRoadPositionStrategy =
+    RoadPositionStrategy::kExhaustiveSearch;
+
+// Solver settings.
+static constexpr double kGuessDurationSec = 10.;  // seconds
+static constexpr int kNumTimeSamples = 21;
+
+std::unique_ptr<RoadGeometry> MakeDragway(int num_dragway_lanes) {
   return std::make_unique<maliput::dragway::RoadGeometry>(
-      maliput::api::RoadGeometryId({"Dragway"}),
-      num_dragway_lanes, kDragwayLength, kLaneWidth,
-      0. /* shoulder width */, 5. /* maximum_height */,
+      maliput::api::RoadGeometryId({"dragway"}), num_dragway_lanes,
+      kDragwayLength, kLaneWidth, 0. /* shoulder width */,
+      5. /* maximum_height */,
       std::numeric_limits<double>::epsilon() /* linear_tolerance */,
       std::numeric_limits<double>::epsilon() /* angular_tolerance */);
 }
 
-std::pair<std::unique_ptr<AutomotiveSimulator<double>>, std::vector<int>>
-SetupSimulator(bool is_playback_mode, int num_dragway_lanes,
-               std::unique_ptr<maliput::api::RoadGeometry> road,
-               const std::vector<const maliput::api::Lane*>& goal_lanes) {
-  DRAKE_DEMAND(num_dragway_lanes > 0);
-  std::vector<int> ids{};
+// ** TODO ** Does it make sense for this to be a class rather than a function?
+// (Here, we have to worry about tranferring unique_ptrs in the main function)
+std::pair<std::unique_ptr<Diagram<double>>, const System<double>*>
+MakeIdmSimpleCarSubsystem(const std::string& name, const RoadGeometry& road) {
+  std::unique_ptr<systems::DiagramBuilder<double>> builder{
+      std::make_unique<systems::DiagramBuilder<double>>()};
 
-  const int num_cars = goal_lanes.size() + 1 /* ego + ado cars */;
-  auto simulator = (is_playback_mode)
-      ? std::make_unique<AutomotiveSimulator<double>>(
-          std::make_unique<lcm::DrakeLcm>(), num_cars)
-      : std::make_unique<AutomotiveSimulator<double>>(nullptr, num_cars);
+  const auto idm_controller = builder->template AddSystem<IdmController<double>>(
+      road, kScanStrategy, kRoadPositionStrategy, kPeriodSec);
+  idm_controller->set_name(name + "_idm_controller");
 
-  auto simulator_road = simulator->SetRoadGeometry(std::move(road));
-  auto dragway_road_geometry =
-      dynamic_cast<const maliput::dragway::RoadGeometry*>(simulator_road);
+  const auto simple_car = builder->template AddSystem<SimpleCar<double>>();
+  simple_car->set_name(name + "_simple_car");
 
-  // TODO: We can just delete these altogether.
-  // Set the initial states.
-  const int kEgoStartLaneIndex = 0;
-  const int kEgoGoalLaneIndex = 0;
+  const auto pursuit = builder->template AddSystem<PurePursuitController<double>>();
+  pursuit->set_name(name + "_pure_pursuit_controller");
+  const auto mux = builder->template AddSystem<systems::Multiplexer<double>>(
+          DrivingCommand<double>());
+  mux->set_name(name + "_mux");
 
-  const maliput::api::Lane* ego_start_lane =
-      dragway_road_geometry->junction(0)->segment(0)->lane(kEgoStartLaneIndex);
-  const maliput::api::Lane* ego_goal_lane =
-      dragway_road_geometry->junction(0)->segment(0)->lane(kEgoGoalLaneIndex);
+  // Wire up the simple car to IdmController.
+  builder->Connect(simple_car->pose_output(), idm_controller->ego_pose_input());
+  builder->Connect(simple_car->velocity_output(),
+                   idm_controller->ego_velocity_input());
 
-  // Provide a valid instantiation to be fixed in the optimization.
-  const double start_s_ego = 5.;
-  const double start_speed_ego = 20.;
-  const maliput::api::GeoPosition start_position_ego =
-      ego_start_lane->ToGeoPosition({start_s_ego, 0., 0.});
+  // Wire up the simple car to PurePursuitController.
+  builder->Connect(simple_car->pose_output(), pursuit->ego_pose_input());
+  // Build DrivingCommand via a mux of two scalar outputs.
+  builder->Connect(pursuit->steering_command_output(),
+                   mux->get_input_port(DrivingCommandIndices::kSteeringAngle));
+  builder->Connect(idm_controller->acceleration_output(),
+                   mux->get_input_port(DrivingCommandIndices::kAcceleration));
 
-  SimpleCarState<double> ego_initial_state;
-  ego_initial_state.set_x(start_position_ego.x());
-  ego_initial_state.set_y(start_position_ego.y());
-  ego_initial_state.set_heading(0.);
-  ego_initial_state.set_velocity(start_speed_ego);
+  // TODO(jadecastro) For now, we don't need a model vector ctor for Adder,
+  // but *will* need it once AutoDiff with named vectors is resolved.
+  const auto adder = builder->template AddSystem<systems::Adder<double>>(2, 2);
+  builder->Connect(mux->get_output_port(0), adder->get_input_port(0));
+  builder->Connect(adder->get_output_port(), simple_car->get_input_port(0));
 
-  const int ego_id = simulator->AddIdmControlledCar(
-      kEgoCarName, true /* move along the "s"-direction */,
-      ego_initial_state, ego_goal_lane, ScanStrategy::kPath,
-      RoadPositionStrategy::kExhaustiveSearch, 0. /* (unused) */);
-  ids.emplace_back(ego_id);
+  // Export the i/o.
+  const int noise_port = builder->ExportInput(adder->get_input_port(1));
+  const int traffic_port =
+      builder->ExportInput(idm_controller->traffic_input());
+  const int lane_port = builder->ExportInput(pursuit->lane_input());
 
-  int i{0};
-  for (const auto goal_lane : goal_lanes) {
-    // Provide a valid instantiation for the lane changer (note these will be
-    // overwritten).
-    const double start_s_lc = 5.;
-    const double start_speed_lc = 10.;
-    const maliput::api::GeoPosition start_position_lc =
-        ego_start_lane->ToGeoPosition({start_s_lc, 0., 0.});
+  const int pose_port = builder->ExportOutput(simple_car->pose_output());
+  const int velocity_port = builder->ExportOutput(simple_car->velocity_output());
 
-    SimpleCarState<double> lc_initial_state;
-    lc_initial_state.set_x(start_position_lc.x());
-    lc_initial_state.set_y(start_position_lc.y());
-    lc_initial_state.set_heading(0.);
-    lc_initial_state.set_velocity(start_speed_lc);
+  // Seems silly, but all this will go away once this function becomes a member
+  // of a class.
+  DRAKE_DEMAND(noise_port == kNoiseInputPort);
+  DRAKE_DEMAND(traffic_port == kTrafficInputPort);
+  DRAKE_DEMAND(lane_port == kGoalLaneInputPort);
+  DRAKE_DEMAND(pose_port == kPoseOutputPort);
+  DRAKE_DEMAND(velocity_port == kVelocityOutputPort);
 
-    // All lane changers move into the ego car's lane.
-    const int ado_id = simulator->AddIdmControlledCar(
-        kLaneChangerName + "_" + std::to_string(i++),
-        true /* move along the "s"-direction */, lc_initial_state, goal_lane,
-        ScanStrategy::kPath, RoadPositionStrategy::kExhaustiveSearch,
-        0. /* (unused) */);
-    ids.emplace_back(ado_id);
-  }
-  return std::make_pair(
-      std::unique_ptr<AutomotiveSimulator<double>>(simulator.release()), ids);
+  std::unique_ptr<systems::Diagram<double>> diagram = builder->Build();
+  diagram->set_name(name);
+  DRAKE_DEMAND(simple_car !=
+               nullptr);  // ** TODO ** Remove once we're conviced it is.
+  return std::make_pair(std::move(diagram), simple_car);
 }
 
-template <typename T>
-void SetSimpleCarState(const systems::Diagram<T>& diagram,
-                       const systems::System<T>& car,
-                       const SimpleCarState<T>& value,
-                       systems::Context<T>* context) {
-  systems::VectorBase<T>& context_state =
-      diagram.GetMutableSubsystemContext(car, context)
-      .get_mutable_continuous_state_vector();
-  SimpleCarState<T>* const state =
-      dynamic_cast<SimpleCarState<T>*>(&context_state);
+std::unique_ptr<Diagram<double>> MakeScenarioDiagram(
+    std::vector<std::unique_ptr<Diagram<double>>>* diagrams,
+    std::unique_ptr<System<double>> ego_car) {
+  // ** TODO ** Demand that all the lane input ports are wired up.
+  // ** TODO ** Assert if the ego_car's inputs aren't the DrivingCommands we're
+  //            expecting below.
+  // ** TODO ** Assert if any of the ado_car's inputs aren't the DrivingCommands
+  //            we're expecting below.
+  const int num_cars = diagrams->size() + 1;
+
+  std::unique_ptr<systems::DiagramBuilder<double>> builder{
+      std::make_unique<systems::DiagramBuilder<double>>()};
+
+  const int input_size = DrivingCommandIndices::kNumCoordinates * num_cars;
+  const auto demux =
+      builder->template AddSystem<systems::Demultiplexer<double>>(
+          input_size, DrivingCommandIndices::kNumCoordinates);
+  demux->set_name("demux");
+  const auto aggregator =
+      builder->template AddSystem<systems::rendering::PoseAggregator<double>>();
+  aggregator->set_name("pose_aggregator");
+
+  // Ego car.
+  const auto ego_car_system = builder->AddSystem(std::move(ego_car));
+  const auto ego_car_alias = dynamic_cast<const automotive::SimpleCar<double>*>(
+      ego_car_system);
+  DRAKE_DEMAND(ego_car_alias != nullptr);
+  builder->Connect(demux->get_output_port(kEgoPort),
+                   ego_car_alias->get_input_port(0));
+  {
+    auto ports = aggregator->AddSinglePoseAndVelocityInput(
+        ego_car_alias->get_name(), kEgoPort);
+    builder->Connect(ego_car_alias->pose_output(), ports.pose_descriptor);
+    builder->Connect(ego_car_alias->velocity_output(), ports.velocity_descriptor);
+  }
+
+  // Ado cars.
+  // ** TODO ** Watch that the port ordering is aligned with the right system
+  //            when called by index below!  Also should agree with
+  //            PoseAggregator.
+  int demux_port{1};
+  while (diagrams->size() > 0) {
+    DRAKE_DEMAND(demux_port != kEgoPort);
+    const auto diagram_alias =
+        builder->AddSystem(std::move(*diagrams->erase(diagrams->begin())));
+    builder->Connect(demux->get_output_port(demux_port++),
+                     diagram_alias->get_input_port(kNoiseInputPort));
+    builder->Connect(aggregator->get_output_port(0),
+                     diagram_alias->get_input_port(kTrafficInputPort));
+    auto ports =
+        aggregator->AddSinglePoseAndVelocityInput(
+            diagram_alias->get_name(), kEgoPort);
+    builder->Connect(diagram_alias->get_output_port(kPoseOutputPort),
+                     ports.pose_descriptor);
+    builder->Connect(diagram_alias->get_output_port(kVelocityOutputPort),
+                     ports.velocity_descriptor);
+  }
+
+  // Export the stacked input.
+  builder->ExportInput(demux->get_input_port(0));
+
+  std::unique_ptr<systems::Diagram<double>> diagram = builder->Build();
+  diagram->set_name("crash_finder_scenario");
+
+  DRAKE_DEMAND(ego_car !=
+               nullptr);  // ** TODO ** Remove once we're conviced it is.
+  return diagram;
+}
+
+std::vector<int> GetEgoIndices(const System<double>* ego_car_alias,
+                               std::vector<const System<double>*> systems) {
+  int index{0};
+  std::vector<int> result(SimpleCarStateIndices::kNumCoordinates);
+  // ** TODO ** Use find?
+  for (const auto& system : systems) {
+    if (system == ego_car_alias) {
+      std::iota(std::begin(result), std::end(result), index);
+      break;
+    }
+    index += SimpleCarStateIndices::kNumCoordinates;
+  }
+  return result;
+}
+
+std::vector<std::vector<int>> GetAdoIndices(
+    const std::vector<const System<double>*>& ado_car_aliases,
+    std::vector<const System<double>*> systems) {
+  int index{0};
+  std::vector<std::vector<int>> result{};
+  // ** TODO ** Use find?
+  for (const auto& alias : ado_car_aliases) {
+    std::vector<int> car_result(SimpleCarStateIndices::kNumCoordinates);
+    for (const auto& system : systems) {
+      if (system == alias) {
+        std::iota(std::begin(car_result), std::end(car_result), index);
+        break;
+      }
+      index += SimpleCarStateIndices::kNumCoordinates;
+    }
+    result.push_back(car_result);
+  }
+  return result;
+}
+
+void FixLaneInput(const LaneDirection& lane_direction,
+                  systems::Context<double>* context) {
+  DRAKE_DEMAND(context != nullptr);
+  auto lane_value = systems::AbstractValue::Make(lane_direction);
+  context->FixInputPort(kGoalLaneInputPort, std::move(lane_value));
+}
+
+void SetSubsystemState(const SimpleCarState<double>& value,
+                       systems::Context<double>* context) {
+  systems::VectorBase<double>& context_state =
+      context->get_mutable_continuous_state_vector();
+  SimpleCarState<double>* const state =
+      dynamic_cast<SimpleCarState<double>*>(&context_state);
   DRAKE_ASSERT(state);
   state->set_value(value.get_value());
 }
 
-// TODO(jadecastro) Diagram context yearns for a better way at mapping
-// subcontext to subsystem.
-void PopulateContext(
-    const systems::Diagram<double>& diagram,
-    const SimpleCarState<double>& ego_initial_conditions,
-    const std::vector<SimpleCarState<double>*>& lc_initial_conditions,
-    std::vector<const systems::System<double>*>& systems,
-    systems::Context<double>* context) {
-  int i{0};
-  for (const auto& system : systems) {
-    std::string name = system->get_name();
-    //    std::cout << " NAME " << name << std::endl;
-    if (name.find(kEgoCarName + "_simple_car") != std::string::npos) {
-      SetSimpleCarState(diagram, *system, ego_initial_conditions, context);
-    } else if ((name.find(kLaneChangerName) != std::string::npos) &&
-               (name.find("simple_car") != std::string::npos)) {
-      SetSimpleCarState(diagram, *system, *lc_initial_conditions[i++], context);
-      // std::cout << "  Ado ic "
-      //          << context->get_continuous_state_vector().CopyToVector()
-      //          << std::endl;
-    }
-  }
-}
+std::unique_ptr<DirectCollocation> InitializeFalsifier(
+    const systems::Diagram<double>& scenario_diagram) {
+  const auto& plant =
+      dynamic_cast<const systems::System<double>&>(scenario_diagram);
+  // Set up a direct-collocation problem.
+  const double kMinTimeStep = 0.2 * kGuessDurationSec / (kNumTimeSamples - 1);
+  const double kMaxTimeStep = 3. * kGuessDurationSec / (kNumTimeSamples - 1);
+  const double kLimit = 100.;
 
-int DoMain(void) {
-  using std::log;
-  using std::sqrt;
-
-  const int kNumLanes = 3;  // Number of lanes in the scenario.
-
-  std::unique_ptr<maliput::api::RoadGeometry> road = MakeRoad(kNumLanes);
-  const maliput::api::Segment* segment = road->junction(0)->segment(0);
-
-  const maliput::api::Lane* goal_lane_car0 = segment->lane(0);
-  const maliput::api::Lane* goal_lane_car1 = segment->lane(1);
-  const maliput::api::Lane* goal_lane_car2 = segment->lane(2);
-  //  const maliput::api::Lane* goal_lane_car3 = segment->lane(0);
-
-  std::vector<const maliput::api::Lane*> goal_lanes;
-  goal_lanes.push_back(goal_lane_car0);
-  goal_lanes.push_back(goal_lane_car1);
-  goal_lanes.push_back(goal_lane_car2);
-  //  goal_lanes.push_back(goal_lane_car3);
-
-  const int num_ado_cars = goal_lanes.size();
-
-  std::unique_ptr<AutomotiveSimulator<double>> simulator;
-  std::vector<int> ids;
-  std::tie(simulator, ids) = SetupSimulator(
-      false /* is_playback_mode */, kNumLanes, std::move(road), goal_lanes);
-
-  simulator->BuildAndInitialize();
-
-  const systems::System<double>& plant = simulator->GetDiagram();
   auto context = plant.CreateDefaultContext();
-
-  // Set up a direct-collocation feasibility problem.
-  const double guess_duration = 10.;  // seconds
-  const int kNumTimeSamples = 21;
-  const double kMinTimeStep = 0.2 * guess_duration / (kNumTimeSamples - 1);
-  const double kMaxTimeStep = 3. * guess_duration / (kNumTimeSamples - 1);
-
-  DirectCollocation prog(&plant, *context, kNumTimeSamples,
-                         kMinTimeStep, kMaxTimeStep);
+  std::unique_ptr<DirectCollocation> prog(new DirectCollocation(
+      &plant, *context, kNumTimeSamples, kMinTimeStep, kMaxTimeStep));
 
   // Ensure that time intervals are evenly spaced.
-  prog.AddEqualTimeIntervalsConstraints();
-
-  const double delta_y =  0.;  // 0.5 * kLaneWidth;
-  // VectorX<double> vect0(14);
-  // VectorX<double> vectf(14);
-
-  const auto& diagram = dynamic_cast<const systems::Diagram<double>&>(plant);
-
-  // Supply ICs externally to main().
-  SimpleCarState<double> ego_initial_conditions;
-  ego_initial_conditions.set_x(30.);
-  ego_initial_conditions.set_y(-1. * kLaneWidth + delta_y);
-  ego_initial_conditions.set_heading(0.);
-  ego_initial_conditions.set_velocity(7.);
-
-  std::vector<SimpleCarState<double>*> lc_initial_conditions;
-  SimpleCarState<double> car0;
-  car0.set_x(40.);
-  car0.set_y(goal_lane_car0->ToGeoPosition({0., 0., 0.}).y());
-  car0.set_heading(0.);
-  car0.set_velocity(5.);
-  lc_initial_conditions.push_back(&car0);
-
-  SimpleCarState<double> car1;
-  car1.set_x(60.);
-  car1.set_y(goal_lane_car1->ToGeoPosition({0., 0., 0.}).y());
-  car1.set_heading(0.);
-  car1.set_velocity(8.);
-  lc_initial_conditions.push_back(&car1);
-
-  SimpleCarState<double> car2;
-  car2.set_x(10.);
-  car2.set_y(goal_lane_car2->ToGeoPosition({0., 0., 0.}).y());
-  car2.set_heading(0.);
-  car2.set_velocity(5.);
-  lc_initial_conditions.push_back(&car2);
-
-  SimpleCarState<double> car3;
-  car3.set_x(20.);
-  car3.set_y(1. * kLaneWidth + delta_y);
-  car3.set_heading(0.);
-  car3.set_velocity(10.);
-  // lc_initial_conditions.push_back(&car3);
-
-  std::vector<const systems::System<double>*> systems = diagram.GetSystems();
-  auto initial_context = diagram.CreateDefaultContext();
-  PopulateContext(diagram, ego_initial_conditions, lc_initial_conditions,
-                  systems, initial_context.get());
-
-  // Supply final conditions for the guessed trajectory.
-  SimpleCarState<double> ego_final_conditions;
-  ego_final_conditions.set_x(40.);
-  ego_final_conditions.set_y(-0.6 * kLaneWidth + delta_y);
-  ego_final_conditions.set_heading(0.);
-  ego_final_conditions.set_velocity(5.0);
-
-  std::vector<SimpleCarState<double>*> lc_final_conditions;
-  car0.set_x(60.);
-  car0.set_y(goal_lane_car0->ToGeoPosition({0., 0., 0.}).y());
-  car0.set_heading(0.);
-  car0.set_velocity(5.);
-  lc_final_conditions.push_back(&car0);
-
-  car1.set_x(80.);
-  car1.set_y(goal_lane_car1->ToGeoPosition({0., 0., 0.}).y());
-  car1.set_heading(0.);
-  car1.set_velocity(8.);
-  lc_final_conditions.push_back(&car1);
-
-  car2.set_x(40.);
-  car2.set_y(goal_lane_car2->ToGeoPosition({0., 0., 0.}).y());
-  car2.set_heading(0.);
-  car2.set_velocity(6.);
-  lc_final_conditions.push_back(&car2);
-
-  car3.set_x(30.);
-  car3.set_y(0.4 * kLaneWidth + delta_y);
-  car3.set_heading(0.);
-  car3.set_velocity(10.);
-  // lc_final_conditions.push_back(&car3);
-
-  auto final_context = diagram.CreateDefaultContext();
-  PopulateContext(diagram, ego_final_conditions, lc_final_conditions,
-                  systems, final_context.get());
-
-  std::cout << " initial states \n "
-            << initial_context->get_continuous_state_vector().CopyToVector()
-            << std::endl;
-  std::cout << " final states \n"
-            << final_context->get_continuous_state_vector().CopyToVector()
-            << std::endl;
+  prog->AddEqualTimeIntervalsConstraints();
 
   // Generous bounding box on all decision variables.
-  prog.AddBoundingBoxConstraint(-100, 100, prog.decision_variables());
+  prog->AddBoundingBoxConstraint(-kLimit, kLimit, prog->decision_variables());
 
-  // Parse the initial conditions.
+  return prog;
+}
+
+void FixInitialConditions(const systems::Context<double>& initial_context,
+                          DirectCollocation* prog) {
+  // Parse the initial conditions and set a constraint there.
   const systems::VectorBase<double>& initial_states =
-      initial_context->get_continuous_state_vector();
-  prog.AddLinearConstraint(prog.initial_state() ==
-                           initial_states.CopyToVector());
+      initial_context.get_continuous_state_vector();
+  prog->AddLinearConstraint(prog->initial_state() ==
+                            initial_states.CopyToVector());
+}
 
-
-  // Getters for the subsystem (SimpleCar) states.
-  // TODO: I wonder if this is horribly inefficient.
-  auto ego_indices = [systems]() {
-    int index{0};
-    auto result = std::vector<int>(SimpleCarStateIndices::kNumCoordinates);
-    for (const auto& system : systems) {
-      std::string name = system->get_name();
-      if (name.find(kEgoCarName + "_simple_car") != std::string::npos) {
-        std::iota(std::begin(result), std::end(result), index);
-        break;
-      }
-      if (name.find("simple_car") != std::string::npos) {
-        index += SimpleCarStateIndices::kNumCoordinates;
-      }
-    }
-    return result;
-  };
-
-  auto ado_indices = [systems](int ado_car_index) {
-    int index{0};
-    auto result = std::vector<int>(SimpleCarStateIndices::kNumCoordinates);
-    for (const auto& system : systems) {
-      std::string name = system->get_name();
-      if ((name.find(kLaneChangerName) != std::string::npos) &&
-          (name.find("_" + std::to_string(ado_car_index) + "_") !=
-           std::string::npos) &&
-          (name.find("simple_car") != std::string::npos)) {
-        std::iota(std::begin(result), std::end(result), index);
-        break;
-      }
-      if (name.find("simple_car") != std::string::npos) {
-        index += SimpleCarStateIndices::kNumCoordinates;
-      }
-    }
-    return result;
-  };
-
-  const int kX = SimpleCarStateIndices::kX;
-  const int kY = SimpleCarStateIndices::kY;
-
-  // Constraints keeping the cars on the road.
-  prog.AddConstraintToAllKnotPoints(
-      prog.state()(ego_indices().at(kY)) >= -1.5 * kLaneWidth);
-  prog.AddConstraintToAllKnotPoints(
-      prog.state()(ego_indices().at(kY)) <= 0.5 * kLaneWidth);
-
-  prog.AddConstraintToAllKnotPoints(
-      prog.state()(ado_indices(0).at(kY)) >= -1.5 * kLaneWidth);
-  prog.AddConstraintToAllKnotPoints(
-      prog.state()(ado_indices(0).at(kY)) <= 0.5 * kLaneWidth);
-
-  prog.AddConstraintToAllKnotPoints(
-      prog.state()(ado_indices(1).at(kY)) >= -1.5 * kLaneWidth);
-  prog.AddConstraintToAllKnotPoints(
-      prog.state()(ado_indices(1).at(kY)) <= 0.5 * kLaneWidth);
-
-  // TODO(jadecastro) Infeasible with these active?
-  // prog.AddConstraintToAllKnotPoints(
-  //    prog.state()(ado_indices(2).at(kY)) >= -1.5 * kLaneWidth);
-  // prog.AddConstraintToAllKnotPoints(
-  //    prog.state()(ado_indices(2).at(kY)) <= 0.5 * kLaneWidth);
-
-  // Solve a collision with one of the cars, in this case, Traffic Car 2 merging
-  // into the middle lane.  Assume for now that, irrespective of its
-  // orientation, the traffic car occupies a lane-aligned bounding box.
-
-  // TODO(jadecastro) As above, this assumes the ordering of the context. Update
-  // Dircol to make this less fragile.
-  prog.AddLinearConstraint(prog.final_state()(ado_indices(2).at(kY)) <=
-                           prog.final_state()(ego_indices().at(kY))
-                           + 0.5 * kLaneWidth);
-  prog.AddLinearConstraint(prog.final_state()(ado_indices(2).at(kX)) >=
-                           prog.final_state()(ego_indices().at(kX)) - 2.5);
-  prog.AddLinearConstraint(prog.final_state()(ado_indices(2).at(kX)) <=
-                           prog.final_state()(ego_indices().at(kX)) + 2.5);
-
+void SetLinearGuessTrajectory(const systems::Context<double>& initial_context,
+                              const systems::Context<double>& final_context,
+                              DirectCollocation* prog) {
   const Eigen::VectorXd x0 =
-      initial_context->get_continuous_state_vector().CopyToVector();
+      initial_context.get_continuous_state_vector().CopyToVector();
   const Eigen::VectorXd xf =
-      final_context->get_continuous_state_vector().CopyToVector();
+      final_context.get_continuous_state_vector().CopyToVector();
   auto guess_state_trajectory = PiecewisePolynomial<double>::FirstOrderHold(
-      {0, guess_duration}, {x0, xf});
-  prog.SetInitialTrajectory(PiecewisePolynomial<double>(),
-                            guess_state_trajectory);
+      {0, kGuessDurationSec}, {x0, xf});
+  prog->SetInitialTrajectory(PiecewisePolynomial<double>(),
+                             guess_state_trajectory);
+}
 
-  // Add a log-probability cost representing the deviation of the commands from
-  // a deterministic evolution of IDM/PurePursuit (nominal policy).  We assume
-  // that the policy has zero-mean Gaussian distribution.
-  // TODO: Separate out Sigmas for steering and acceleration.
+// N.B. Assumes Dragway.
+void SetLateralLaneBounds(const std::vector<int>& car_indices,
+                          std::pair<const Lane*, const Lane*> lane_bounds,
+                          DirectCollocation* prog) {
+  std::vector<double> y_bounds{};
+  y_bounds.push_back(lane_bounds.first->ToGeoPosition(
+      {0., lane_bounds.first->lane_bounds(0.).min(), 0.}).y());
+  y_bounds.push_back(lane_bounds.first->ToGeoPosition(
+      {0., lane_bounds.first->lane_bounds(0.).max(), 0.}).y());
+  y_bounds.push_back(lane_bounds.second->ToGeoPosition(
+      {0., lane_bounds.first->lane_bounds(0.).min(), 0.}).y());
+  y_bounds.push_back(lane_bounds.second->ToGeoPosition(
+      {0., lane_bounds.first->lane_bounds(0.).max(), 0.}).y());
+  prog->AddConstraintToAllKnotPoints(
+      prog->state()(car_indices.at(kY)) >=
+      *std::min_element(y_bounds.begin(), y_bounds.end()));
+  prog->AddConstraintToAllKnotPoints(
+      prog->state()(car_indices.at(kY)) <=
+      *std::max_element(y_bounds.begin(), y_bounds.end()));
+}
+
+// Add cost representing the noise perturbation from a deterministic evolution
+// of IDM/PurePursuit (nominal policy).  We assume that the policy has a
+// state-independent, zero-mean Gaussian distribution.
+// ** TODO ** Separate out Sigmas for steering and acceleration.
+void AddLogProbabilityCost(DirectCollocation* prog) {
   const double kSigma = 50.;
   const double kCoeff = 1. / (2. * kSigma * kSigma);
   symbolic::Expression running_cost;
-  for (int i{0}; i < prog.input().size(); ++i) {
-    std::cout << " prog.input()(i) " << prog.input()(i) << std::endl;
-    running_cost += kCoeff * prog.input()(i) * prog.input()(i);
+  for (int i{0}; i < prog->input().size(); ++i) {
+    std::cout << " prog->input()(i) " << prog->input()(i) << std::endl;
+    running_cost += kCoeff * prog->input()(i) * prog->input()(i);
   }
-  prog.AddRunningCost(running_cost);
+  prog->AddRunningCost(running_cost);
+}
 
-  // Additionally, provide a chance constraint on drawing the sample path of the
-  // disturbance.
+// Add a log-probability contraints representing the deviation of the commands
+// from a deterministic evolution of IDM/PurePursuit (nominal policy).  We
+// assume that the policy has zero-mean Gaussian distribution.  ** TODO **
+// Separate out Sigmas for steering and acceleration.
+void AddLogProbabilityChanceConstraint(DirectCollocation* prog) {
+  using std::log;
+  using std::sqrt;
+
+  const double kSigma = 50.;
   const double kSamplePathProb = 0.5;
   const double kP = 2. * kNumTimeSamples * kSigma * kSigma *
-      log(1. / (sqrt(2. * M_PI) * kSigma)) -
-      2. * kSigma * kSigma * log(kSamplePathProb);
+                        log(1. / (sqrt(2. * M_PI) * kSigma)) -
+                    2. * kSigma * kSigma * log(kSamplePathProb);
   drake::unused(kP);
-  for (int i{0}; i < prog.input().size(); ++i) {
-    std::cout << " prog.input()(i) " << prog.input()(i) << std::endl;
-    // prog.AddConstraint(prog.input()(i) * prog.input()(i) >= kP);
+  for (int i{0}; i < prog->input().size(); ++i) {
+    std::cout << " prog->input()(i) " << prog->input()(i) << std::endl;
+    // prog->AddConstraint(prog->input()(i) * prog->input()(i) >= kP);
   }
+}
 
-  const auto result = prog.Solve();
-
-  // Extract the initial context from prog and plot the solution using MATLAB.
-  // To view, type `bazel run //common/proto:call_python_client_cli`.
-
-  Eigen::MatrixXd inputs = prog.GetInputSamples();
-  Eigen::MatrixXd states = prog.GetStateSamples();
-  Eigen::VectorXd times_out = prog.GetSampleTimes();
-  Eigen::VectorXd ego_x = states.row(ego_indices().at(kX));
-  Eigen::VectorXd ego_y = states.row(ego_indices().at(kY));
+void PlotResult(const std::vector<int>& ego_indices,
+                const std::vector<std::vector<int>>& ado_indices,
+                const solvers::SolutionResult& result,
+                const DirectCollocation& prog) {
+  const Eigen::MatrixXd inputs = prog.GetInputSamples();
+  const Eigen::MatrixXd states = prog.GetStateSamples();
+  const Eigen::VectorXd times_out = prog.GetSampleTimes();
+  const Eigen::VectorXd ego_x = states.row(ego_indices.at(kX));
+  const Eigen::VectorXd ego_y = states.row(ego_indices.at(kY));
   std::cout << " Sample times: " << times_out << std::endl;
   std::cout << " Inputs for ego car: " << inputs.row(0) << std::endl;
   std::cout << "                     " << inputs.row(1) << std::endl;
@@ -428,16 +379,16 @@ int DoMain(void) {
   CallPython("plt.xlabel", "ego car x (m)");
   CallPython("plt.ylabel", "ego car y (m)");
   CallPython("plt.show");
-  for (int i{0}; i < num_ado_cars; ++i) {
-    Eigen::VectorXd ado_x = states.row(ado_indices(i).at(kX));
-    Eigen::VectorXd ado_y = states.row(ado_indices(i).at(kY));
-    CallPython("figure", i+2);
+  for (int i{0}; i < kNumAdoCars; ++i) {
+    const Eigen::VectorXd ado_x = states.row(ado_indices[i].at(kX));
+    const Eigen::VectorXd ado_y = states.row(ado_indices[i].at(kY));
+    CallPython("figure", i + 2);
     CallPython("clf");
     CallPython("plot", ado_x, ado_y);
     CallPython("setvars", "ado_x_" + std::to_string(i), ado_x,
                "ado_y_" + std::to_string(i), ado_y);
-    CallPython("plt.xlabel", "ado car "+ std::to_string(i) +" x (m)");
-    CallPython("plt.ylabel", "ado car "+ std::to_string(i) +" y (m)");
+    CallPython("plt.xlabel", "ado car " + std::to_string(i) + " x (m)");
+    CallPython("plt.ylabel", "ado car " + std::to_string(i) + " y (m)");
     CallPython("plt.show");
   }
 
@@ -447,25 +398,189 @@ int DoMain(void) {
   // }
 
   std::cout << " SOLUTION RESULT: " << result << std::endl;
+}
 
-  //if (result == solvers::SolutionResult::kSolutionFound) {
+void SimulateResult(const DirectCollocation& prog) {
+  const Eigen::MatrixXd inputs = prog.GetInputSamples();
+  const Eigen::MatrixXd states = prog.GetStateSamples();
+  const Eigen::VectorXd times_out = prog.GetSampleTimes();
+  // ** TODO ** Make an automotive::Trajectory() from the result, and replay it
+  //            in AutomotiveSimulator.
   /*
+  const double kRealTimeRate = 1.;
   if (true) {
     // Build another simulator with LCM capability and run in play-back mode.
-    auto simulator_lcm = SetupSimulator(true, kNumLanes,
-                                        kNumLaneChangingCars);
-    simulator_lcm->Build();
-
-    // Pipe the offending initial condition into AutomotiveSimulator.
-    // TODO(jadecastro): Set up a trajectory-playback Diagram.
-    const auto& plant_lcm = simulator_lcm->GetDiagram();
-    auto context_lcm = plant_lcm.CreateDefaultContext();
-    context_lcm->get_mutable_continuous_state().SetFromVector(states.col(0));
-
-    simulator_lcm->Start(1., std::move(context_lcm));
-    simulator_lcm->StepBy(10.);
+    auto simulator = std::unique_ptr<AutomotiveSimulator>();
+    for (int i{0}; i < states.cols(); i++) {
+        simulator->AddTrajectoryFollower(states.col(i));
+    }
+    simulator->Build();
+    simulator->Start(kRealTimeRate);
+    simulator->StepBy(times.back());
   }
   */
+}
+
+int DoMain(void) {
+  std::unique_ptr<RoadGeometry> road = MakeDragway(kNumLanes);
+  const maliput::api::Segment* segment = road->junction(0)->segment(0);
+
+  // Make three ado cars.
+  std::vector<std::unique_ptr<Diagram<double>>> ado_car_subsystems(kNumAdoCars);
+  std::vector<const System<double>*> ado_car_aliases(kNumAdoCars);
+  std::tie(ado_car_subsystems[0], ado_car_aliases[0]) =
+      MakeIdmSimpleCarSubsystem("ado_car_0", *road);
+  std::tie(ado_car_subsystems[1], ado_car_aliases[1]) =
+      MakeIdmSimpleCarSubsystem("ado_car_1", *road);
+  std::tie(ado_car_subsystems[2], ado_car_aliases[2]) =
+      MakeIdmSimpleCarSubsystem("ado_car_2", *road);
+
+  // Make an ego car.
+  auto ego_car = std::make_unique<SimpleCar<double>>();
+  ego_car->set_name("ego_car");
+  auto ego_car_alias = ego_car.get();
+
+  std::unique_ptr<Diagram<double>> scenario_diagram =
+      MakeScenarioDiagram(&ado_car_subsystems, std::move(ego_car));
+  std::vector<const System<double>*> systems = scenario_diagram->GetSystems();
+  auto context = scenario_diagram->CreateDefaultContext();
+
+  // Fix the goal lanes for each of the ado cars.
+  FixLaneInput(LaneDirection(segment->lane(0), true),
+               &scenario_diagram->GetMutableSubsystemContext(
+                   *ado_car_aliases[0], context.get()));
+  FixLaneInput(LaneDirection(segment->lane(1), true),
+               &scenario_diagram->GetMutableSubsystemContext(
+                   *ado_car_aliases[1], context.get()));
+  FixLaneInput(LaneDirection(segment->lane(2), true),
+               &scenario_diagram->GetMutableSubsystemContext(
+                   *ado_car_aliases[2], context.get()));
+
+  // Supply initial conditions (used as falsification constraints and for the
+  // initial guess trajectory).
+  auto initial_context = context->Clone();
+  SimpleCarState<double> initial_conditions;
+  initial_conditions.set_x(30.);
+  initial_conditions.set_y(-1. * kLaneWidth);
+  initial_conditions.set_heading(0.);
+  initial_conditions.set_velocity(7.);
+  SetSubsystemState(initial_conditions,
+                    &scenario_diagram->GetMutableSubsystemContext(
+                        *ego_car, initial_context.get()));
+  // ** TODO ** Collapse the above to two arguments, by making a class member.
+  //            (Requires us to load ICs externally).
+
+  initial_conditions.set_x(40.);
+  initial_conditions.set_y(segment->lane(0)->ToGeoPosition({0., 0., 0.}).y());
+  initial_conditions.set_heading(0.);
+  initial_conditions.set_velocity(5.);
+  SetSubsystemState(initial_conditions,
+                    &scenario_diagram->GetMutableSubsystemContext(
+                        *ado_car_aliases[0], initial_context.get()));
+
+  initial_conditions.set_x(60.);
+  initial_conditions.set_y(segment->lane(1)->ToGeoPosition({0., 0., 0.}).y());
+  initial_conditions.set_heading(0.);
+  initial_conditions.set_velocity(8.);
+  SetSubsystemState(initial_conditions,
+                    &scenario_diagram->GetMutableSubsystemContext(
+                        *ado_car_aliases[1], initial_context.get()));
+
+  initial_conditions.set_x(10.);
+  initial_conditions.set_y(segment->lane(2)->ToGeoPosition({0., 0., 0.}).y());
+  initial_conditions.set_heading(0.);
+  initial_conditions.set_velocity(5.);
+  SetSubsystemState(initial_conditions,
+                    &scenario_diagram->GetMutableSubsystemContext(
+                        *ado_car_aliases[2], initial_context.get()));
+
+  // Supply final conditions (only used for the initial guess trajectory).
+  auto final_context = context->Clone();
+  SimpleCarState<double> final_conditions;
+  final_conditions.set_x(40.);
+  final_conditions.set_y(-0.6 * kLaneWidth);
+  final_conditions.set_heading(0.);
+  final_conditions.set_velocity(5.0);
+  SetSubsystemState(final_conditions,
+                    &scenario_diagram->GetMutableSubsystemContext(
+                        *ego_car, final_context.get()));
+
+  final_conditions.set_x(60.);
+  final_conditions.set_y(segment->lane(0)->ToGeoPosition({0., 0., 0.}).y());
+  final_conditions.set_heading(0.);
+  final_conditions.set_velocity(5.);
+  SetSubsystemState(final_conditions,
+                    &scenario_diagram->GetMutableSubsystemContext(
+                        *ado_car_aliases[0], final_context.get()));
+
+  final_conditions.set_x(80.);
+  final_conditions.set_y(segment->lane(1)->ToGeoPosition({0., 0., 0.}).y());
+  final_conditions.set_heading(0.);
+  final_conditions.set_velocity(8.);
+  SetSubsystemState(final_conditions,
+                    &scenario_diagram->GetMutableSubsystemContext(
+                        *ado_car_aliases[1], final_context.get()));
+
+  final_conditions.set_x(40.);
+  final_conditions.set_y(segment->lane(2)->ToGeoPosition({0., 0., 0.}).y());
+  final_conditions.set_heading(0.);
+  final_conditions.set_velocity(6.);
+  SetSubsystemState(final_conditions,
+                    &scenario_diagram->GetMutableSubsystemContext(
+                        *ado_car_aliases[2], final_context.get()));
+
+  /*
+  std::cout << " initial states \n "
+            << initial_context->get_continuous_state_vector().CopyToVector()
+            << std::endl;
+  std::cout << " final states \n"
+            << final_context->get_continuous_state_vector().CopyToVector()
+            << std::endl;
+  */
+
+  std::unique_ptr<DirectCollocation> prog =
+      InitializeFalsifier(*scenario_diagram);
+
+  FixInitialConditions(*initial_context, prog.get());
+
+  // Getters for the subsystem (SimpleCar) states.
+  const std::vector<int> ego_indices = GetEgoIndices(ego_car_alias, systems);
+  const std::vector<std::vector<int>> ado_indices =
+      GetAdoIndices(ado_car_aliases, systems);
+
+  // Constraints keeping the cars on the road or in their lanes.
+  std::pair<const Lane*, const Lane*> lane_bounds;
+  lane_bounds.first = segment->lane(0);
+  lane_bounds.second = segment->lane(2);
+  SetLateralLaneBounds(ego_indices, lane_bounds, prog.get());
+  SetLateralLaneBounds(ado_indices[0], lane_bounds, prog.get());
+  SetLateralLaneBounds(ado_indices[1], lane_bounds, prog.get());
+  SetLateralLaneBounds(ado_indices[2], lane_bounds, prog.get());
+
+  // Solve a collision with one of the cars, in this case, Traffic Car 2 merging
+  // into the middle lane.  Assume for now that, irrespective of its
+  // orientation, the traffic car occupies a lane-aligned bounding box.
+  prog->AddLinearConstraint(prog->final_state()(ado_indices[2].at(kY)) <=
+                            prog->final_state()(ego_indices.at(kY)) +
+                                0.5 * kLaneWidth);
+  prog->AddLinearConstraint(prog->final_state()(ado_indices[2].at(kX)) >=
+                            prog->final_state()(ego_indices.at(kX)) - 2.5);
+  prog->AddLinearConstraint(prog->final_state()(ado_indices[2].at(kX)) <=
+                            prog->final_state()(ego_indices.at(kX)) + 2.5);
+
+  AddLogProbabilityCost(prog.get());
+
+  AddLogProbabilityChanceConstraint(prog.get());
+
+  SetLinearGuessTrajectory(*initial_context, *final_context, prog.get());
+
+  const auto result = prog->Solve();
+
+  // Extract the initial context from prog and plot the solution using MATLAB.
+  // To view, type `bazel run //common/proto:call_python_client_cli`.
+  PlotResult(ego_indices, ado_indices, result, *prog);
+
+  SimulateResult(*prog);
 
   return 0;
 }
