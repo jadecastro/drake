@@ -2,6 +2,7 @@
 #include <pybind11/pybind11.h>
 
 #include "drake/automotive/calc_ongoing_road_position.h"
+#include "drake/automotive/falsifier.h"
 #include "drake/automotive/gen/driving_command.h"
 #include "drake/automotive/idm_controller.h"
 #include "drake/automotive/maliput/api/lane_data.h"
@@ -91,11 +92,6 @@ PYBIND11_MODULE(automotive, m) {
                      doc.LaneDirection.with_s.doc);
   pysystems::AddValueInstantiation<LaneDirection>(m);
 
-  py::class_<Falsifier::InputStateTrajectory>(m, "InputStateTrajectory")
-      .def_readwrite("inputs", &Falsifier::InputStateTrajectory::inputs)
-      .def_readwrite("states", &Falsifier::InputStateTrajectory::states)
-      .def_readwrite("times_out", &Falsifier::InputStateTrajectory::times);
-
   // TODO(eric.cousineau) Bind this named vector automatically (see #8096).
   py::class_<DrivingCommand<T>, BasicVector<T>>(m, "DrivingCommand",
                                                 doc.DrivingCommand.doc)
@@ -108,6 +104,19 @@ PYBIND11_MODULE(automotive, m) {
            doc.DrivingCommand.set_steering_angle.doc)
       .def("set_acceleration", &DrivingCommand<T>::set_acceleration,
            doc.DrivingCommand.set_acceleration.doc);
+
+  py::class_<Falsifier::InputStateTrajectory>(m, "InputStateTrajectory")
+      .def_readwrite("inputs", &Falsifier::InputStateTrajectory::inputs)
+      .def_readwrite("states", &Falsifier::InputStateTrajectory::states)
+      .def_readwrite("times", &Falsifier::InputStateTrajectory::times);
+
+  py::class_<Falsifier>(m, "Falsifier")
+      .def(py::init<>())
+      .def("SetEgoLinearConstraint", &Falsifier::SetEgoLinearConstraint,
+           py::arg("A"), py::arg("b"), py::arg("t"))
+      .def("Run", &Falsifier::Run)
+      .def("get_trajectory", &Falsifier::get_trajectory,
+           py_reference_internal);
 
   py::class_<IdmController<T>, LeafSystem<T>>(m, "IdmController",
                                               doc.IdmController.doc)
@@ -191,7 +200,7 @@ PYBIND11_MODULE(automotive, m) {
       .def("pose_output", &SimpleCar<T>::pose_output, py_reference_internal,
            doc.SimpleCar.pose_output.doc)
       .def("velocity_output", &SimpleCar<T>::velocity_output,
-           py_reference_internal, doc.SimpleCar.velocity_output.doc);
+           py_reference_internal);
 
   // TODO(jadecastro) Bind more systems as appropriate.
 }

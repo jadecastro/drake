@@ -496,6 +496,14 @@ drake_cc_binary(
     ],
 )
 
+drake_cc_binary(
+    name = "falsifier_executor",
+    srcs = ["falsifier_executor.cc"],
+    deps = [
+        "//automotive:falsifier",
+    ],
+)
+
 drake_py_binary(
     name = "steering_command_driver",
     srcs = ["steering_command_driver.py"],

@@ -19,6 +19,7 @@
 #include "drake/systems/framework/diagram.h"
 #include "drake/systems/framework/diagram_builder.h"
 #include "drake/systems/primitives/adder.h"
+#include "drake/systems/primitives/constant_value_source.h"
 #include "drake/systems/primitives/demultiplexer.h"
 #include "drake/systems/primitives/multiplexer.h"
 #include "drake/systems/rendering/pose_aggregator.h"
@@ -138,6 +139,7 @@ MakeIdmSimpleCarSubsystem(const std::string& name, const RoadGeometry& road) {
 }
 
 std::unique_ptr<Diagram<double>> MakeScenarioDiagram(
+    const std::map<const Diagram<double>*, LaneDirection> goal_lane_map,
     std::vector<std::unique_ptr<Diagram<double>>>* diagrams,
     std::unique_ptr<System<double>> ego_car) {
   // ** TODO ** Demand that all the lane input ports are wired up.
@@ -180,8 +182,14 @@ std::unique_ptr<Diagram<double>> MakeScenarioDiagram(
   int demux_port{1};
   while (diagrams->size() > 0) {
     DRAKE_DEMAND(demux_port != kEgoPort);
-    const auto diagram_alias =
-        builder->AddSystem(std::move(*diagrams->erase(diagrams->begin())));
+    auto diagram = std::move(*diagrams->begin());
+    diagrams->erase(diagrams->begin());
+    const auto diagram_alias = builder->AddSystem(std::move(diagram));
+    const LaneDirection lane_direction = goal_lane_map.at(diagram_alias);
+    auto lane_source =
+        builder->template AddSystem<systems::ConstantValueSource<double>>(
+            systems::AbstractValue::Make<LaneDirection>(lane_direction));
+
     builder->Connect(demux->get_output_port(demux_port++),
                      diagram_alias->get_input_port(kNoiseInputPort));
     builder->Connect(aggregator->get_output_port(0),
@@ -193,6 +201,8 @@ std::unique_ptr<Diagram<double>> MakeScenarioDiagram(
                      ports.pose_descriptor);
     builder->Connect(diagram_alias->get_output_port(kVelocityOutputPort),
                      ports.velocity_descriptor);
+    builder->Connect(lane_source->get_output_port(0),
+                     diagram_alias->get_input_port(kGoalLaneInputPort));
   }
 
   // Export the stacked input.
@@ -201,8 +211,6 @@ std::unique_ptr<Diagram<double>> MakeScenarioDiagram(
   std::unique_ptr<systems::Diagram<double>> diagram = builder->Build();
   diagram->set_name("crash_finder_scenario");
 
-  DRAKE_DEMAND(ego_car !=
-               nullptr);  // ** TODO ** Remove once we're conviced it is.
   return diagram;
 }
 
@@ -224,10 +232,10 @@ std::vector<int> GetEgoIndices(const System<double>* ego_car_alias,
 std::vector<std::vector<int>> GetAdoIndices(
     const std::vector<const System<double>*>& ado_car_aliases,
     std::vector<const System<double>*> systems) {
-  int index{0};
   std::vector<std::vector<int>> result{};
-  // ** TODO ** Use find?
+  // ** TODO ** Use std::find()
   for (const auto& alias : ado_car_aliases) {
+    int index{0};
     std::vector<int> car_result(SimpleCarStateIndices::kNumCoordinates);
     for (const auto& system : systems) {
       if (system == alias) {
@@ -241,13 +249,6 @@ std::vector<std::vector<int>> GetAdoIndices(
   return result;
 }
 
-void FixLaneInput(const LaneDirection& lane_direction,
-                  systems::Context<double>* context) {
-  DRAKE_DEMAND(context != nullptr);
-  auto lane_value = systems::AbstractValue::Make(lane_direction);
-  context->FixInputPort(kGoalLaneInputPort, std::move(lane_value));
-}
-
 void SetSubsystemState(const SimpleCarState<double>& value,
                        systems::Context<double>* context) {
   systems::VectorBase<double>& context_state =
@@ -259,9 +260,9 @@ void SetSubsystemState(const SimpleCarState<double>& value,
 }
 
 std::unique_ptr<DirectCollocation> InitializeFalsifier(
-    const systems::Diagram<double>& scenario_diagram) {
+    systems::Diagram<double>& finalized_diagram) {
   const auto& plant =
-      dynamic_cast<const systems::System<double>&>(scenario_diagram);
+      dynamic_cast<const systems::System<double>&>(finalized_diagram);  // Need?
   // Set up a direct-collocation problem.
   const double kMinTimeStep = 0.2 * kGuessDurationSec / (kNumTimeSamples - 1);
   const double kMaxTimeStep = 3. * kGuessDurationSec / (kNumTimeSamples - 1);
@@ -302,6 +303,7 @@ void SetLinearGuessTrajectory(const systems::Context<double>& initial_context,
                              guess_state_trajectory);
 }
 
+/*
 // N.B. Assumes Dragway.
 void SetLateralLaneBounds(const std::vector<int>& car_indices,
                           std::pair<const Lane*, const Lane*> lane_bounds,
@@ -322,7 +324,7 @@ void SetLateralLaneBounds(const std::vector<int>& car_indices,
       prog->state()(car_indices.at(kY)) <=
       *std::max_element(y_bounds.begin(), y_bounds.end()));
 }
-
+*/
 // Add cost representing the noise perturbation from a deterministic evolution
 // of IDM/PurePursuit (nominal policy).  We assume that the policy has a
 // state-independent, zero-mean Gaussian distribution.
@@ -440,21 +442,21 @@ int DoMain(void) {
   ego_car->set_name("ego_car");
   auto ego_car_alias = ego_car.get();
 
+  // Fix the goal lanes for each of the ado cars.
+  std::map<const Diagram<double>*, LaneDirection> goal_lane_map;
+  goal_lane_map.insert(std::make_pair(
+      ado_car_subsystems[0].get(), LaneDirection(segment->lane(0), true)));
+  goal_lane_map.insert(std::make_pair(
+      ado_car_subsystems[1].get(), LaneDirection(segment->lane(1), true)));
+  goal_lane_map.insert(std::make_pair(
+      ado_car_subsystems[2].get(), LaneDirection(segment->lane(2), true)));
+
   std::unique_ptr<Diagram<double>> scenario_diagram =
-      MakeScenarioDiagram(&ado_car_subsystems, std::move(ego_car));
+      MakeScenarioDiagram(goal_lane_map, &ado_car_subsystems, std::move(ego_car));
   std::vector<const System<double>*> systems = scenario_diagram->GetSystems();
   auto context = scenario_diagram->CreateDefaultContext();
-
-  // Fix the goal lanes for each of the ado cars.
-  FixLaneInput(LaneDirection(segment->lane(0), true),
-               &scenario_diagram->GetMutableSubsystemContext(
-                   *ado_car_aliases[0], context.get()));
-  FixLaneInput(LaneDirection(segment->lane(1), true),
-               &scenario_diagram->GetMutableSubsystemContext(
-                   *ado_car_aliases[1], context.get()));
-  FixLaneInput(LaneDirection(segment->lane(2), true),
-               &scenario_diagram->GetMutableSubsystemContext(
-                   *ado_car_aliases[2], context.get()));
+  // auto diagram_context = dynamic_cast<systems::DiagramContext<double>*>(context.get());
+  // DRAKE_DEMAND(diagram_context != nullptr);
 
   // Supply initial conditions (used as falsification constraints and for the
   // initial guess trajectory).
@@ -466,7 +468,8 @@ int DoMain(void) {
   initial_conditions.set_velocity(7.);
   SetSubsystemState(initial_conditions,
                     &scenario_diagram->GetMutableSubsystemContext(
-                        *ego_car, initial_context.get()));
+                        *ego_car_alias, initial_context.get()));
+
   // ** TODO ** Collapse the above to two arguments, by making a class member.
   //            (Requires us to load ICs externally).
 
@@ -503,7 +506,7 @@ int DoMain(void) {
   final_conditions.set_velocity(5.0);
   SetSubsystemState(final_conditions,
                     &scenario_diagram->GetMutableSubsystemContext(
-                        *ego_car, final_context.get()));
+                        *ego_car_alias, final_context.get()));
 
   final_conditions.set_x(60.);
   final_conditions.set_y(segment->lane(0)->ToGeoPosition({0., 0., 0.}).y());
@@ -552,10 +555,10 @@ int DoMain(void) {
   std::pair<const Lane*, const Lane*> lane_bounds;
   lane_bounds.first = segment->lane(0);
   lane_bounds.second = segment->lane(2);
-  SetLateralLaneBounds(ego_indices, lane_bounds, prog.get());
-  SetLateralLaneBounds(ado_indices[0], lane_bounds, prog.get());
-  SetLateralLaneBounds(ado_indices[1], lane_bounds, prog.get());
-  SetLateralLaneBounds(ado_indices[2], lane_bounds, prog.get());
+  // SetLateralLaneBounds(ego_indices, lane_bounds, prog.get());
+  // SetLateralLaneBounds(ado_indices[0], lane_bounds, prog.get());
+  // SetLateralLaneBounds(ado_indices[1], lane_bounds, prog.get());
+  // SetLateralLaneBounds(ado_indices[2], lane_bounds, prog.get());
 
   // Solve a collision with one of the cars, in this case, Traffic Car 2 merging
   // into the middle lane.  Assume for now that, irrespective of its
