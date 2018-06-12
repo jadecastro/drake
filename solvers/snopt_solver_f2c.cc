@@ -275,7 +275,7 @@ void DoStuff(
     const std::vector<int> decision_variable_indices, snopt::doublereal F[],
     snopt::doublereal G[], size_t constraint_index, size_t grad_index,
     const Eigen::VectorXd& xvec, const Binding<C> binding) {
-  std::cout << " NL Constraint " << std::endl;
+  // std::cout << " NL Constraint " << std::endl;
   const auto& c = binding.evaluator();
   int num_constraints = SingleNonlinearConstraintSize(*c);
 
@@ -331,7 +331,7 @@ void EvaluateNonlinearConstraints(
     std::thread workers[constraint_list.size()];
     int index{0};
     for (const auto& binding : constraint_list) {
-      std::cout << " Thread Constraint # " << index << std::endl;
+      // std::cout << " Thread Constraint # " << index << std::endl;
       std::vector<int> decision_variable_indices =
           prog.FindDecisionVariableIndices(binding.variables());
       const auto& c = binding.evaluator();
@@ -349,9 +349,9 @@ void EvaluateNonlinearConstraints(
       workers[i].join();
     }
   } else {
-    int index{0};
+    // int index{0};
     for (const auto& binding : constraint_list) {
-      std::cout << " Constraint # " << index++ << std::endl;
+      // std::cout << " Constraint # " << index++ << std::endl;
       std::vector<int> decision_variable_indices =
           prog.FindDecisionVariableIndices(binding.variables());
       const auto& c = binding.evaluator();

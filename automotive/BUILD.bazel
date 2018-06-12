@@ -29,6 +29,7 @@ drake_cc_package_library(
     name = "automotive",
     deps = [
         ":automotive_simulator",
+        ":automotive_trajectory_optimization",
         ":bicycle_car",
         ":calc_ongoing_road_position",
         ":calc_smooth_acceleration",
@@ -175,6 +176,20 @@ drake_cc_library(
         "//automotive/maliput/dragway",
         "//common/proto:call_python",
         "//common:text_logging_gflags",
+        "//systems/trajectory_optimization:direct_collocation",
+    ],
+)
+
+drake_cc_library(
+    name = "automotive_trajectory_optimization",
+    srcs = ["automotive_trajectory_optimization.cc"],
+    hdrs = ["automotive_trajectory_optimization.h"],
+    deps = [
+        "//automotive:automotive_simulator",
+        "//automotive:simple_car",
+        "//automotive/maliput/api",
+        "//automotive/maliput/dragway",
+        "//common/proto:call_python",
         "//systems/trajectory_optimization:direct_collocation",
     ],
 )
@@ -485,14 +500,8 @@ drake_cc_binary(
     name = "crash_finder",
     srcs = ["crash_finder.cc"],
     deps = [
-        "//automotive:automotive_simulator",
-        "//automotive:create_trajectory_params",
-        "//automotive:simple_car",
-        "//automotive/maliput/api",
-        "//automotive/maliput/dragway",
-        "//common/proto:call_python",
+        "//automotive:automotive_trajectory_optimization",
         "//common:text_logging_gflags",
-        "//systems/trajectory_optimization:direct_collocation",
     ],
 )
 

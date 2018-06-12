@@ -182,7 +182,7 @@ void SimpleCar<T>::ImplCalcTimeDerivatives(const SimpleCarParams<T>& params,
   using std::sin;
   using std::tanh;
 
-  std::cout << " simplecar input : " << input.CopyToVector() << std::endl;
+  // std::cout << " simplecar input : " << input.CopyToVector() << std::endl;
   // Sanity check our input.
   // DRAKE_DEMAND(abs(input.GetAtIndex(kSteeringIndex)) < M_PI);
 
@@ -203,9 +203,9 @@ void SimpleCar<T>::ImplCalcTimeDerivatives(const SimpleCarParams<T>& params,
   // Soften the saturation limits.
   const T saturated_steering_angle =
       params.max_abs_steering_angle() * tanh(input.GetAtIndex(kSteeringIndex) / params.max_abs_steering_angle());
-  drake::log()->info(" ** Steering unsat : {}\n", input.GetAtIndex(kSteeringIndex));
-  drake::log()->info("    Steering sat : {}\n", params.max_abs_steering_angle());
-  drake::log()->info("    Steering act : {}\n", saturated_steering_angle);
+  // drake::log()->info(" ** Steering unsat : {}\n", input.GetAtIndex(kSteeringIndex));
+  // drake::log()->info("    Steering sat : {}\n", params.max_abs_steering_angle());
+  // drake::log()->info("    Steering act : {}\n", saturated_steering_angle);
   const T curvature = tan(saturated_steering_angle) / params.wheelbase();
 
   // Don't allow small negative velocities to affect position or heading.
@@ -227,7 +227,7 @@ void SimpleCar<T>::CalcSteeringAngleConstraint(
   *value = Vector2<T>(
       params.max_abs_steering_angle() - input.GetAtIndex(kSteeringIndex),
       params.max_abs_steering_angle() + input.GetAtIndex(kSteeringIndex));
-  drake::log()->info(" ** Steering : ", *value);
+  // drake::log()->info(" ** Steering : ", *value);
   // if ((*value)[0] < 0.) std::cout << " ** Steering exceeded max! " << std::endl;
   // if ((*value)[1] < 0.) std::cout << " ** Steering exceeded min! " << std::endl;
 }
@@ -242,7 +242,7 @@ void SimpleCar<T>::CalcAccelerationConstraint(
   *value = Vector2<T>(
       params.max_acceleration() - input.GetAtIndex(kAccelIndex),
       params.max_acceleration() + input.GetAtIndex(kAccelIndex));
-  drake::log()->info(" ** Accel : ", *value);
+  // drake::log()->info(" ** Accel : ", *value);
   // if ((*value)[0] < 0.) std::cout << " ** Accel exceeded max! " << std::endl;
   // if ((*value)[1] < 0.) std::cout << " ** Accel exceeded min! " << std::endl;
 }
@@ -256,7 +256,7 @@ void SimpleCar<T>::CalcVelocityConstraint(const systems::Context<T>& context,
   const SimpleCarParams<T>& params = get_params(context);
   *value =
       Vector2<T>(params.max_velocity() - state.velocity(), state.velocity());
-  drake::log()->info(" ** Vel : ", *value);
+  // drake::log()->info(" ** Vel : ", *value);
   //  if ((*value)(0) < 0.) drake::log()->info(" ** Vel exceeded max! ");
   //  if ((*value)(1) < 0.) drake::log()->info(" ** Vel exceeded min! ");
 }

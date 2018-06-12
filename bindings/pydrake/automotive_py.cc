@@ -1,6 +1,7 @@
 #include <pybind11/eigen.h>
 #include <pybind11/pybind11.h>
 
+#include "drake/automotive/automotive_trajectory_optimization.h"
 #include "drake/automotive/calc_ongoing_road_position.h"
 #include "drake/automotive/falsifier.h"
 #include "drake/automotive/gen/driving_command.h"
@@ -117,6 +118,64 @@ PYBIND11_MODULE(automotive, m) {
       .def("Run", &Falsifier::Run)
       .def("get_trajectory", &Falsifier::get_trajectory,
            py_reference_internal);
+
+  py::class_<Scenario>(m, "Scenario")
+      .def(py::init<int, double, double>(), py::arg("num_lanes"),
+           py::arg("lane_width"), py::arg("road_length"))
+      .def("AddIdmSimpleCar", &Scenario::AddIdmSimpleCar, py::arg("name"),
+           py_reference_internal)
+      .def("AddSimpleCar", &Scenario::AddSimpleCar, py::arg("name"),
+           py_reference_internal)
+      .def("FixGoalLaneDirection", &Scenario::FixGoalLaneDirection,
+           py::arg("subsystem"), py::arg("lane_direction"))
+      .def("Build", &Scenario::Build)
+      .def("SetInitialSubsystemState", &Scenario::SetInitialSubsystemState,
+           py::arg("subsystem"), py::arg("value"))
+      .def("SetFinalSubsystemState", &Scenario::SetFinalSubsystemState,
+           py::arg("subsystem"), py::arg("value"))
+      .def("GetStateIndices", &Scenario::GetStateIndices,
+           py::arg("subsystem"))
+      .def("road", &Scenario::road, py_reference_internal);
+
+  py::class_<AutomotiveTrajectoryOptimization>(
+      m, "AutomotiveTrajectoryOptimization")
+      .def(py::init<std::unique_ptr<Scenario>, int, double, double, double>(),
+           py::arg("scenario"), py::arg("num_time_samples"),
+           py::arg("min_time_step"), py::arg("max_time_step"),
+           py::arg("initial_guess_duration_sec"))
+      .def("SetLinearGuessTrajectory",
+           &AutomotiveTrajectoryOptimization::SetLinearGuessTrajectory)
+      .def("SetLateralLaneBounds",
+           &AutomotiveTrajectoryOptimization::SetLateralLaneBounds,
+           py::arg("subsystem"), py::arg("lane_bounds"))
+      .def("AddLogProbabilityCost",
+           &AutomotiveTrajectoryOptimization::AddLogProbabilityCost)
+      .def("AddLogProbabilityChanceConstraint",
+           &AutomotiveTrajectoryOptimization::AddLogProbabilityChanceConstraint)
+      .def("SetEgoLinearConstraint",
+           &AutomotiveTrajectoryOptimization::SetEgoLinearConstraint,
+           py::arg("A"), py::arg("b"), py::arg("t"))
+      .def("Solve", &AutomotiveTrajectoryOptimization::Solve)
+      .def("PlotResult", &AutomotiveTrajectoryOptimization::PlotResult)
+      .def("SimulateResult", &AutomotiveTrajectoryOptimization::SimulateResult)
+      .def("scenario", &AutomotiveTrajectoryOptimization::scenario,
+           py_reference_internal)
+      .def("prog", &AutomotiveTrajectoryOptimization::prog,
+           py_reference_internal)
+      .def("get_trajectory", &AutomotiveTrajectoryOptimization::get_trajectory,
+           py_reference_internal);
+
+  py::class_<AutomotiveTrajectoryOptimization::InputStateTrajectoryData>(
+      m, "InputStateTrajectoryData")
+      .def_readwrite(
+          "inputs",
+          &AutomotiveTrajectoryOptimization::InputStateTrajectoryData::inputs)
+      .def_readwrite(
+          "states",
+          &AutomotiveTrajectoryOptimization::InputStateTrajectoryData::states)
+      .def_readwrite(
+          "times",
+          &AutomotiveTrajectoryOptimization::InputStateTrajectoryData::times);
 
   py::class_<IdmController<T>, LeafSystem<T>>(m, "IdmController",
                                               doc.IdmController.doc)
