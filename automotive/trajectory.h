@@ -167,6 +167,9 @@ class Trajectory final {
   /// PoseVelocity.
   PoseVelocity value(double time) const;
 
+  double start_time() const { return translation_.start_time(); }
+  double end_time() const { return translation_.end_time(); }
+
  private:
   // Constructs a Trajectory from a translation PiecewisePolynomial, @p
   // translation, and a rotation PiecewiseQuaternionSlerp, @p rotation.

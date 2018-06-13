@@ -161,6 +161,12 @@ GTEST_TEST(TrajectoryTest, Trajectory) {
     EXPECT_LT(0., actual.velocity().rotational().y());
     EXPECT_LT(0., actual.velocity().rotational().z());
   }
+
+  // Check the start_time()/end_time() accessors.
+  EXPECT_NEAR(*times.begin(), trajectory.start_time(),
+              std::numeric_limits<double>::epsilon());
+  EXPECT_NEAR(*times.end(), trajectory.start_time(),
+              std::numeric_limits<double>::epsilon());
 }
 
 // Computes a vector of x-y-z positions (with y, z fixed), under
