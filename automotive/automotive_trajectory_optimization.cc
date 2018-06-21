@@ -274,7 +274,7 @@ AutomotiveTrajectoryOptimization::AutomotiveTrajectoryOptimization(
       scenario_->diagram());  // Need?
 
   // Set up a direct-collocation problem.
-  const double kBoundingBoxLimit = 100.;
+  const double kBoundingBoxLimit = 300.;
   auto context = plant.CreateDefaultContext();
   prog_ = std::make_unique<DirectCollocation>(
       &plant, *context, num_time_samples_, min_time_step_, max_time_step_);
