@@ -119,10 +119,10 @@ int DoMain(void) {
   // Constraints keeping the cars on the road or in their lanes.
   std::pair<const Lane*, const Lane*> lane_bounds =
       std::make_pair(segment->lane(0), segment->lane(2));
-  falsifier->SetLateralLaneBounds(ego, lane_bounds);
-  falsifier->SetLateralLaneBounds(ado0, lane_bounds);
-  // falsifier->SetLateralLaneBounds(ado1, lane_bounds);
-  //  falsifier->SetLateralLaneBounds(ado2, lane_bounds);
+  falsifier->SetDragwayLateralLaneBounds(ego, lane_bounds);
+  falsifier->SetDragwayLateralLaneBounds(ado0, lane_bounds);
+  // falsifier->SetDragwayLateralLaneBounds(ado1, lane_bounds);
+  // falsifier->SetDragwayLateralLaneBounds(ado2, lane_bounds);
 
   // Solve a collision with one of the cars, in this case, Traffic Car 2 merging
   // into the middle lane.  Assume for now that, irrespective of its
