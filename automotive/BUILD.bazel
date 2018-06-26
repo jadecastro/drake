@@ -29,7 +29,6 @@ drake_cc_package_library(
     name = "automotive",
     deps = [
         ":automotive_simulator",
-        ":automotive_trajectory_optimization",
         ":bicycle_car",
         ":calc_ongoing_road_position",
         ":calc_smooth_acceleration",
@@ -51,11 +50,13 @@ drake_cc_package_library(
         ":pure_pursuit_controller",
         ":road_odometry",
         ":road_path",
+        ":scenario",
         ":simple_car",
         ":simple_powertrain",
         ":trajectory",
         ":trajectory_car",
         ":trajectory_follower",
+        ":trajectory_optimization",
         ":trivial_right_of_way_state_provider",
     ],
 )
@@ -181,15 +182,36 @@ drake_cc_library(
 )
 
 drake_cc_library(
-    name = "automotive_trajectory_optimization",
-    srcs = ["automotive_trajectory_optimization.cc"],
-    hdrs = ["automotive_trajectory_optimization.h"],
+    name = "scenario",
+    srcs = ["scenario.cc"],
+    hdrs = ["scenario.h"],
     deps = [
-        "//automotive:automotive_simulator",
-        "//automotive:simple_car",
+        ":lane_direction",
+        ":idm_controller",
+        ":pure_pursuit_controller",
+        ":simple_car",
+        "//automotive/maliput/api",
+        "//automotive/maliput/dragway",
+        "//systems/framework",
+        "//systems/primitives:adder",
+        "//systems/primitives:constant_value_source",
+        "//systems/primitives:demultiplexer",
+        "//systems/primitives:multiplexer",
+        "//systems/rendering:pose_aggregator",
+    ],
+)
+
+drake_cc_library(
+    name = "trajectory_optimization",
+    srcs = ["trajectory_optimization.cc"],
+    hdrs = ["trajectory_optimization.h"],
+    deps = [
+        ":automotive_simulator",
+        ":scenario",
         "//automotive/maliput/api",
         "//automotive/maliput/dragway",
         "//common/proto:call_python",
+        "//common/trajectories:piecewise_polynomial",
         "//systems/trajectory_optimization:direct_collocation",
     ],
 )
@@ -500,7 +522,7 @@ drake_cc_binary(
     name = "crash_finder",
     srcs = ["crash_finder.cc"],
     deps = [
-        "//automotive:automotive_trajectory_optimization",
+        "//automotive:trajectory_optimization",
         "//common:text_logging_gflags",
     ],
 )

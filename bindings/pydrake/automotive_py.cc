@@ -1,7 +1,6 @@
 #include <pybind11/eigen.h>
 #include <pybind11/pybind11.h>
 
-#include "drake/automotive/automotive_trajectory_optimization.h"
 #include "drake/automotive/calc_ongoing_road_position.h"
 #include "drake/automotive/falsifier.h"
 #include "drake/automotive/gen/driving_command.h"
@@ -11,7 +10,9 @@
 #include "drake/automotive/pose_selector.h"
 #include "drake/automotive/pure_pursuit_controller.h"
 #include "drake/automotive/road_odometry.h"
+#include "drake/automotive/scenario.h"
 #include "drake/automotive/simple_car.h"
+#include "drake/automotive/trajectory_optimization.h"
 #include "drake/bindings/pydrake/documentation_pybind.h"
 #include "drake/bindings/pydrake/pydrake_pybind.h"
 #include "drake/bindings/pydrake/systems/systems_pybind.h"
@@ -142,49 +143,49 @@ PYBIND11_MODULE(automotive, m) {
       .def("car_length", &Scenario::car_length)
       ;
 
-  py::class_<AutomotiveTrajectoryOptimization>(
-      m, "AutomotiveTrajectoryOptimization")
+  py::class_<TrajectoryOptimization>(
+      m, "TrajectoryOptimization")
       .def(py::init<std::unique_ptr<Scenario>, int, double, double, double>(),
            py::arg("scenario"), py::arg("num_time_samples"),
            py::arg("min_time_step"), py::arg("max_time_step"),
            py::arg("initial_guess_duration_sec"))
       .def("SetLinearGuessTrajectory",
-           &AutomotiveTrajectoryOptimization::SetLinearGuessTrajectory)
+           &TrajectoryOptimization::SetLinearGuessTrajectory)
       .def("SetDragwayLaneBounds",
-           &AutomotiveTrajectoryOptimization::SetDragwayLaneBounds,
+           &TrajectoryOptimization::SetDragwayLaneBounds,
            py::arg("subsystem"), py::arg("lane_bounds"))
       .def("AddFinalCollisionConstraints",
-           &AutomotiveTrajectoryOptimization::AddFinalCollisionConstraints,
+           &TrajectoryOptimization::AddFinalCollisionConstraints,
            py::arg("subsystem"))
       .def("AddGaussianCost",
-           &AutomotiveTrajectoryOptimization::AddGaussianCost)
+           &TrajectoryOptimization::AddGaussianCost)
       .def("SetEgoLinearConstraint",
-           &AutomotiveTrajectoryOptimization::SetEgoLinearConstraint,
+           &TrajectoryOptimization::SetEgoLinearConstraint,
            py::arg("A"), py::arg("b"), py::arg("t"))
-      .def("Solve", &AutomotiveTrajectoryOptimization::Solve)
+      .def("Solve", &TrajectoryOptimization::Solve)
       .def("GetSolutionTotalProbability",
-           &AutomotiveTrajectoryOptimization::GetSolutionTotalProbability)
-      .def("PlotSolution", &AutomotiveTrajectoryOptimization::PlotSolution)
+           &TrajectoryOptimization::GetSolutionTotalProbability)
+      .def("PlotSolution", &TrajectoryOptimization::PlotSolution)
       .def("AnimateSolution",
-           &AutomotiveTrajectoryOptimization::AnimateSolution)
-      .def("scenario", &AutomotiveTrajectoryOptimization::scenario,
+           &TrajectoryOptimization::AnimateSolution)
+      .def("scenario", &TrajectoryOptimization::scenario,
            py_reference_internal)
-      .def("prog", &AutomotiveTrajectoryOptimization::prog,
+      .def("prog", &TrajectoryOptimization::prog,
            py_reference_internal)
-      .def("get_trajectory", &AutomotiveTrajectoryOptimization::get_trajectory,
+      .def("get_trajectory", &TrajectoryOptimization::get_trajectory,
            py_reference_internal);
 
-  py::class_<AutomotiveTrajectoryOptimization::InputStateTrajectoryData>(
+  py::class_<TrajectoryOptimization::InputStateTrajectoryData>(
       m, "InputStateTrajectoryData")
       .def_readwrite(
           "inputs",
-          &AutomotiveTrajectoryOptimization::InputStateTrajectoryData::inputs)
+          &TrajectoryOptimization::InputStateTrajectoryData::inputs)
       .def_readwrite(
           "states",
-          &AutomotiveTrajectoryOptimization::InputStateTrajectoryData::states)
+          &TrajectoryOptimization::InputStateTrajectoryData::states)
       .def_readwrite(
           "times",
-          &AutomotiveTrajectoryOptimization::InputStateTrajectoryData::times);
+          &TrajectoryOptimization::InputStateTrajectoryData::times);
 
   py::class_<IdmController<T>, LeafSystem<T>>(m, "IdmController",
                                               doc.IdmController.doc)
