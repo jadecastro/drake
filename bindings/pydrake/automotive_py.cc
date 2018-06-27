@@ -121,57 +121,66 @@ PYBIND11_MODULE(automotive, m) {
            py_reference_internal);
 
   py::class_<Scenario>(m, "Scenario")
-      .def(py::init<int, double, double, double, double>(),
-           py::arg("num_lanes"), py::arg("lane_width"), py::arg("road_length"),
-           py::arg("car_width"), py::arg("car_length"))
+      .def(py::init<std::unique_ptr<maliput::api::RoadGeometry>, double, double>(),
+           py::arg("road"), py::arg("car_width"), py::arg("car_length"),
+           // Keep alive, reference: `self` keeps `road` alive.
+           py::keep_alive<1, 2>())
       .def("AddIdmSimpleCar", &Scenario::AddIdmSimpleCar, py::arg("name"),
-           py_reference_internal)
+           py::arg("lane_direction"), py_reference_internal)
       .def("AddSimpleCar", &Scenario::AddSimpleCar, py::arg("name"),
            py_reference_internal)
-      .def("FixGoalLaneDirection", &Scenario::FixGoalLaneDirection,
-           py::arg("subsystem"), py::arg("lane_direction"))
       .def("Build", &Scenario::Build)
-      .def("SetInitialSubsystemStateBounds",
-           &Scenario::SetInitialSubsystemStateBounds, py::arg("subsystem"),
-           py::arg("lb_value"), py::arg("ub_value"))
-      .def("SetFinalSubsystemState", &Scenario::SetFinalSubsystemState,
-           py::arg("subsystem"), py::arg("value"))
       .def("GetStateIndices", &Scenario::GetStateIndices,
            py::arg("subsystem"))
       .def("road", &Scenario::road, py_reference_internal)
-      .def("car_width", &Scenario::car_width)
-      .def("car_length", &Scenario::car_length)
       ;
 
   py::class_<TrajectoryOptimization>(
       m, "TrajectoryOptimization")
-      .def(py::init<std::unique_ptr<Scenario>, int, double, double, double>(),
+      .def(py::init<std::unique_ptr<Scenario>, int, double, double, double,
+           double>(),
            py::arg("scenario"), py::arg("num_time_samples"),
            py::arg("min_time_step"), py::arg("max_time_step"),
-           py::arg("initial_guess_duration_sec"))
+           py::arg("initial_guess_duration_sec"), py::arg("bounding_box_limit"),
+           // Keep alive, reference: `self` keeps `scenario` alive.
+           py::keep_alive<1, 2>())
+      .def("RegisterInitialBoxConstraint",
+           &TrajectoryOptimization::RegisterInitialBoxConstraint,
+           py::arg("subsystem"), py::arg("intial_state_lb"),
+           py::arg("intial_state_ub"))
+      .def("RegisterInitialConstraint",
+           &TrajectoryOptimization::RegisterInitialConstraint,
+           py::arg("subsystem"), py::arg("intial_state"))
+      .def("RegisterFinalBoxConstraint",
+           &TrajectoryOptimization::RegisterFinalBoxConstraint,
+           py::arg("subsystem"), py::arg("final_state_lb"),
+           py::arg("final_state_ub"))
+      .def("RegisterFinalConstraint",
+           &TrajectoryOptimization::RegisterFinalConstraint,
+           py::arg("subsystem"), py::arg("final_state"))
+      .def("AddInitialConstraints",
+           &TrajectoryOptimization::AddInitialConstraints)
+      .def("AddFinalConstraints",  &TrajectoryOptimization::AddFinalConstraints)
       .def("SetLinearGuessTrajectory",
            &TrajectoryOptimization::SetLinearGuessTrajectory)
-      .def("SetDragwayLaneBounds",
-           &TrajectoryOptimization::SetDragwayLaneBounds,
+      .def("AddDragwayLaneConstraints",
+           &TrajectoryOptimization::AddDragwayLaneConstraints,
            py::arg("subsystem"), py::arg("lane_bounds"))
       .def("AddFinalCollisionConstraints",
            &TrajectoryOptimization::AddFinalCollisionConstraints,
-           py::arg("subsystem"))
-      .def("AddGaussianCost",
-           &TrajectoryOptimization::AddGaussianCost)
-      .def("SetEgoLinearConstraint",
-           &TrajectoryOptimization::SetEgoLinearConstraint,
-           py::arg("A"), py::arg("b"), py::arg("t"))
+           py::arg("subsystem1"), py::arg("subsystem2"))
+      .def("AddGaussianCost", &TrajectoryOptimization::AddGaussianCost,
+           py::arg("subsystem"), py::arg("sigma"))
+      .def("AddLinearConstraint",
+           &TrajectoryOptimization::AddLinearConstraint,
+           py::arg("subsystem"), py::arg("A"), py::arg("b"), py::arg("t"))
       .def("Solve", &TrajectoryOptimization::Solve)
       .def("GetSolutionTotalProbability",
            &TrajectoryOptimization::GetSolutionTotalProbability)
       .def("PlotSolution", &TrajectoryOptimization::PlotSolution)
-      .def("AnimateSolution",
-           &TrajectoryOptimization::AnimateSolution)
-      .def("scenario", &TrajectoryOptimization::scenario,
-           py_reference_internal)
-      .def("prog", &TrajectoryOptimization::prog,
-           py_reference_internal)
+      .def("AnimateSolution", &TrajectoryOptimization::AnimateSolution)
+      .def("scenario", &TrajectoryOptimization::scenario, py_reference_internal)
+      .def("prog", &TrajectoryOptimization::prog, py_reference_internal)
       .def("get_trajectory", &TrajectoryOptimization::get_trajectory,
            py_reference_internal);
 

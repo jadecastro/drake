@@ -17,7 +17,10 @@ namespace automotive {
 
 using common::CallPython;
 using maliput::api::Lane;
+using maliput::api::LanePosition;
 using maliput::api::RoadGeometry;
+using systems::BasicVector;
+using systems::Context;
 using systems::Diagram;
 using systems::System;
 using systems::trajectory_optimization::DirectCollocation;
@@ -31,52 +34,100 @@ static constexpr int kHeading = SimpleCarStateIndices::kHeading;
 TrajectoryOptimization::TrajectoryOptimization(
     std::unique_ptr<Scenario> scenario, int num_time_samples,
     double min_time_step, double max_time_step,
-    double initial_guess_duration_sec)
+    double initial_guess_duration_sec, double bounding_box_limit = -1.)
     : num_time_samples_(num_time_samples),
       min_time_step_(min_time_step),
       max_time_step_(max_time_step),
       initial_guess_duration_sec_(initial_guess_duration_sec),
-      scenario_(std::move(scenario)) {
+      scenario_(std::move(scenario)),
+      initial_context_ub_(scenario_->diagram().CreateDefaultContext()),
+      initial_context_lb_(scenario_->diagram().CreateDefaultContext()),
+      final_context_ub_(scenario_->diagram().CreateDefaultContext()),
+      final_context_lb_(scenario_->diagram().CreateDefaultContext()) {
   // ** TODO ** Check that scenario_ is valid.
-  const auto& plant = dynamic_cast<const systems::System<double>&>(
-      scenario_->diagram());  // Need?
 
   // Set up a direct-collocation problem.
-  const double kBoundingBoxLimit = 300.;
-  auto context = plant.CreateDefaultContext();
   prog_ = std::make_unique<DirectCollocation>(
-      &plant, *context, num_time_samples_, min_time_step_, max_time_step_);
+      &scenario_->diagram(), *initial_context_lb_, num_time_samples_,
+      min_time_step_, max_time_step_);
 
   // Ensure that time intervals are evenly spaced.
   prog_->AddEqualTimeIntervalsConstraints();
 
-  // Generous bounding box on all decision variables.
-  prog_->AddBoundingBoxConstraint(-kBoundingBoxLimit, kBoundingBoxLimit,
-                                  prog_->decision_variables());
-
-  FixInitialConditions();
+  if (bounding_box_limit > 0.) {
+    // Apply a uniform bounding box on all decision variables.
+    prog_->AddBoundingBoxConstraint(-bounding_box_limit, bounding_box_limit,
+                                    prog_->decision_variables());
+  }
 }
 
-void TrajectoryOptimization::FixInitialConditions() {
+void TrajectoryOptimization::RegisterInitialBoxConstraint(
+    const System<double>& subsystem,
+    const BasicVector<double>& initial_state_lb,
+    const BasicVector<double>& initial_state_ub) {
+  DRAKE_DEMAND(!is_solved_);
+  // ** TODO ** Check that the bounds are consistent.
+  SetSubcontext(subsystem, initial_state_ub, initial_context_ub_.get());
+  SetSubcontext(subsystem, initial_state_lb, initial_context_lb_.get());
+}
+
+void TrajectoryOptimization::RegisterInitialConstraint(
+    const System<double>& subsystem, const BasicVector<double>& initial_state) {
+  RegisterInitialBoxConstraint(subsystem, initial_state, initial_state);
+}
+
+void TrajectoryOptimization::RegisterFinalBoxConstraint(
+    const System<double>& subsystem, const BasicVector<double>& final_state_lb,
+    const BasicVector<double>& final_state_ub) {
+  DRAKE_DEMAND(!is_solved_);
+  // ** TODO ** Check that the bounds are consistent.
+  SetSubcontext(subsystem, final_state_ub, final_context_ub_.get());
+  SetSubcontext(subsystem, final_state_lb, final_context_lb_.get());
+}
+
+void TrajectoryOptimization::RegisterFinalConstraint(
+    const System<double>& subsystem, const BasicVector<double>& final_state) {
+  RegisterFinalBoxConstraint(subsystem, final_state, final_state);
+}
+
+void TrajectoryOptimization::AddInitialConstraints() {
+  DRAKE_DEMAND(!is_solved_);
   // Parse the initial conditions and set a constraint there.
   const systems::VectorBase<double>& initial_states_lb =
-      scenario_->initial_context_lb().get_continuous_state_vector();
+      initial_context_lb_->get_continuous_state_vector();
   prog_->AddLinearConstraint(prog_->initial_state() >=
                              initial_states_lb.CopyToVector());
   const systems::VectorBase<double>& initial_states_ub =
-      scenario_->initial_context_ub().get_continuous_state_vector();
+      initial_context_ub_->get_continuous_state_vector();
+  prog_->AddLinearConstraint(prog_->initial_state() <=
+                             initial_states_ub.CopyToVector());
+}
+
+void TrajectoryOptimization::AddFinalConstraints() {
+  DRAKE_DEMAND(!is_solved_);
+  // Parse the initial conditions and set a constraint there.
+  const systems::VectorBase<double>& initial_states_lb =
+      initial_context_lb_->get_continuous_state_vector();
+  prog_->AddLinearConstraint(prog_->initial_state() >=
+                             initial_states_lb.CopyToVector());
+  const systems::VectorBase<double>& initial_states_ub =
+      initial_context_ub_->get_continuous_state_vector();
   prog_->AddLinearConstraint(prog_->initial_state() <=
                              initial_states_ub.CopyToVector());
 }
 
 void TrajectoryOptimization::SetLinearGuessTrajectory() {
+  DRAKE_DEMAND(!is_solved_);
   const Eigen::VectorXd x0_lb =
-      scenario().initial_context_lb().get_continuous_state_vector().CopyToVector();
+      initial_context_lb_->get_continuous_state_vector().CopyToVector();
   const Eigen::VectorXd x0_ub =
-      scenario().initial_context_ub().get_continuous_state_vector().CopyToVector();
+      initial_context_ub_->get_continuous_state_vector().CopyToVector();
   const Eigen::VectorXd x0 = 0.5 * (x0_lb + x0_ub);
-  const Eigen::VectorXd xf =
-      scenario().final_context().get_continuous_state_vector().CopyToVector();
+  const Eigen::VectorXd xf_lb =
+      final_context_lb_->get_continuous_state_vector().CopyToVector();
+  const Eigen::VectorXd xf_ub =
+      final_context_ub_->get_continuous_state_vector().CopyToVector();
+  const Eigen::VectorXd xf = 0.5 * (xf_lb + xf_ub);
   auto guess_state_trajectory = PiecewisePolynomial<double>::FirstOrderHold(
       {0, initial_guess_duration_sec_}, {x0, xf});
   prog_->SetInitialTrajectory(PiecewisePolynomial<double>(),
@@ -84,168 +135,136 @@ void TrajectoryOptimization::SetLinearGuessTrajectory() {
 }
 
 // N.B. Assumes Dragway.
-void TrajectoryOptimization::SetDragwayLaneBounds(
+void TrajectoryOptimization::AddDragwayLaneConstraints(
     const System<double>& subsystem,
     std::pair<const Lane*, const Lane*> lane_bounds) {
-  using std::cos;
-  using std::sin;
-
-  std::vector<double> y_bounds{};
   if (dynamic_cast<const maliput::dragway::RoadGeometry*>(&scenario().road()) ==
       nullptr) {
     throw std::runtime_error("This function only works for Dragway.");
   }
-  y_bounds.push_back(
-      lane_bounds.first
-          ->ToGeoPosition({0., lane_bounds.first->lane_bounds(0.).min(), 0.})
-          .y());
-  y_bounds.push_back(
-      lane_bounds.first
-          ->ToGeoPosition({0., lane_bounds.first->lane_bounds(0.).max(), 0.})
-      .y());
-  y_bounds.push_back(
-      lane_bounds.second
-          ->ToGeoPosition({0., lane_bounds.first->lane_bounds(0.).min(), 0.})
-          .y());
-  y_bounds.push_back(
-      lane_bounds.second
-          ->ToGeoPosition({0., lane_bounds.first->lane_bounds(0.).max(), 0.})
-          .y());
+  DRAKE_DEMAND(!is_solved_);
 
-  auto state = get_state(&subsystem);
-  const double w = scenario().car_width();
-  const double l = scenario().car_length();
-  const auto y00 =
-      state[kY] + (l / 2.) * sin(state[kHeading]) - (w / 2.) * cos(state[kHeading]);
-  const auto y10 =
-      state[kY] - (l / 2.) * sin(state[kHeading]) - (w / 2.) * cos(state[kHeading]);
-  const auto y01 =
-      state[kY] - (l / 2.) * sin(state[kHeading]) + (w / 2.) * cos(state[kHeading]);
-  const auto y11 =
-      state[kY] + (l / 2.) * sin(state[kHeading]) + (w / 2.) * cos(state[kHeading]);
-
-  prog_->AddConstraintToAllKnotPoints(
-      y00 >= *std::min_element(y_bounds.begin(), y_bounds.end()));
-  prog_->AddConstraintToAllKnotPoints(
-      y00 <= *std::max_element(y_bounds.begin(), y_bounds.end()));
-  prog_->AddConstraintToAllKnotPoints(
-      y01 >= *std::min_element(y_bounds.begin(), y_bounds.end()));
-  prog_->AddConstraintToAllKnotPoints(
-      y01 <= *std::max_element(y_bounds.begin(), y_bounds.end()));
-  prog_->AddConstraintToAllKnotPoints(
-      y10 >= *std::min_element(y_bounds.begin(), y_bounds.end()));
-  prog_->AddConstraintToAllKnotPoints(
-      y10 <= *std::max_element(y_bounds.begin(), y_bounds.end()));
-  prog_->AddConstraintToAllKnotPoints(
-      y11 >= *std::min_element(y_bounds.begin(), y_bounds.end()));
-  prog_->AddConstraintToAllKnotPoints(
-      y11 <= *std::max_element(y_bounds.begin(), y_bounds.end()));
-}
-
-void TrajectoryOptimization::AddFinalCollisionConstraints(
-    const System<double>& subsystem) {
   using std::cos;
   using std::sin;
 
-  auto ego_state = get_final_state(scenario_->ego_alias());
-  const auto x_ego = ego_state[kX];
-  const auto y_ego = ego_state[kY];
-  const auto heading_ego = ego_state[kHeading];
-  auto ado_state = get_final_state(&subsystem);
-  const auto x_ado = ado_state[kX];
-  const auto y_ado = ado_state[kY];
-  const auto heading_ado = ado_state[kHeading];
+  // N.B. We have a dragway; we can safely assume each lane has the same width.
+  const LanePosition min_lane_pos(
+      0., lane_bounds.first->lane_bounds(0.).min(), 0.);
+  const LanePosition max_lane_pos(
+      0., lane_bounds.first->lane_bounds(0.).max(), 0.);
 
-  // Compute a bisecting point, use it to approximately declare collision
-  // between cars.
-  const auto x_bisect = 0.5 * (x_ego + x_ado);
-  const auto y_bisect = 0.5 * (y_ego + y_ado);
+  std::vector<double> y_bounds{};
+  y_bounds.push_back(lane_bounds.first->ToGeoPosition(min_lane_pos).y());
+  y_bounds.push_back(lane_bounds.first->ToGeoPosition(max_lane_pos).y());
+  y_bounds.push_back(lane_bounds.second->ToGeoPosition(min_lane_pos).y());
+  y_bounds.push_back(lane_bounds.second->ToGeoPosition(max_lane_pos).y());
+  const double y_min = *std::min_element(y_bounds.begin(), y_bounds.end());
+  const double y_max = *std::max_element(y_bounds.begin(), y_bounds.end());
 
   const double w = scenario().car_width();
   const double l = scenario().car_length();
 
-  const auto a_lat_x_ego = -sin(heading_ego);
-  const auto a_lat_y_ego = cos(heading_ego);
-  const auto b_lat_lo_ego =
-      -x_ego * sin(heading_ego) +
-      y_ego * cos(heading_ego) - w / 2.;
-  const auto b_lat_hi_ego =
-      -x_ego * sin(heading_ego) +
-      y_ego * cos(heading_ego) + w / 2.;
-  const auto a_lon_x_ego = cos(heading_ego);
-  const auto a_lon_y_ego = sin(heading_ego);
-  const auto b_lon_lo_ego =
-      x_ego * cos(heading_ego) +
-      y_ego * sin(heading_ego) - l / 2.;
-  const auto b_lon_hi_ego =
-      x_ego * cos(heading_ego) +
-      y_ego * sin(heading_ego) + l / 2.;
+  auto state = get_state(subsystem);
 
-  const auto a_lat_x_ado = -sin(heading_ado);
-  const auto a_lat_y_ado = cos(heading_ado);
-  const auto b_lat_lo_ado =
-      -x_ado * sin(heading_ado) +
-      y_ado * cos(heading_ado) - w / 2.;
-  const auto b_lat_hi_ado =
-      -x_ado * sin(heading_ado) +
-      y_ado * cos(heading_ado) + w / 2.;
-  const auto a_lon_x_ado = cos(heading_ado);
-  const auto a_lon_y_ado = sin(heading_ado);
-  const auto b_lon_lo_ado =
-      x_ado * cos(heading_ado) +
-      y_ado * sin(heading_ado) - l / 2.;
-  const auto b_lon_hi_ado =
-      x_ado * cos(heading_ado) +
-      y_ado * sin(heading_ado) + l / 2.;
+  // Compute the y-component of the four vertices of the heading-oriented box.
+  const auto y00 = state[kY] + (l / 2.) * sin(state[kHeading]) -
+      (w / 2.) * cos(state[kHeading]);
+  const auto y10 = state[kY] - (l / 2.) * sin(state[kHeading]) -
+      (w / 2.) * cos(state[kHeading]);
+  const auto y01 = state[kY] - (l / 2.) * sin(state[kHeading]) +
+      (w / 2.) * cos(state[kHeading]);
+  const auto y11 = state[kY] + (l / 2.) * sin(state[kHeading]) +
+      (w / 2.) * cos(state[kHeading]);
 
-  // Require the bisector to be in collision with the ego car.
-  prog_->AddConstraint(
-      a_lat_x_ego * x_bisect + a_lat_y_ego * y_bisect <= b_lat_hi_ego);
-  prog_->AddConstraint(
-      a_lat_x_ego * x_bisect + a_lat_y_ego * y_bisect >= b_lat_lo_ego);
-  prog_->AddConstraint(
-      a_lon_x_ego * x_bisect + a_lon_y_ego * y_bisect <= b_lon_hi_ego);
-  prog_->AddConstraint(
-      a_lon_x_ego * x_bisect + a_lon_y_ego * y_bisect >= b_lon_hi_ego);
-
-  // Require the bisector to be in collision with the ado car.
-  prog_->AddConstraint(
-      a_lat_x_ado * x_bisect + a_lat_y_ado * y_bisect <= b_lat_hi_ado);
-  prog_->AddConstraint(
-      a_lat_x_ado * x_bisect + a_lat_y_ado * y_bisect >= b_lat_lo_ado);
-  prog_->AddConstraint(
-      a_lon_x_ado * x_bisect + a_lon_y_ado * y_bisect <= b_lon_hi_ado);
-  prog_->AddConstraint(
-      a_lon_x_ado * x_bisect + a_lon_y_ado * y_bisect >= b_lon_hi_ado);
+  prog_->AddConstraintToAllKnotPoints(y_min <= y00);
+  prog_->AddConstraintToAllKnotPoints(y00 <= y_max);
+  prog_->AddConstraintToAllKnotPoints(y_min <= y01);
+  prog_->AddConstraintToAllKnotPoints(y01 <= y_max);
+  prog_->AddConstraintToAllKnotPoints(y_min <= y10);
+  prog_->AddConstraintToAllKnotPoints(y10 <= y_max);
+  prog_->AddConstraintToAllKnotPoints(y_min <= y11);
+  prog_->AddConstraintToAllKnotPoints(y11 <= y_max);
 }
 
-void TrajectoryOptimization::AddGaussianCost() {
-  const double kSigma = 50.;
-  const double kCoeff = 1. / (2. * kSigma * kSigma);
-  symbolic::Expression running_cost;
-  for (int i{0}; i < prog_->input().size(); ++i) {
-    std::cout << " prog->input()(i) " << prog_->input()(i) << std::endl;
-    running_cost += kCoeff * prog_->input()(i) * prog_->input()(i);
-  }
-  prog_->AddRunningCost(running_cost);
+void TrajectoryOptimization::AddFinalCollisionConstraints(
+    const System<double>& subsystem1, const System<double>& subsystem2) {
+  DRAKE_DEMAND(!is_solved_);
+  using std::cos;
+  using std::sin;
+
+  // Compute a heading-oriented box and check for intersections with a trial
+  // point.
+  const double w = scenario().car_width();
+  const double l = scenario().car_length();
+  const Eigen::Vector2d xy_offset(w / 2., l / 2.);
+
+  auto ego_state = get_final_state(subsystem1);
+  const auto& x_ego = ego_state[kX];
+  const auto& y_ego = ego_state[kY];
+  const auto& heading_ego = ego_state[kHeading];
+  const Vector2<symbolic::Variable> xy_ego(x_ego, y_ego);
+
+  auto ado_state = get_final_state(subsystem2);
+  const auto& x_ado = ado_state[kX];
+  const auto& y_ado = ado_state[kY];
+  const auto& heading_ado = ado_state[kHeading];
+  const Vector2<symbolic::Variable> xy_ado(x_ado, y_ado);
+
+  // Compute a bisecting point on the line connecting the two bodies, use it to
+  // declare a (possibly conservative) necessary condition for collision between
+  // them.
+  const Vector2<symbolic::Expression> xy_bisect(0.5 * (x_ego + x_ado),
+                                                0.5 * (y_ego + y_ado));
+
+  Matrix2<symbolic::Expression> A_ego;
+  A_ego << -sin(heading_ego), cos(heading_ego),
+            cos(heading_ego), sin(heading_ego);
+
+  const Vector2<symbolic::Expression> b_hi_ego = A_ego * xy_ego + xy_offset;
+  const Vector2<symbolic::Expression> b_lo_ego = A_ego * xy_ego - xy_offset;
+
+  Matrix2<symbolic::Expression> A_ado;
+  A_ado << -sin(heading_ado), cos(heading_ado),
+            cos(heading_ado), sin(heading_ado);
+
+  const Vector2<symbolic::Expression> b_hi_ado = A_ado * xy_ado + xy_offset;
+  const Vector2<symbolic::Expression> b_lo_ado = A_ado * xy_ado - xy_offset;
+
+  prog_->AddConstraint(b_lo_ego <= A_ego * xy_bisect);
+  prog_->AddConstraint(A_ego * xy_bisect <= b_hi_ego);
+  prog_->AddConstraint(b_lo_ado <= A_ado * xy_bisect);
+  prog_->AddConstraint(A_ado * xy_bisect <= b_hi_ado);
 }
 
-void TrajectoryOptimization::SetEgoLinearConstraint(
-    const Eigen::Ref<const Eigen::MatrixXd> A,
+void TrajectoryOptimization::AddGaussianCost(const System<double>& subsystem,
+                                             const Eigen::MatrixXd& sigma) {
+  DRAKE_DEMAND(!is_solved_);
+
+  const auto input = get_input(subsystem);
+  DRAKE_DEMAND(sigma.rows() == input.size());
+  DRAKE_DEMAND(sigma.cols() == input.size());
+
+  const Eigen::MatrixXd sigma_inv = sigma.inverse();
+  prog_->AddRunningCost(input.transpose() * sigma_inv * input);
+}
+
+void TrajectoryOptimization::AddLinearConstraint(
+    const System<double>& subsystem, const Eigen::Ref<const Eigen::MatrixXd> A,
     const Eigen::Ref<const Eigen::VectorXd> b, double t) {
+  DRAKE_DEMAND(!is_solved_);
   DRAKE_DEMAND(min_time_step_ == max_time_step_);
-  DRAKE_DEMAND(t >= 0 && t <= min_time_step_ * num_time_samples_);
   DRAKE_DEMAND(A.cols() == SimpleCarStateIndices::kNumCoordinates);
 
   // Assume a zero-order hold on the constraints application.
-  const int index = std::ceil(t / min_time_step_);
-  auto x_ego = get_state(index, scenario_->ego_alias());
+  auto state = get_state(t, subsystem);
   prog_->AddLinearConstraint(A, -b * std::numeric_limits<double>::infinity(), b,
-                             x_ego);
-  // prog_->AddLinearConstraint(A * x_ego <= b);  // ** TODO ** Enable this spelling.
+                             state);
+  // prog_->AddConstraint(A * state <= b);  // ** TODO ** Enable this spelling.
 }
 
 void TrajectoryOptimization::Solve() {
+  DRAKE_DEMAND(!is_solved_);
+
   result_ = prog_->Solve();
   trajectory_.inputs = prog_->GetInputSamples();
   trajectory_.states = prog_->GetStateSamples();
@@ -265,45 +284,50 @@ void TrajectoryOptimization::Solve() {
   // }
 
   std::cout << " SOLUTION RESULT: " << result_ << std::endl;
+  is_solved_ = true;
 }
 
-solvers::VectorXDecisionVariable
-TrajectoryOptimization::get_state(
-    const System<double>* subsystem) const {
-  DRAKE_DEMAND(subsystem != nullptr);
-  const std::vector<int> indices = scenario_->GetStateIndices(*subsystem);
-  return prog_->state().segment(
-      indices[0], SimpleCarStateIndices::kNumCoordinates);
+solvers::VectorXDecisionVariable TrajectoryOptimization::get_input(
+    const System<double>& subsystem) const {
+  const std::vector<int> indices = scenario_->GetInputIndices(subsystem);
+  return prog_->input().segment(indices[0],
+                                DrivingCommandIndices::kNumCoordinates);
+}
+
+solvers::VectorXDecisionVariable TrajectoryOptimization::get_state(
+    const System<double>& subsystem) const {
+  const std::vector<int> indices = scenario_->GetStateIndices(subsystem);
+  return prog_->state().segment(indices[0],
+                                SimpleCarStateIndices::kNumCoordinates);
 }
 
 TrajectoryOptimization::SubVectorXDecisionVariable
-TrajectoryOptimization::get_state(
-    int index, const System<double>* subsystem) const {
-  DRAKE_DEMAND(subsystem != nullptr);
-  const std::vector<int> indices = scenario_->GetStateIndices(*subsystem);
-  return prog_->state(index).segment(
-      indices[0], SimpleCarStateIndices::kNumCoordinates);
+TrajectoryOptimization::get_state(double t,
+                                  const System<double>& subsystem) const {
+  DRAKE_DEMAND(t >= 0 && t <= min_time_step_ * num_time_samples_);
+  const int index = std::ceil(t / min_time_step_);
+  const std::vector<int> indices = scenario_->GetStateIndices(subsystem);
+  return prog_->state(index).segment(indices[0],
+                                     SimpleCarStateIndices::kNumCoordinates);
 }
 
 TrajectoryOptimization::SubVectorXDecisionVariable
 TrajectoryOptimization::get_initial_state(
-    const System<double>* subsystem) const {
-  DRAKE_DEMAND(subsystem != nullptr);
-  const std::vector<int> indices = scenario_->GetStateIndices(*subsystem);
-  return prog_->initial_state().segment(
-      indices[0], SimpleCarStateIndices::kNumCoordinates);
+    const System<double>& subsystem) const {
+  const std::vector<int> indices = scenario_->GetStateIndices(subsystem);
+  return prog_->initial_state().segment(indices[0],
+                                        SimpleCarStateIndices::kNumCoordinates);
 }
 
 TrajectoryOptimization::SubVectorXDecisionVariable
-TrajectoryOptimization::get_final_state(
-    const System<double>* subsystem) const {
-  DRAKE_DEMAND(subsystem != nullptr);
-  const std::vector<int> indices = scenario_->GetStateIndices(*subsystem);
-  return prog_->final_state().segment(
-      indices[0], SimpleCarStateIndices::kNumCoordinates);
+TrajectoryOptimization::get_final_state(const System<double>& subsystem) const {
+  const std::vector<int> indices = scenario_->GetStateIndices(subsystem);
+  return prog_->final_state().segment(indices[0],
+                                      SimpleCarStateIndices::kNumCoordinates);
 }
 
 double TrajectoryOptimization::GetSolutionTotalProbability() const {
+  DRAKE_DEMAND(is_solved_);
   using std::log;
   using std::sqrt;
 
@@ -311,14 +335,15 @@ double TrajectoryOptimization::GetSolutionTotalProbability() const {
   // const double kP = 2. * num_time_samples_ * kSigma * kSigma *
   //                      log(1. / (sqrt(2. * M_PI) * kSigma)) -
   //                  2. * kSigma * kSigma * log(path_probability);
-  //drake::unused(kP);
-  //for (int i{0}; i < prog_->input().size(); ++i) {
+  // drake::unused(kP);
+  // for (int i{0}; i < prog_->input().size(); ++i) {
   //  std::cout << " prog->input()(i) " << prog_->input()(i) << std::endl;
   //}
   return 0.;
 }
 
 void TrajectoryOptimization::PlotSolution() {
+  DRAKE_DEMAND(is_solved_);
   int i{0};
   for (const auto& subsystem : scenario().aliases()) {
     const Eigen::VectorXd x =
@@ -337,6 +362,7 @@ void TrajectoryOptimization::PlotSolution() {
 }
 
 void TrajectoryOptimization::AnimateSolution() const {
+  DRAKE_DEMAND(is_solved_);
   const Eigen::MatrixXd inputs = prog_->GetInputSamples();
   const Eigen::MatrixXd states = prog_->GetStateSamples();
   const Eigen::VectorXd times_out = prog_->GetSampleTimes();
@@ -356,6 +382,21 @@ void TrajectoryOptimization::AnimateSolution() const {
     simulator->StepBy(times.back());
   }
   */
+}
+const TrajectoryOptimization::InputStateTrajectoryData&
+TrajectoryOptimization::get_trajectory() const {
+  DRAKE_DEMAND(is_solved_);
+  return trajectory_;
+}
+
+void TrajectoryOptimization::SetSubcontext(
+    const System<double>& subsystem, const BasicVector<double>& state_vector,
+    Context<double>* context) {
+  auto& subcontext =
+      scenario_->diagram().GetMutableSubsystemContext(subsystem, context);
+  systems::VectorBase<double>& state =
+      subcontext.get_mutable_continuous_state_vector();
+  state.SetFromVector(state_vector.get_value());
 }
 
 }  // namespace automotive

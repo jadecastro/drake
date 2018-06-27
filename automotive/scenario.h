@@ -9,98 +9,85 @@
 #include "drake/automotive/simple_car.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/systems/framework/diagram.h"
+#include "drake/systems/framework/diagram_builder.h"
+#include "drake/systems/rendering/pose_aggregator.h"
 
 namespace drake {
 namespace automotive {
 
+/// Builds a scenario based on a RoadGeometry and a set of car subsystems
+/// (Diagrams or LeafSystems). We require that all subsystems have
+/// DrivingCommand inputs and SimpleCarState, and the required ports to connect
+/// to PoseAggregator.
 class Scenario final {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(Scenario)
 
-  Scenario(int num_lanes, double lane_width, double road_length,
-           double car_width, double car_length);
+  struct CarGeometry {
+    CarGeometry() = delete;
+    CarGeometry(double w, double l) : width(w), length(l) {}
 
-  // ** TODO ** These can only be called *before* Build().
-  // ** TODO ** Put these into a subclass?
-  // @{
-  const systems::System<double>* AddIdmSimpleCar(const std::string& name);
+    const double width{};
+    const double length{};
+  };
 
+  Scenario(std::unique_ptr<maliput::api::RoadGeometry> road, double car_width,
+           double car_length);
+
+  /// Add a new open-loop SimpleCar system to the scenario.  Returns a reference
+  /// to the (stateful) SimpleCar model.
   const systems::System<double>* AddSimpleCar(const std::string& name);
 
-  void FixGoalLaneDirection(const systems::System<double>& subsystem,
-                            const LaneDirection& lane_direction);
-  // @}
+  /// Add a new SimpleCar controlled by a (stateless) IDM longitudinal
+  /// controller and a (stateless) pure-pursuit lateral controller to the
+  /// scenario.  The goal for the pure-pursuit controller is the center-line of
+  /// the lane and its direction, as specified in `goal_lane_direction`.  The
+  /// input is an addive DrivingCommand value to the IDM/pure-pursuit commands
+  /// sent to the SimpleCar.  Returns a reference to the (stateful) SimpleCar
+  /// model.
+  //
+  // TODO(jadecastro) Default to current lane if goal_lane_direction is
+  // unspecified.
+  const systems::System<double>* AddIdmSimpleCar(
+      const std::string& name, const LaneDirection& goal_lane_direction);
 
   void Build();
+
+  /// Returns a vector of indices corresponding to the states for a `subsystem`
+  /// in the scenario.
+  std::vector<int> GetStateIndices(
+      const systems::System<double>& subsystem) const;
+
+  /// Returns a vector of indices corresponding to the inputs for a `subsystem`
+  /// in the scenario.
+  std::vector<int> GetInputIndices(
+      const systems::System<double>& subsystem) const;
+
+  /// Accessor to the finalized scenario Diagram.
+  const systems::Diagram<double>& diagram() const { return *scenario_diagram_; }
+
+  /// Accessor to the stateful subsystems of the scenario Diagram.
+  std::vector<const systems::System<double>*> aliases() const {
+    return aliases_;
+  }
 
   /// @name Road and geometry accessors.
   /// @{
   const maliput::api::RoadGeometry& road() const { return *road_; }
-  double car_width() const { return car_width_; }
-  double car_length() const { return car_length_; }
-  /// @}
-
-  // ** TODO ** The remainder of these public methods can only be called *after* Build().
-  void SetInitialSubsystemStateBounds(
-      const systems::System<double>& subsystem,
-      const SimpleCarState<double>& lb_value,
-      const SimpleCarState<double>& ub_value);
-
-  void SetFinalSubsystemState(const systems::System<double>& subsystem,
-                              const SimpleCarState<double>& value);
-
-  /// Returns a vector of indices corresponding to a particular `subsystem` in
-  /// the scenario.
-  std::vector<int> GetStateIndices(
-      const systems::System<double>& subsystem) const;
-
-  /// @name System accessors.
-  /// @{
-  const systems::Diagram<double>& diagram() const { return *scenario_diagram_; }
-  const systems::Context<double>& initial_context_lb() const {
-    return *initial_context_lb_;
-  }
-  const systems::Context<double>& initial_context_ub() const {
-    return *initial_context_ub_;
-  }
-  const systems::Context<double>& final_context() const {
-    return *final_context_;
-  }
-  std::vector<const systems::System<double>*> aliases() const {
-    return aliases_;
-  }
-  const systems::System<double>* ego_alias() const { return ego_alias_; }
+  double car_width() const { return geometry_->width; }
+  double car_length() const { return geometry_->length; }
   /// @}
 
  private:
   std::unique_ptr<maliput::api::RoadGeometry> road_;
-  const double car_width_{0.};
-  const double car_length_{0.};
+  std::unique_ptr<CarGeometry> geometry_;
 
-  // Temporaries that move to DiagramBuilder once BuildScenario is called.
-  std::vector<std::unique_ptr<systems::Diagram<double>>> ado_cars_{};
-  std::unique_ptr<SimpleCar<double>> ego_car_;
+  std::unique_ptr<systems::DiagramBuilder<double>> builder_;
+  systems::rendering::PoseAggregator<double>* aggregator_{nullptr};
 
-  const systems::System<double>* ego_alias_{nullptr};
   std::vector<const systems::System<double>*>
-      aliases_{};  // Double check if even needed!
-
-  std::map<const systems::System<double>*, LaneDirection> goal_lane_map_;
-
-  // Indices used for accessing the decision variables.
-  std::vector<int> ego_indices_{};
-  std::vector<std::vector<int>> ado_indices_{};
-
+      aliases_{};  // ** TODO ** Store as map with a BasicVector size?
   std::unique_ptr<systems::Diagram<double>> scenario_diagram_;
-  std::unique_ptr<systems::Context<double>> initial_context_lb_;
-  std::unique_ptr<systems::Context<double>> initial_context_ub_;
-  std::unique_ptr<systems::Context<double>> final_context_;
-
-  int noise_inport_{};
-  int traffic_inport_{};
-  int lane_inport_{};
-  int pose_outport_{};
-  int velocity_outport_{};
 };
 
 }  // namespace automotive
