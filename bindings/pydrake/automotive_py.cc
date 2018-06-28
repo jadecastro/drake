@@ -187,14 +187,18 @@ PYBIND11_MODULE(automotive, m) {
   py::class_<TrajectoryOptimization::InputStateTrajectoryData>(
       m, "InputStateTrajectoryData")
       .def_readwrite(
-          "inputs",
-          &TrajectoryOptimization::InputStateTrajectoryData::inputs)
+          "inputs", &TrajectoryOptimization::InputStateTrajectoryData::inputs)
       .def_readwrite(
-          "states",
-          &TrajectoryOptimization::InputStateTrajectoryData::states)
+          "states", &TrajectoryOptimization::InputStateTrajectoryData::states)
       .def_readwrite(
-          "times",
-          &TrajectoryOptimization::InputStateTrajectoryData::times);
+          "times", &TrajectoryOptimization::InputStateTrajectoryData::times)
+      .def_readwrite(
+          "x", &TrajectoryOptimization::InputStateTrajectoryData::x)
+      .def_readwrite(
+          "y", &TrajectoryOptimization::InputStateTrajectoryData::y)
+      .def_readwrite(
+          "heading", &TrajectoryOptimization::InputStateTrajectoryData::heading)
+      ;
 
   py::class_<IdmController<T>, LeafSystem<T>>(m, "IdmController",
                                               doc.IdmController.doc)

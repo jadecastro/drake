@@ -24,9 +24,20 @@ class TrajectoryOptimization final {
 
   /// Container with the trajectory solver result.
   struct InputStateTrajectoryData {
+    Eigen::VectorXd times;
     Eigen::MatrixXd inputs;
     Eigen::MatrixXd states;
-    Eigen::VectorXd times;
+
+    std::map<const systems::System<double>*, Eigen::VectorXd> x;
+    std::map<const systems::System<double>*, Eigen::VectorXd> y;
+    std::map<const systems::System<double>*, Eigen::VectorXd> heading;
+  };
+
+  template <typename T>
+  struct Cartesian {
+    T x;
+    T y;
+    T heading;
   };
 
   /// Registers the initial set for a `subsystem` in the scenario Diagram as a
@@ -60,9 +71,8 @@ class TrajectoryOptimization final {
   /// at the provided `initial_state`.  Does nothing without the additional
   /// (optional) calls to SetLinearGuessTrajectory(), AddInitialConstraints(),
   /// and AddFinalConstraints().
-  void RegisterFinalConstraint(
-      const systems::System<double>& subsystem,
-      const systems::BasicVector<double>& final_state);
+  void RegisterFinalConstraint(const systems::System<double>& subsystem,
+                               const systems::BasicVector<double>& final_state);
 
   /// Adds the initial constraints given in
   /// RegisterSubsystemInitial{Box}Constraint() to the DirectCollocation
@@ -108,6 +118,14 @@ class TrajectoryOptimization final {
   void AddGaussianCost(const systems::System<double>& subsystem,
                        const Eigen::MatrixXd& sigma);
 
+  /// Adds a chance constraint under the cost function specified under
+  /// AddGaussianCost(), as a zero-mean Gaussian probability density function
+  /// representing the deviation from the inputs from the nominal controller.
+  //
+  // ** TODO **
+  void AddGaussianTotalProbabilityConstraint(
+      const systems::System<double>& subsystem);
+
   /// Sets the affine constraint:
   ///     A * x_ego(t) ≤ b
   /// at time `t` on the provided `subsystem` state (Note: does NOT apply the
@@ -124,14 +142,20 @@ class TrajectoryOptimization final {
                            const Eigen::Ref<const Eigen::MatrixXd> A,
                            const Eigen::Ref<const Eigen::VectorXd> b, double t);
 
-  /// Attempts to solve the falsification problem.
+  /// Attempts to solve the trajectory optimization problem.
   void Solve();
 
-  /// @name Convenience getters for the underlying states.
+  /// @name Convenience getters for decision variables associated with a
+  /// particular subsystem.
   /// @{
+
   /// Accessor for the input vector at all times for `subsystem`.
   solvers::VectorXDecisionVariable get_input(
       const systems::System<double>& subsystem) const;
+
+  /// Accessor for the input vector at time `t` for `subsystem`.
+  SubVectorXDecisionVariable get_input(
+      double t, const systems::System<double>& subsystem) const;
 
   /// Accessor for the state vector at all times for `subsystem`.
   solvers::VectorXDecisionVariable get_state(
@@ -149,6 +173,12 @@ class TrajectoryOptimization final {
   SubVectorXDecisionVariable get_final_state(
       const systems::System<double>& subsystem) const;
   /// @}
+
+  /// Accessor for the cartesian components for `subsystem` evaluated at its
+  /// `substate`.
+  Cartesian<symbolic::Expression> get_cartesian(
+      const systems::System<double>& subsystem,
+      const VectorX<symbolic::Expression>& substate) const;
 
   /// Retuns the total probability of the solution under the cost function
   /// specified under AddGaussianCost(), as a zero-mean Gaussian probability

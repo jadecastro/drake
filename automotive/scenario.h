@@ -15,13 +15,60 @@
 namespace drake {
 namespace automotive {
 
-/// Builds a scenario based on a RoadGeometry and a set of car subsystems
-/// (Diagrams or LeafSystems). We require that all subsystems have
-/// DrivingCommand inputs and SimpleCarState, and the required ports to connect
-/// to PoseAggregator.
+class IdmSimpleCar : public systems::Diagram<double> {
+ public:
+  ///
+  IdmSimpleCar(std::string name, const maliput::api::RoadGeometry& road);
+
+  // TODO(jadecastro) Make IdmSimpleCar derive from an abstract class with these
+  // as pure vituals.
+  const systems::InputPortDescriptor<double>& disturbance_input_port() const;
+  const systems::InputPortDescriptor<double>& lane_input_port() const;
+  const systems::InputPortDescriptor<double>& traffic_input_port() const;
+  const systems::OutputPort<double>& state_output_port() const;
+  const systems::OutputPort<double>& pose_output_port() const;
+  const systems::OutputPort<double>& velocity_output_port() const;
+
+  /// TODO(jadecastro) Temporary getter until we've resolved symbolic support
+  /// for this diagram.
+  const SimpleCar<double>* get_simple_car() const { return simple_car_; }
+
+ private:
+  SimpleCar<double>* simple_car_{nullptr};
+
+  int disturbance_input_port_{};
+  int lane_input_port_{};
+  int traffic_input_port_{};
+  int state_output_port_{};
+  int pose_output_port_{};
+  int velocity_output_port_{};
+};
+
+/// Builds a system of cars with a common underlying RoadGeometry and a set of
+/// car subsystems (Diagrams or LeafSystems).
+///
+/// All subsystems added via AddFoo() methods are assumed to have three output
+/// ports, with the following ordering:
+///
+/// port 0: SimpleCarState
+/// port 1: PoseVector
+/// port 2: FrameVelocity
 class Scenario final {
  public:
+  using InputPortMap = std::map<const systems::System<double>*,
+                                const systems::InputPortDescriptor<double>*>;
+  using OutputPortMap = std::map<const systems::System<double>*,
+                                 const systems::OutputPort<double>*>;
+
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(Scenario)
+
+  Scenario(std::unique_ptr<maliput::api::RoadGeometry> road, double car_width,
+           double car_length);
+
+  static constexpr int kSimpleCarStatePort = 0;
+  static constexpr int kPoseVectorPort = 1;
+  static constexpr int kFrameVelocityPort = 2;
+  // ** TODO ** Unit test to verify this for our AddFoo() subsystems.
 
   struct CarGeometry {
     CarGeometry() = delete;
@@ -30,9 +77,6 @@ class Scenario final {
     const double width{};
     const double length{};
   };
-
-  Scenario(std::unique_ptr<maliput::api::RoadGeometry> road, double car_width,
-           double car_length);
 
   /// Add a new open-loop SimpleCar system to the scenario.  Returns a reference
   /// to the (stateful) SimpleCar model.
@@ -66,9 +110,18 @@ class Scenario final {
   /// Accessor to the finalized scenario Diagram.
   const systems::Diagram<double>& diagram() const { return *scenario_diagram_; }
 
-  /// Accessor to the stateful subsystems of the scenario Diagram.
+  /// Accessor to the subsystems of the scenario Diagram.
   std::vector<const systems::System<double>*> aliases() const {
     return aliases_;
+  }
+
+  /// *Temporary* accessor to the stateful sub-subsystems of the scenario
+  /// Diagram.
+  // TODO(jadecastro) Remove me once the subsystem diagrams are
+  // symbolic-supported.
+  std::map<const systems::System<double>*, const systems::System<double>*>
+  stateful_aliases() const {
+    return stateful_aliases_;
   }
 
   /// @name Road and geometry accessors.
@@ -83,10 +136,21 @@ class Scenario final {
   std::unique_ptr<CarGeometry> geometry_;
 
   std::unique_ptr<systems::DiagramBuilder<double>> builder_;
-  systems::rendering::PoseAggregator<double>* aggregator_{nullptr};
 
-  std::vector<const systems::System<double>*>
-      aliases_{};  // ** TODO ** Store as map with a BasicVector size?
+  InputPortMap driving_command_ports_;
+  InputPortMap traffic_ports_;
+  OutputPortMap state_ports_;
+  OutputPortMap pose_ports_;
+  OutputPortMap velocity_ports_;
+  std::map<const systems::System<double>*, int> state_sizes_;
+
+  std::vector<const systems::System<double>*> aliases_{};
+
+  // Maps a subsystem to the corresponding sub-subsystem that has states.
+  std::map<const systems::System<double>*, const systems::System<double>*>
+      stateful_aliases_{};  // TODO(jadecastro) Remove me once subsystems are
+                            // all symbolic-supported.
+
   std::unique_ptr<systems::Diagram<double>> scenario_diagram_;
 };
 

@@ -26,10 +26,28 @@ using systems::System;
 using systems::trajectory_optimization::DirectCollocation;
 using trajectories::PiecewisePolynomial;
 
-static constexpr int kX = SimpleCarStateIndices::kX;
-static constexpr int kY = SimpleCarStateIndices::kY;
-static constexpr int kHeading = SimpleCarStateIndices::kHeading;
-// static constexpr int kVelocity = SimpleCarStateIndices::kVelocity;
+namespace {
+
+// Calculate the Cartesian components of `substate` by evaluating the
+// SimpleCarState output of `subsystem`.
+template <typename T>
+TrajectoryOptimization::Cartesian<T> CalcCartesian(const System<T>& subsystem,
+                                                   const VectorX<T>& substate) {
+  auto subcontext = subsystem.CreateDefaultContext();
+  subcontext->get_mutable_continuous_state_vector().SetFromVector(substate);
+  auto output = subsystem.AllocateOutput(*subcontext);
+  auto car_state = dynamic_cast<const SimpleCarState<T>*>(
+      output->get_vector_data(Scenario::kSimpleCarStatePort));
+  DRAKE_DEMAND(car_state != nullptr);
+  subsystem.CalcOutput(*subcontext, output.get());
+  TrajectoryOptimization::Cartesian<T> cartesian;
+  cartesian.x = car_state->x();
+  cartesian.y = car_state->y();
+  cartesian.heading = car_state->heading();
+  return cartesian;
+}
+
+}  // namespace
 
 TrajectoryOptimization::TrajectoryOptimization(
     std::unique_ptr<Scenario> scenario, int num_time_samples,
@@ -92,7 +110,6 @@ void TrajectoryOptimization::RegisterFinalConstraint(
 
 void TrajectoryOptimization::AddInitialConstraints() {
   DRAKE_DEMAND(!is_solved_);
-  // Parse the initial conditions and set a constraint there.
   const systems::VectorBase<double>& initial_states_lb =
       initial_context_lb_->get_continuous_state_vector();
   prog_->AddLinearConstraint(prog_->initial_state() >=
@@ -105,7 +122,6 @@ void TrajectoryOptimization::AddInitialConstraints() {
 
 void TrajectoryOptimization::AddFinalConstraints() {
   DRAKE_DEMAND(!is_solved_);
-  // Parse the initial conditions and set a constraint there.
   const systems::VectorBase<double>& initial_states_lb =
       initial_context_lb_->get_continuous_state_vector();
   prog_->AddLinearConstraint(prog_->initial_state() >=
@@ -148,10 +164,10 @@ void TrajectoryOptimization::AddDragwayLaneConstraints(
   using std::sin;
 
   // N.B. We have a dragway; we can safely assume each lane has the same width.
-  const LanePosition min_lane_pos(
-      0., lane_bounds.first->lane_bounds(0.).min(), 0.);
-  const LanePosition max_lane_pos(
-      0., lane_bounds.first->lane_bounds(0.).max(), 0.);
+  const LanePosition min_lane_pos(0., lane_bounds.first->lane_bounds(0.).min(),
+                                  0.);
+  const LanePosition max_lane_pos(0., lane_bounds.first->lane_bounds(0.).max(),
+                                  0.);
 
   std::vector<double> y_bounds{};
   y_bounds.push_back(lane_bounds.first->ToGeoPosition(min_lane_pos).y());
@@ -165,16 +181,17 @@ void TrajectoryOptimization::AddDragwayLaneConstraints(
   const double l = scenario().car_length();
 
   auto state = get_state(subsystem);
+  auto ego = get_cartesian(subsystem, state);
 
-  // Compute the y-component of the four vertices of the heading-oriented box.
-  const auto y00 = state[kY] + (l / 2.) * sin(state[kHeading]) -
-      (w / 2.) * cos(state[kHeading]);
-  const auto y10 = state[kY] - (l / 2.) * sin(state[kHeading]) -
-      (w / 2.) * cos(state[kHeading]);
-  const auto y01 = state[kY] - (l / 2.) * sin(state[kHeading]) +
-      (w / 2.) * cos(state[kHeading]);
-  const auto y11 = state[kY] + (l / 2.) * sin(state[kHeading]) +
-      (w / 2.) * cos(state[kHeading]);
+  // Compute the y-component of the four vertices of the body.
+  const auto y00 =
+      ego.y + (l / 2.) * sin(ego.heading) - (w / 2.) * cos(ego.heading);
+  const auto y10 =
+      ego.y - (l / 2.) * sin(ego.heading) - (w / 2.) * cos(ego.heading);
+  const auto y01 =
+      ego.y - (l / 2.) * sin(ego.heading) + (w / 2.) * cos(ego.heading);
+  const auto y11 =
+      ego.y + (l / 2.) * sin(ego.heading) + (w / 2.) * cos(ego.heading);
 
   prog_->AddConstraintToAllKnotPoints(y_min <= y00);
   prog_->AddConstraintToAllKnotPoints(y00 <= y_max);
@@ -192,43 +209,42 @@ void TrajectoryOptimization::AddFinalCollisionConstraints(
   using std::cos;
   using std::sin;
 
-  // Compute a heading-oriented box and check for intersections with a trial
-  // point.
+  // Compute a bounding box in the body frame (x'-y') and check for
+  // intersections with a trial point.
   const double w = scenario().car_width();
   const double l = scenario().car_length();
-  const Eigen::Vector2d xy_offset(w / 2., l / 2.);
+  const Eigen::Vector2d xpyp_offset(w / 2., l / 2.);
 
-  auto ego_state = get_final_state(subsystem1);
-  const auto& x_ego = ego_state[kX];
-  const auto& y_ego = ego_state[kY];
-  const auto& heading_ego = ego_state[kHeading];
-  const Vector2<symbolic::Variable> xy_ego(x_ego, y_ego);
+  auto ego_final_state = get_final_state(subsystem1);
+  auto ego = get_cartesian(subsystem1, ego_final_state);
+  const Vector2<symbolic::Expression> xy_ego(ego.x, ego.y);
 
-  auto ado_state = get_final_state(subsystem2);
-  const auto& x_ado = ado_state[kX];
-  const auto& y_ado = ado_state[kY];
-  const auto& heading_ado = ado_state[kHeading];
-  const Vector2<symbolic::Variable> xy_ado(x_ado, y_ado);
+  auto ado_final_state = get_final_state(subsystem2);
+  auto ado = get_cartesian(subsystem2, ado_final_state);
+  const Vector2<symbolic::Expression> xy_ado(ado.x, ado.y);
 
   // Compute a bisecting point on the line connecting the two bodies, use it to
   // declare a (possibly conservative) necessary condition for collision between
   // them.
-  const Vector2<symbolic::Expression> xy_bisect(0.5 * (x_ego + x_ado),
-                                                0.5 * (y_ego + y_ado));
+  const Vector2<symbolic::Expression> xy_bisect = 0.5 * (xy_ego + xy_ado);
 
   Matrix2<symbolic::Expression> A_ego;
-  A_ego << -sin(heading_ego), cos(heading_ego),
-            cos(heading_ego), sin(heading_ego);
+  // clang-format off
+  A_ego << -sin(ego.heading), cos(ego.heading),
+            cos(ego.heading), sin(ego.heading);
+  // clang-format on
 
-  const Vector2<symbolic::Expression> b_hi_ego = A_ego * xy_ego + xy_offset;
-  const Vector2<symbolic::Expression> b_lo_ego = A_ego * xy_ego - xy_offset;
+  const Vector2<symbolic::Expression> b_hi_ego = A_ego * xy_ego + xpyp_offset;
+  const Vector2<symbolic::Expression> b_lo_ego = A_ego * xy_ego - xpyp_offset;
 
   Matrix2<symbolic::Expression> A_ado;
-  A_ado << -sin(heading_ado), cos(heading_ado),
-            cos(heading_ado), sin(heading_ado);
+  // clang-format off
+  A_ado << -sin(ado.heading), cos(ado.heading),
+            cos(ado.heading), sin(ado.heading);
+  // clang-format on
 
-  const Vector2<symbolic::Expression> b_hi_ado = A_ado * xy_ado + xy_offset;
-  const Vector2<symbolic::Expression> b_lo_ado = A_ado * xy_ado - xy_offset;
+  const Vector2<symbolic::Expression> b_hi_ado = A_ado * xy_ado + xpyp_offset;
+  const Vector2<symbolic::Expression> b_lo_ado = A_ado * xy_ado - xpyp_offset;
 
   prog_->AddConstraint(b_lo_ego <= A_ego * xy_bisect);
   prog_->AddConstraint(A_ego * xy_bisect <= b_hi_ego);
@@ -238,6 +254,7 @@ void TrajectoryOptimization::AddFinalCollisionConstraints(
 
 void TrajectoryOptimization::AddGaussianCost(const System<double>& subsystem,
                                              const Eigen::MatrixXd& sigma) {
+  // ** TODO ** make sigma a BasicVector?
   DRAKE_DEMAND(!is_solved_);
 
   const auto input = get_input(subsystem);
@@ -246,6 +263,22 @@ void TrajectoryOptimization::AddGaussianCost(const System<double>& subsystem,
 
   const Eigen::MatrixXd sigma_inv = sigma.inverse();
   prog_->AddRunningCost(input.transpose() * sigma_inv * input);
+}
+
+void TrajectoryOptimization::AddGaussianTotalProbabilityConstraint(
+    const System<double>& subsystem) {
+  DRAKE_DEMAND(is_solved_);
+  using std::log;
+  using std::sqrt;
+
+  // const double kSigma = 50.;
+  // const double kP = 2. * num_time_samples_ * kSigma * kSigma *
+  //                      log(1. / (sqrt(2. * M_PI) * kSigma)) -
+  //                  2. * kSigma * kSigma * log(path_probability);
+  // drake::unused(kP);
+  // for (int i{0}; i < prog_->input().size(); ++i) {
+  //  std::cout << " prog->input()(i) " << prog_->input()(i) << std::endl;
+  //}
 }
 
 void TrajectoryOptimization::AddLinearConstraint(
@@ -266,39 +299,52 @@ void TrajectoryOptimization::Solve() {
   DRAKE_DEMAND(!is_solved_);
 
   result_ = prog_->Solve();
+
   trajectory_.inputs = prog_->GetInputSamples();
   trajectory_.states = prog_->GetStateSamples();
   trajectory_.times = prog_->GetSampleTimes();
 
-  std::cout << " Sample times: " << trajectory_.times << std::endl;
-  std::cout << " Inputs for ego car: " << trajectory_.inputs.row(0)
-            << std::endl;
-  std::cout << "                     " << trajectory_.inputs.row(1)
-            << std::endl;
-  // TODO(jadecastro) Transform this cost into a probability distribution.
-  std::cout << " Optimal Cost: " << prog_->GetOptimalCost() << std::endl;
-
-  // Dump the entire solution result to the screen.
-  // for (int i{0}; i < states.size(); ++i) {
-  //   std::cout << " states(" << i << ") " << states(i) << std::endl;
-  // }
-
+  const int size = trajectory_.times.rows();
+  for (const auto& subsystem : scenario().aliases()) {
+    trajectory_.x[subsystem].resize(size);
+    trajectory_.y[subsystem].resize(size);
+    trajectory_.heading[subsystem].resize(size);
+    for (int i{0}; i < size; i++) {
+      const std::vector<int> indices = scenario_->GetStateIndices(*subsystem);
+      const Eigen::VectorXd substates =
+          trajectory_.states.col(i).segment(indices[0], indices.size());
+      const auto stateful_subsystem = scenario_->stateful_aliases()[subsystem];
+      const TrajectoryOptimization::Cartesian<double> cartesian =
+          CalcCartesian<double>(*stateful_subsystem, substates);
+      trajectory_.x[subsystem](i) = cartesian.x;
+      trajectory_.y[subsystem](i) = cartesian.y;
+      trajectory_.heading[subsystem](i) = cartesian.heading;
+    }
+  }
   std::cout << " SOLUTION RESULT: " << result_ << std::endl;
+  std::cout << " Sample times: " << trajectory_.times.transpose() << std::endl;
   is_solved_ = true;
 }
 
 solvers::VectorXDecisionVariable TrajectoryOptimization::get_input(
     const System<double>& subsystem) const {
   const std::vector<int> indices = scenario_->GetInputIndices(subsystem);
-  return prog_->input().segment(indices[0],
-                                DrivingCommandIndices::kNumCoordinates);
+  return prog_->input().segment(indices[0], indices.size());
+}
+
+TrajectoryOptimization::SubVectorXDecisionVariable
+TrajectoryOptimization::get_input(double t,
+                                  const System<double>& subsystem) const {
+  DRAKE_DEMAND(t >= 0 && t <= min_time_step_ * num_time_samples_);
+  const int index = std::ceil(t / min_time_step_);
+  const std::vector<int> indices = scenario_->GetInputIndices(subsystem);
+  return prog_->input(index).segment(indices[0], indices.size());
 }
 
 solvers::VectorXDecisionVariable TrajectoryOptimization::get_state(
     const System<double>& subsystem) const {
   const std::vector<int> indices = scenario_->GetStateIndices(subsystem);
-  return prog_->state().segment(indices[0],
-                                SimpleCarStateIndices::kNumCoordinates);
+  return prog_->state().segment(indices[0], indices.size());
 }
 
 TrajectoryOptimization::SubVectorXDecisionVariable
@@ -307,23 +353,29 @@ TrajectoryOptimization::get_state(double t,
   DRAKE_DEMAND(t >= 0 && t <= min_time_step_ * num_time_samples_);
   const int index = std::ceil(t / min_time_step_);
   const std::vector<int> indices = scenario_->GetStateIndices(subsystem);
-  return prog_->state(index).segment(indices[0],
-                                     SimpleCarStateIndices::kNumCoordinates);
+  return prog_->state(index).segment(indices[0], indices.size());
 }
 
 TrajectoryOptimization::SubVectorXDecisionVariable
 TrajectoryOptimization::get_initial_state(
     const System<double>& subsystem) const {
   const std::vector<int> indices = scenario_->GetStateIndices(subsystem);
-  return prog_->initial_state().segment(indices[0],
-                                        SimpleCarStateIndices::kNumCoordinates);
+  return prog_->initial_state().segment(indices[0], indices.size());
 }
 
 TrajectoryOptimization::SubVectorXDecisionVariable
 TrajectoryOptimization::get_final_state(const System<double>& subsystem) const {
   const std::vector<int> indices = scenario_->GetStateIndices(subsystem);
-  return prog_->final_state().segment(indices[0],
-                                      SimpleCarStateIndices::kNumCoordinates);
+  return prog_->final_state().segment(indices[0], indices.size());
+}
+
+TrajectoryOptimization::Cartesian<symbolic::Expression>
+TrajectoryOptimization::get_cartesian(
+    const System<double>& subsystem,
+    const VectorX<symbolic::Expression>& substate) const {
+  const auto subsystem_symb =
+      scenario_->stateful_aliases()[&subsystem]->ToSymbolic();
+  return CalcCartesian<symbolic::Expression>(*subsystem_symb, substate);
 }
 
 double TrajectoryOptimization::GetSolutionTotalProbability() const {
@@ -346,11 +398,9 @@ void TrajectoryOptimization::PlotSolution() {
   DRAKE_DEMAND(is_solved_);
   int i{0};
   for (const auto& subsystem : scenario().aliases()) {
-    const Eigen::VectorXd x =
-        trajectory_.states.row(scenario().GetStateIndices(*subsystem).at(kX));
-    const Eigen::VectorXd y =
-        trajectory_.states.row(scenario().GetStateIndices(*subsystem).at(kY));
-    CallPython("figure", i++ + 2);
+    const Eigen::VectorXd& x = trajectory_.x[subsystem];
+    const Eigen::VectorXd& y = trajectory_.y[subsystem];
+    CallPython("figure", i + 2);
     CallPython("clf");
     CallPython("plot", x, y);
     //    CallPython("setvars", "ado_x_" + std::to_string(i), ado_x,
@@ -358,15 +408,12 @@ void TrajectoryOptimization::PlotSolution() {
     CallPython("plt.xlabel", subsystem->get_name() + " x (m)");
     CallPython("plt.ylabel", subsystem->get_name() + " y (m)");
     CallPython("plt.show");
+    i++;
   }
 }
 
 void TrajectoryOptimization::AnimateSolution() const {
   DRAKE_DEMAND(is_solved_);
-  const Eigen::MatrixXd inputs = prog_->GetInputSamples();
-  const Eigen::MatrixXd states = prog_->GetStateSamples();
-  const Eigen::VectorXd times_out = prog_->GetSampleTimes();
-
   // ** TODO ** Make an automotive::Trajectory() from the result, and replay it
   //            in AutomotiveSimulator.
   /*
@@ -383,6 +430,7 @@ void TrajectoryOptimization::AnimateSolution() const {
   }
   */
 }
+
 const TrajectoryOptimization::InputStateTrajectoryData&
 TrajectoryOptimization::get_trajectory() const {
   DRAKE_DEMAND(is_solved_);
