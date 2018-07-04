@@ -81,7 +81,7 @@ class SimpleCar final : public systems::LeafSystem<T> {
 
   void ImplCalcTimeDerivatives(const SimpleCarParams<T>& params,
                                const SimpleCarState<T>& state,
-                               const systems::BasicVector<T>& input,
+                               const DrivingCommand<T>& input,
                                SimpleCarState<T>* rates) const;
 
   void CalcSteeringAngleConstraint(const systems::Context<T>&,

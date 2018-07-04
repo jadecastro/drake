@@ -59,20 +59,10 @@ const GeoPositionT<T> PurePursuit<T>::ComputeGoalPoint(
   const Lane* const lane = lane_direction.lane;
   const bool with_s = lane_direction.with_s;
 
-  // Make z coherent.
-  auto translation = pose.get_translation();
-  const T x = translation.x();
-  const T y = translation.y();
-  T z = translation.z();
-  autodiffxd_make_coherent(x, &z);
-  PoseVector<T> new_pose;
-  new_pose.set_translation(Eigen::Translation<T, 3>{x, y, z});
-  new_pose.set_rotation(pose.get_rotation());
-
   const LanePositionT<T> position =
-      lane->ToLanePositionT<T>({new_pose.get_translation().x(),
-                                new_pose.get_translation().y(),
-                                new_pose.get_translation().z()},
+      lane->ToLanePositionT<T>({pose.get_translation().x(),
+                                pose.get_translation().y(),
+                                pose.get_translation().z()},
                                nullptr, nullptr);
   const T s_new =
       with_s ? position.s() + s_lookahead : position.s() - s_lookahead;

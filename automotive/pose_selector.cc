@@ -528,44 +528,21 @@ ClosestPose<T> PoseSelector<T>::FindSingleClosestPose(
     const Lane* lane, const PoseVector<T>& ego_pose,
     const PoseBundle<T>& traffic_poses, const T& scan_distance,
     const AheadOrBehind side, ScanStrategy path_or_branches) {
-  // Make z coherent.
-  auto translation = ego_pose.get_translation();
-  const T x = translation.x();
-  const T y = translation.y();
-  T z = translation.z();
-  autodiffxd_make_coherent(x, &z);
-  PoseVector<T> new_pose;
-  new_pose.set_translation(Eigen::Translation<T, 3>{x, y, z});
-  new_pose.set_rotation(ego_pose.get_rotation());
-
-  PoseBundle<T> new_poses(traffic_poses.get_num_poses());
-  for (int i{0}; i < traffic_poses.get_num_poses(); ++i) {
-    // Make z coherent.
-    auto pose = traffic_poses.get_pose(i);
-    auto vel = traffic_poses.get_velocity(i);
-    const T xt = pose.translation().x();
-    T zt = pose.translation().z();
-    autodiffxd_make_coherent(xt, &zt);
-    Isometry3<T> isometry = pose;
-    isometry.translation().z() = zt;
-    new_poses.set_pose(i, isometry);
-    new_poses.set_velocity(i, vel);
-  }
 
   // Find any leading traffic cars along the same default path as the ego
   // vehicle.
   const ClosestPose<T> result_in_path = FindSingleClosestInDefaultPath(
-      lane, new_pose, new_poses, scan_distance, side);
+      lane, ego_pose, traffic_poses, scan_distance, side);
   if (path_or_branches == ScanStrategy::kPath) return result_in_path;
 
   const std::vector<LaneEndDistance<T>> branches =
-      FindConfluentBranches(lane, new_pose, scan_distance, side);
+      FindConfluentBranches(lane, ego_pose, scan_distance, side);
   if (branches.size() == 0) return result_in_path;
 
   // Find any leading traffic cars in lanes leading into the ego vehicle's
   // default path.
   const ClosestPose<T> result_in_branch = FindSingleClosestInBranches(
-      lane, new_pose, new_poses, scan_distance, side, branches);
+      lane, ego_pose, traffic_poses, scan_distance, side, branches);
 
   if (result_in_path.distance <= result_in_branch.distance) {
     return result_in_path;

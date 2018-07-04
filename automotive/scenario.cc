@@ -4,14 +4,14 @@
 #include <vector>
 
 #include "drake/automotive/gen/driving_command.h"
+#include "drake/automotive/driving_command_adder.h"
+#include "drake/automotive/driving_command_demux.h"
+#include "drake/automotive/driving_command_mux.h"
 #include "drake/automotive/idm_controller.h"
 #include "drake/automotive/maliput/dragway/road_geometry.h"
 #include "drake/automotive/pure_pursuit_controller.h"
 #include "drake/systems/framework/diagram_builder.h"
-#include "drake/systems/primitives/adder.h"
 #include "drake/systems/primitives/constant_value_source.h"
-#include "drake/systems/primitives/demultiplexer.h"
-#include "drake/systems/primitives/multiplexer.h"
 
 namespace drake {
 namespace automotive {
@@ -48,10 +48,7 @@ IdmSimpleCar::IdmSimpleCar(std::string name, const RoadGeometry& road)
   const auto pursuit =
       builder.template AddSystem<PurePursuitController<double>>();
   pursuit->set_name(name + "_pure_pursuit_controller");
-  const auto mux = builder.template AddSystem<systems::Multiplexer<double>>(
-      DrivingCommand<double>());
-  // ** TODO ** Rebase and replace with DrivingCommandMux.
-  // ** TODO ** (related) Apply SimpleCar coherence fix.
+  const auto mux = builder.template AddSystem<DrivingCommandMux<double>>();
   mux->set_name(name + "_mux");
 
   builder.Connect(simple_car_->pose_output(), idm_controller->ego_pose_input());
@@ -59,14 +56,12 @@ IdmSimpleCar::IdmSimpleCar(std::string name, const RoadGeometry& road)
                   idm_controller->ego_velocity_input());
   builder.Connect(simple_car_->pose_output(), pursuit->ego_pose_input());
 
-  builder.Connect(pursuit->steering_command_output(),
-                  mux->get_input_port(DrivingCommandIndices::kSteeringAngle));
+  builder.Connect(pursuit->steering_command_output(), mux->steering_input());
   builder.Connect(idm_controller->acceleration_output(),
-                  mux->get_input_port(DrivingCommandIndices::kAcceleration));
+                  mux->acceleration_input());
 
-  const int input_size = DrivingCommandIndices::kNumCoordinates;
-  const auto adder = builder.template AddSystem<systems::Adder<double>>(
-      2 /*num inputs*/, input_size);
+  const auto adder = builder.template AddSystem<DrivingCommandAdder<double>>(
+      2 /*num inputs*/);
   const int kAdderValuePort = 0;
   const int kAdderNoisePort = 1;
   builder.Connect(adder->get_output_port(), simple_car_->get_input_port(0));
@@ -117,7 +112,7 @@ const System<double>* Scenario::AddSimpleCar(const std::string& name) {
 
   // Wire up the subsystem to the scenario diagram.
   const auto simple_car = builder_->AddSystem<SimpleCar<double>>();
-  simple_car->set_name(name);
+  simple_car->set_name(name + "_simple_car");
 
   // Register the subsystem.
   driving_command_ports_[simple_car] = &simple_car->get_input_port(0);
@@ -158,11 +153,8 @@ const System<double>* Scenario::AddIdmSimpleCar(
 
 void Scenario::Build() {
   const int num_subsystems = aliases_.size();
-  const int input_size =
-      DrivingCommandIndices::kNumCoordinates * num_subsystems;
   const auto demux =
-      builder_->template AddSystem<systems::Demultiplexer<double>>(
-          input_size, DrivingCommandIndices::kNumCoordinates);
+      builder_->template AddSystem<DrivingCommandDemux<double>>(num_subsystems);
   demux->set_name("demux");
   const auto aggregator =
       builder_->template AddSystem<PoseAggregator<double>>();

@@ -23,9 +23,6 @@ using systems::rendering::PoseVector;
 
 namespace automotive {
 
-static constexpr int kSteeringIndex = DrivingCommandIndices::kSteeringAngle;
-static constexpr int kAccelIndex = DrivingCommandIndices::kAcceleration;
-
 namespace {  // Local helper function.
 
 // Obtain our continuous state from a context.
@@ -41,10 +38,10 @@ const SimpleCarState<T>& get_state(const systems::Context<T>& context) {
 
 // Obtain our input from a context.
 template <typename T>
-const BasicVector<T>& get_input(const SimpleCar<T>* simple_car,
+const DrivingCommand<T>& get_input(const SimpleCar<T>* simple_car,
                                    const systems::Context<T>& context) {
-  const BasicVector<T>* const input =
-      simple_car->template EvalVectorInput<BasicVector>(context, 0);
+  const DrivingCommand<T>* const input =
+      simple_car->template EvalVectorInput<DrivingCommand>(context, 0);
   DRAKE_DEMAND(input);
   return *input;
 }
@@ -62,8 +59,7 @@ const SimpleCarParams<T>& get_params(const systems::Context<T>& context) {
 template <typename T>
 SimpleCar<T>::SimpleCar()
     : systems::LeafSystem<T>(systems::SystemTypeTag<automotive::SimpleCar>{}) {
-  this->DeclareVectorInputPort(
-      BasicVector<T>(DrivingCommandIndices::kNumCoordinates));
+  this->DeclareVectorInputPort(DrivingCommand<T>());
   this->DeclareVectorOutputPort(&SimpleCar::CalcStateOutput);
   this->DeclareVectorOutputPort(&SimpleCar::CalcPose);
   this->DeclareVectorOutputPort(&SimpleCar::CalcVelocity);
@@ -113,7 +109,8 @@ template <typename T>
 void SimpleCar<T>::CalcPose(const systems::Context<T>& context,
                             PoseVector<T>* pose) const {
   const SimpleCarState<T>& state = get_state(context);
-  pose->set_translation(Eigen::Translation<T, 3>(state.x(), state.y(), 0));
+  pose->set_translation(Eigen::Translation<T, 3>(
+      state.x(), state.y(), 0 * state.x() /* fulfills coherence contract */));
   const Vector3<T> z_axis{0.0, 0.0, 1.0};
   const Eigen::AngleAxis<T> rotation(state.heading(), z_axis);
   pose->set_rotation(Eigen::Quaternion<T>(rotation));
@@ -134,7 +131,8 @@ void SimpleCar<T>::CalcVelocity(
   multibody::SpatialVelocity<T> output;
   output.translational().x() = nonneg_velocity * cos(state.heading());
   output.translational().y() = nonneg_velocity * sin(state.heading());
-  output.translational().z() = T(0);
+  output.translational().z() = 0. * state.x();  // Fulfill coherence contract
+                                                // with downstream components.
   output.rotational().x() = T(0);
   output.rotational().y() = T(0);
   // The rotational velocity around the z-axis is actually rates.heading(),
@@ -156,8 +154,8 @@ void SimpleCar<T>::DoCalcTimeDerivatives(
   const SimpleCarState<T>& state = get_state(context);
 
   // Obtain the input.
-  const BasicVector<T>* const input =
-      this->template EvalVectorInput<BasicVector>(context, 0);
+  const DrivingCommand<T>* const input =
+      this->template EvalVectorInput<DrivingCommand>(context, 0);
   DRAKE_ASSERT(input);
 
   // Obtain the result structure.
@@ -174,7 +172,7 @@ void SimpleCar<T>::DoCalcTimeDerivatives(
 template <typename T>
 void SimpleCar<T>::ImplCalcTimeDerivatives(const SimpleCarParams<T>& params,
                                            const SimpleCarState<T>& state,
-                                           const BasicVector<T>& input,
+                                           const DrivingCommand<T>& input,
                                            SimpleCarState<T>* rates) const {
   using std::abs;
   using std::cos;
@@ -184,11 +182,11 @@ void SimpleCar<T>::ImplCalcTimeDerivatives(const SimpleCarParams<T>& params,
 
   // std::cout << " simplecar input : " << input.CopyToVector() << std::endl;
   // Sanity check our input.
-  // DRAKE_DEMAND(abs(input.GetAtIndex(kSteeringIndex)) < M_PI);
+  // DRAKE_DEMAND(abs(input.steering_angle()) < M_PI);
 
   // Compute the smooth acceleration that the vehicle actually executes.
   // TODO(jwnimmer-tri) We should saturate to params.max_acceleration().
-  const T desired_acceleration = input.GetAtIndex(kAccelIndex);
+  const T desired_acceleration = input.acceleration();
   const T smooth_acceleration =
       calc_smooth_acceleration(desired_acceleration, params.max_velocity(),
                                params.velocity_limit_kp(), state.velocity());
@@ -196,14 +194,14 @@ void SimpleCar<T>::ImplCalcTimeDerivatives(const SimpleCarParams<T>& params,
   // Determine steering.
   /*
     const T saturated_steering_angle =
-      math::saturate(input.GetAtIndex(kSteeringIndex),
+      math::saturate(input.steering_angle(),
                      -params.max_abs_steering_angle(),
                      params.max_abs_steering_angle());
   */
   // Soften the saturation limits.
   const T saturated_steering_angle =
-      params.max_abs_steering_angle() * tanh(input.GetAtIndex(kSteeringIndex) / params.max_abs_steering_angle());
-  // drake::log()->info(" ** Steering unsat : {}\n", input.GetAtIndex(kSteeringIndex));
+      params.max_abs_steering_angle() * tanh(input.steering_angle() / params.max_abs_steering_angle());
+  // drake::log()->info(" ** Steering unsat : {}\n", input.steering_angle());
   // drake::log()->info("    Steering sat : {}\n", params.max_abs_steering_angle());
   // drake::log()->info("    Steering act : {}\n", saturated_steering_angle);
   const T curvature = tan(saturated_steering_angle) / params.wheelbase();
@@ -222,11 +220,11 @@ void SimpleCar<T>::ImplCalcTimeDerivatives(const SimpleCarParams<T>& params,
 template <typename T>
 void SimpleCar<T>::CalcSteeringAngleConstraint(
     const systems::Context<T>& context, VectorX<T>* value) const {
-  const BasicVector<T>& input = get_input(this, context);
+  const DrivingCommand<T>& input = get_input(this, context);
   const SimpleCarParams<T>& params = get_params(context);
   *value = Vector2<T>(
-      params.max_abs_steering_angle() - input.GetAtIndex(kSteeringIndex),
-      params.max_abs_steering_angle() + input.GetAtIndex(kSteeringIndex));
+      params.max_abs_steering_angle() - input.steering_angle(),
+      params.max_abs_steering_angle() + input.steering_angle());
   // drake::log()->info(" ** Steering : ", *value);
   // if ((*value)[0] < 0.) std::cout << " ** Steering exceeded max! " << std::endl;
   // if ((*value)[1] < 0.) std::cout << " ** Steering exceeded min! " << std::endl;
@@ -237,11 +235,11 @@ void SimpleCar<T>::CalcSteeringAngleConstraint(
 template <typename T>
 void SimpleCar<T>::CalcAccelerationConstraint(
     const systems::Context<T>& context, VectorX<T>* value) const {
-  const BasicVector<T>& input = get_input(this, context);
+  const DrivingCommand<T>& input = get_input(this, context);
   const SimpleCarParams<T>& params = get_params(context);
   *value = Vector2<T>(
-      params.max_acceleration() - input.GetAtIndex(kAccelIndex),
-      params.max_acceleration() + input.GetAtIndex(kAccelIndex));
+      params.max_acceleration() - input.acceleration(),
+      params.max_acceleration() + input.acceleration());
   // drake::log()->info(" ** Accel : ", *value);
   // if ((*value)[0] < 0.) std::cout << " ** Accel exceeded max! " << std::endl;
   // if ((*value)[1] < 0.) std::cout << " ** Accel exceeded min! " << std::endl;

@@ -35,7 +35,7 @@ TrajectoryOptimization::Cartesian<T> CalcCartesian(const System<T>& subsystem,
                                                    const VectorX<T>& substate) {
   auto subcontext = subsystem.CreateDefaultContext();
   subcontext->get_mutable_continuous_state_vector().SetFromVector(substate);
-  auto output = subsystem.AllocateOutput(*subcontext);
+  auto output = subsystem.AllocateOutput();
   auto car_state = dynamic_cast<const SimpleCarState<T>*>(
       output->get_vector_data(Scenario::kSimpleCarStatePort));
   DRAKE_DEMAND(car_state != nullptr);
