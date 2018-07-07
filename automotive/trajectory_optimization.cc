@@ -289,10 +289,8 @@ void TrajectoryOptimization::AddLinearConstraint(
   DRAKE_DEMAND(A.cols() == SimpleCarStateIndices::kNumCoordinates);
 
   // Assume a zero-order hold on the constraints application.
-  auto state = get_state(t, subsystem);
-  prog_->AddLinearConstraint(A, -b * std::numeric_limits<double>::infinity(), b,
-                             state);
-  // prog_->AddConstraint(A * state <= b);  // ** TODO ** Enable this spelling.
+  const VectorX<symbolic::Expression> state = get_state(t, subsystem);
+  prog_->AddLinearConstraint(A * state <= b);
 }
 
 void TrajectoryOptimization::Solve() {
