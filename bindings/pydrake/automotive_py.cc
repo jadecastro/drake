@@ -2,7 +2,6 @@
 #include <pybind11/pybind11.h>
 
 #include "drake/automotive/calc_ongoing_road_position.h"
-#include "drake/automotive/falsifier.h"
 #include "drake/automotive/gen/driving_command.h"
 #include "drake/automotive/idm_controller.h"
 #include "drake/automotive/maliput/api/lane_data.h"
@@ -106,19 +105,6 @@ PYBIND11_MODULE(automotive, m) {
            doc.DrivingCommand.set_steering_angle.doc)
       .def("set_acceleration", &DrivingCommand<T>::set_acceleration,
            doc.DrivingCommand.set_acceleration.doc);
-
-  py::class_<Falsifier::InputStateTrajectory>(m, "InputStateTrajectory")
-      .def_readwrite("inputs", &Falsifier::InputStateTrajectory::inputs)
-      .def_readwrite("states", &Falsifier::InputStateTrajectory::states)
-      .def_readwrite("times", &Falsifier::InputStateTrajectory::times);
-
-  py::class_<Falsifier>(m, "Falsifier")
-      .def(py::init<>())
-      .def("SetEgoLinearConstraint", &Falsifier::SetEgoLinearConstraint,
-           py::arg("A"), py::arg("b"), py::arg("t"))
-      .def("Run", &Falsifier::Run)
-      .def("get_trajectory", &Falsifier::get_trajectory,
-           py_reference_internal);
 
   py::class_<Scenario>(m, "Scenario")
       .def(py::init<std::unique_ptr<maliput::api::RoadGeometry>, double, double>(),
