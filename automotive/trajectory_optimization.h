@@ -195,6 +195,11 @@ class TrajectoryOptimization final {
   // ** TODO **
   void AnimateSolution() const;
 
+  /// Computes the utility of the solution returned after calling Solve() with
+  /// respect to a given "test" hyperplane.
+  double ComputeUtility(const Eigen::Ref<const Eigen::VectorXd> a,
+                        double b, double t) const;
+
   /// Accessor to the registered scenario.
   const Scenario& scenario() const { return *scenario_; }
 
