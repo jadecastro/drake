@@ -154,7 +154,7 @@ void TrajectoryOptimization::SetLinearGuessTrajectory() {
 void TrajectoryOptimization::AddDragwayLaneConstraints(
     const System<double>& subsystem,
     std::pair<const Lane*, const Lane*> lane_bounds) {
-  if (dynamic_cast<const maliput::dragway::RoadGeometry*>(&scenario().road()) ==
+  if (dynamic_cast<const maliput::dragway::RoadGeometry*>(&scenario_->road()) ==
       nullptr) {
     throw std::runtime_error("This function only works for Dragway.");
   }
@@ -177,8 +177,8 @@ void TrajectoryOptimization::AddDragwayLaneConstraints(
   const double y_min = *std::min_element(y_bounds.begin(), y_bounds.end());
   const double y_max = *std::max_element(y_bounds.begin(), y_bounds.end());
 
-  const double w = scenario().car_width();
-  const double l = scenario().car_length();
+  const double w = scenario_->car_width();
+  const double l = scenario_->car_length();
 
   auto state = get_state(subsystem);
   auto ego = get_cartesian(subsystem, state);
@@ -211,8 +211,8 @@ void TrajectoryOptimization::AddFinalCollisionConstraints(
 
   // Compute a bounding box in the body frame (x'-y') and check for
   // intersections with a trial point.
-  const double w = scenario().car_width();
-  const double l = scenario().car_length();
+  const double w = scenario_->car_width();
+  const double l = scenario_->car_length();
   const Eigen::Vector2d xpyp_offset(w / 2., l / 2.);
 
   auto ego_final_state = get_final_state(subsystem1);
@@ -256,6 +256,7 @@ void TrajectoryOptimization::AddGaussianCost(const System<double>& subsystem,
                                              const Eigen::MatrixXd& sigma) {
   // ** TODO ** make sigma a BasicVector?
   DRAKE_DEMAND(!is_solved_);
+  sigma_map_[&subsystem] = sigma;
 
   const auto input = get_input(subsystem);
   DRAKE_DEMAND(sigma.rows() == input.size());
@@ -268,7 +269,6 @@ void TrajectoryOptimization::AddGaussianCost(const System<double>& subsystem,
 void TrajectoryOptimization::AddGaussianTotalProbabilityConstraint(
     const System<double>& subsystem) {
   DRAKE_DEMAND(is_solved_);
-  using std::log;
   using std::sqrt;
 
   // const double kSigma = 50.;
@@ -303,7 +303,7 @@ void TrajectoryOptimization::Solve() {
   trajectory_.times = prog_->GetSampleTimes();
 
   const int size = trajectory_.times.rows();
-  for (const auto& subsystem : scenario().aliases()) {
+  for (const auto& subsystem : scenario_->aliases()) {
     trajectory_.x[subsystem].resize(size);
     trajectory_.y[subsystem].resize(size);
     trajectory_.heading[subsystem].resize(size);
@@ -376,26 +376,36 @@ TrajectoryOptimization::get_cartesian(
   return CalcCartesian<symbolic::Expression>(*subsystem_symb, substate);
 }
 
-double TrajectoryOptimization::GetSolutionTotalProbability() const {
+double TrajectoryOptimization::GetSolutionTotalLogPdf() const {
   DRAKE_DEMAND(is_solved_);
   using std::log;
-  using std::sqrt;
+  using std::pow;
 
-  // const double kSigma = 50.;
-  // const double kP = 2. * num_time_samples_ * kSigma * kSigma *
-  //                      log(1. / (sqrt(2. * M_PI) * kSigma)) -
-  //                  2. * kSigma * kSigma * log(path_probability);
-  // drake::unused(kP);
-  // for (int i{0}; i < prog_->input().size(); ++i) {
-  //  std::cout << " prog->input()(i) " << prog_->input()(i) << std::endl;
-  //}
-  return 0.;
+  const int size = trajectory_.times.rows();
+  const int all_input_size =
+      sigma_map_.size() * DrivingCommandIndices::kNumCoordinates;
+
+  double result = -0.5 * size * all_input_size * log(2. * M_PI);
+  for (const auto& subsystem : scenario_->aliases()) {
+    if (sigma_map_.find(subsystem) == sigma_map_.end()) continue;
+    const std::vector<int> indices = scenario_->GetInputIndices(*subsystem);
+    const Eigen::MatrixXd sigma = sigma_map_.at(subsystem);
+    const double sigma_det = sigma.determinant();
+    result -= 0.5 * size * log(sigma_det);
+    const Eigen::MatrixXd sigma_inv = sigma.inverse();
+    for (int i{0}; i < size; i++) {
+      const Eigen::VectorXd subinputs =
+          trajectory_.inputs.col(i).segment(indices[0], indices.size());
+      result -= 0.5 * subinputs.transpose() * sigma_inv * subinputs;
+    }
+  }
+  return result;
 }
 
 void TrajectoryOptimization::PlotSolution() {
   DRAKE_DEMAND(is_solved_);
   int i{0};
-  for (const auto& subsystem : scenario().aliases()) {
+  for (const auto& subsystem : scenario_->aliases()) {
     const Eigen::VectorXd& x = trajectory_.x[subsystem];
     const Eigen::VectorXd& y = trajectory_.y[subsystem];
     CallPython("figure", i + 2);

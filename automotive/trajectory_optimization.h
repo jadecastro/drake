@@ -180,13 +180,11 @@ class TrajectoryOptimization final {
       const systems::System<double>& subsystem,
       const VectorX<symbolic::Expression>& substate) const;
 
-  /// Retuns the total probability of the solution under the cost function
-  /// specified under AddGaussianCost(), as a zero-mean Gaussian probability
-  /// density function representing the deviation from the inputs from the
-  /// nominal controller.
-  //
-  // ** TODO **
-  double GetSolutionTotalProbability() const;
+  /// Retuns the value of the total log-probability density function of the
+  /// solution under the cost function specified under AddGaussianCost(), as a
+  /// zero-mean Gaussian probability density function representing the deviation
+  /// from the inputs from the nominal controller.
+  double GetSolutionTotalLogPdf() const;
 
   /// Extracts the initial context from prog and plots the solution using
   /// python.  To view, type `bazel run //common/proto:call_python_client_cli`.
@@ -229,6 +227,7 @@ class TrajectoryOptimization final {
   std::unique_ptr<systems::Context<double>> initial_context_lb_;
   std::unique_ptr<systems::Context<double>> final_context_ub_;
   std::unique_ptr<systems::Context<double>> final_context_lb_;
+  std::map<const systems::System<double>*, Eigen::MatrixXd> sigma_map_{};
   bool is_solved_{false};
 
   std::unique_ptr<systems::trajectory_optimization::DirectCollocation> prog_;

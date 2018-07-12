@@ -161,8 +161,8 @@ PYBIND11_MODULE(automotive, m) {
            &TrajectoryOptimization::AddLinearConstraint,
            py::arg("subsystem"), py::arg("A"), py::arg("b"), py::arg("t"))
       .def("Solve", &TrajectoryOptimization::Solve)
-      .def("GetSolutionTotalProbability",
-           &TrajectoryOptimization::GetSolutionTotalProbability)
+      .def("GetSolutionTotalLogPdf",
+           &TrajectoryOptimization::GetSolutionTotalLogPdf)
       .def("PlotSolution", &TrajectoryOptimization::PlotSolution)
       .def("AnimateSolution", &TrajectoryOptimization::AnimateSolution)
       .def("scenario", &TrajectoryOptimization::scenario, py_reference_internal)
