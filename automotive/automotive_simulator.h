@@ -16,7 +16,9 @@
 #include "drake/automotive/mobil_planner.h"
 #include "drake/automotive/pure_pursuit_controller.h"
 #include "drake/automotive/simple_car.h"
+#include "drake/automotive/trajectory.h"
 #include "drake/automotive/trajectory_car.h"
+#include "drake/automotive/trajectory_follower.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/geometry/scene_graph.h"
 #include "drake/lcm/drake_lcm_interface.h"
@@ -134,6 +136,18 @@ class AutomotiveSimulator {
   int AddPriusTrajectoryCar(const std::string& name,
                             const Curve2<double>& curve, double speed,
                             double start_time);
+
+  /// Adds a TrajectoryFollower to this simulation visualized as a Toyota Prius.
+  ///
+  /// @pre Start() has NOT been called.
+  ///
+  /// @param name The car's name, which must be unique among all cars. Otherwise
+  /// a std::runtime_error will be thrown.
+  ///
+  /// @param trajectory The trajectory (see documentation of
+  /// TrajectoryCar::TrajectoryFollower).
+  int AddPriusTrajectoryFollower(const std::string& name,
+                                 const Trajectory& trajectory);
 
   /// Adds a lane-following SimpleCar with IdmController and
   /// PurePursuitController to this simulation that takes as input a constant
@@ -323,7 +337,9 @@ class AutomotiveSimulator {
              initial_context = nullptr);
 
   /// Returns whether the automotive simulator has started.
-  bool has_started() const { return simulator_ != nullptr; }
+  bool has_started() const {
+    std::cout << " has started " << std::endl;
+    return simulator_ != nullptr; }
 
   /// Advances simulated time by the given @p time_step increment in seconds.
   void StepBy(const T& time_step);

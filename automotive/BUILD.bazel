@@ -219,6 +219,7 @@ drake_cc_library(
         "//automotive/maliput/dragway",
         "//common/proto:call_python",
         "//common/trajectories:piecewise_polynomial",
+        "//math:geometric_transform",
         "//systems/trajectory_optimization:direct_collocation",
     ],
 )
@@ -486,7 +487,9 @@ drake_cc_library(
         ":mobil_planner",
         ":pure_pursuit_controller",
         ":simple_car",
+        ":trajectory",
         ":trajectory_car",
+        ":trajectory_follower",
         ":trivial_right_of_way_state_provider",
         "//automotive/maliput/api",
         "//automotive/maliput/utility",

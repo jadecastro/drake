@@ -127,6 +127,9 @@ class Scenario final {
   /// @name Road and geometry accessors.
   /// @{
   const maliput::api::RoadGeometry& road() const { return *road_; }
+  std::unique_ptr<maliput::api::RoadGeometry> get_road() {
+    return std::move(road_);
+  }
   double car_width() const { return geometry_->width; }
   double car_length() const { return geometry_->length; }
   /// @}
