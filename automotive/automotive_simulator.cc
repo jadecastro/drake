@@ -242,6 +242,29 @@ int AutomotiveSimulator<T>::AddPriusTrajectoryCar(
 }
 
 template <typename T>
+int AutomotiveSimulator<T>::AddPriusTrajectoryFollower(
+    const std::string& name, const Trajectory& trajectory) {
+  // DRAKE_DEMAND(!has_started());
+  DRAKE_DEMAND(aggregator_ != nullptr);
+  CheckNameUniqueness(name);
+  const int id = allocate_vehicle_number();
+
+  auto trajectory_follower =
+      builder_->template AddSystem<TrajectoryFollower<T>>(trajectory);
+  trajectory_follower->set_name(name);
+  vehicles_[id] = trajectory_follower;
+
+  ConnectCarOutputsAndPriusVis(id, trajectory_follower->pose_output(),
+      trajectory_follower->velocity_output());
+
+  if (lcm_) {
+    AddPublisher(*trajectory_follower, id);
+  }
+
+  return id;
+}
+
+template <typename T>
 int AutomotiveSimulator<T>::AddIdmControlledCar(
     const std::string& name, bool initial_with_s,
     const SimpleCarState<T>& initial_state,
@@ -493,6 +516,19 @@ void AutomotiveSimulator<T>::AddPublisher(const TrajectoryCar<T>& system,
 }
 
 template <typename T>
+void AutomotiveSimulator<T>::AddPublisher(const TrajectoryFollower<T>& system,
+                                          int vehicle_number) {
+  DRAKE_DEMAND(!has_started());
+  DRAKE_DEMAND(lcm_ != nullptr);
+  static const SimpleCarStateTranslator translator;
+  const std::string channel =
+      std::to_string(vehicle_number) + "_SIMPLE_CAR_STATE";
+  auto publisher = builder_->template AddSystem<LcmPublisherSystem>(
+      channel, translator, lcm_.get());
+  builder_->Connect(system.state_output(), publisher->get_input_port());
+}
+
+template <typename T>
 systems::System<T>& AutomotiveSimulator<T>::GetBuilderSystemByName(
     std::string name) {
   DRAKE_DEMAND(!has_started());
@@ -609,6 +645,7 @@ void AutomotiveSimulator<T>::Start(
   simulator_->get_mutable_integrator()->set_fixed_step_mode(true);
   simulator_->Initialize();
 }
+
 
 template <typename T>
 void AutomotiveSimulator<T>::InitializeTrajectoryCars() {
