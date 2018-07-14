@@ -186,6 +186,12 @@ class TrajectoryOptimization final {
   /// from the inputs from the nominal controller.
   double GetSolutionTotalLogPdf() const;
 
+  /// Retuns the value of the _normalized_ total log-probability density function
+  /// of the solution under the cost function specified under AddGaussianCost(),
+  /// as a zero-mean Gaussian probability density function representing the
+  /// deviation from the inputs from the nominal controller.
+  double GetSolutionTotalLogNormalizedPdf() const;
+
   /// Extracts the initial context from prog and plots the solution using
   /// python.  To view, type `bazel run //common/proto:call_python_client_cli`.
   void PlotSolution();

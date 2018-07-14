@@ -387,6 +387,7 @@ double TrajectoryOptimization::GetSolutionTotalLogPdf() const {
   const int size = trajectory_.times.rows();
   const int all_input_size =
       sigma_map_.size() * DrivingCommandIndices::kNumCoordinates;
+  // TODO: Replace above with std::accumulate on the sigma sizes.
 
   double result = -0.5 * size * all_input_size * log(2. * M_PI);
   for (const auto& subsystem : scenario_->aliases()) {
@@ -395,6 +396,31 @@ double TrajectoryOptimization::GetSolutionTotalLogPdf() const {
     const Eigen::MatrixXd sigma = sigma_map_.at(subsystem);
     const double sigma_det = sigma.determinant();
     result -= 0.5 * size * log(sigma_det);
+    const Eigen::MatrixXd sigma_inv = sigma.inverse();
+    for (int i{0}; i < size; i++) {
+      const Eigen::VectorXd subinputs =
+          trajectory_.inputs.col(i).segment(indices[0], indices.size());
+      result -= 0.5 * subinputs.transpose() * sigma_inv * subinputs;
+    }
+  }
+  return result;
+}
+
+double TrajectoryOptimization::GetSolutionTotalLogNormalizedPdf() const {
+  DRAKE_DEMAND(is_solved_);
+  using std::log;
+  using std::pow;
+
+  const int size = trajectory_.times.rows();
+  const int all_input_size =
+      sigma_map_.size() * DrivingCommandIndices::kNumCoordinates;
+  // TODO: Replace above with std::accumulate on the sigma sizes.
+
+  double result = -0.5 * size * all_input_size * log(2. * M_PI);
+  for (const auto& subsystem : scenario_->aliases()) {
+    if (sigma_map_.find(subsystem) == sigma_map_.end()) continue;
+    const std::vector<int> indices = scenario_->GetInputIndices(*subsystem);
+    const Eigen::MatrixXd sigma = sigma_map_.at(subsystem);
     const Eigen::MatrixXd sigma_inv = sigma.inverse();
     for (int i{0}; i < size; i++) {
       const Eigen::VectorXd subinputs =
