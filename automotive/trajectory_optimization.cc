@@ -61,10 +61,10 @@ TrajectoryOptimization::TrajectoryOptimization(
       max_time_step_(max_time_step),
       initial_guess_duration_sec_(initial_guess_duration_sec),
       scenario_(std::move(scenario)),
-      initial_context_ub_(scenario_->diagram().CreateDefaultContext()),
-      initial_context_lb_(scenario_->diagram().CreateDefaultContext()),
-      final_context_ub_(scenario_->diagram().CreateDefaultContext()),
-      final_context_lb_(scenario_->diagram().CreateDefaultContext()) {
+      initial_context_ub_(scenario_->context()),
+      initial_context_lb_(scenario_->context()),
+      final_context_ub_(scenario_->context()),
+      final_context_lb_(scenario_->context()) {
   // ** TODO ** Check that scenario_ is valid.
 
   // Set up a direct-collocation problem.
@@ -271,17 +271,7 @@ void TrajectoryOptimization::AddGaussianCost(const System<double>& subsystem,
 
 void TrajectoryOptimization::AddGaussianTotalProbabilityConstraint(
     const System<double>& subsystem) {
-  DRAKE_DEMAND(is_solved_);
-  using std::sqrt;
-
-  // const double kSigma = 50.;
-  // const double kP = 2. * num_time_samples_ * kSigma * kSigma *
-  //                      log(1. / (sqrt(2. * M_PI) * kSigma)) -
-  //                  2. * kSigma * kSigma * log(path_probability);
-  // drake::unused(kP);
-  // for (int i{0}; i < prog_->input().size(); ++i) {
-  //  std::cout << " prog->input()(i) " << prog_->input()(i) << std::endl;
-  //}
+  throw std:runtime_error("Not implemented.");
 }
 
 void TrajectoryOptimization::AddLinearConstraint(

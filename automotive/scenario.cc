@@ -7,9 +7,7 @@
 #include "drake/automotive/driving_command_adder.h"
 #include "drake/automotive/driving_command_demux.h"
 #include "drake/automotive/driving_command_mux.h"
-#include "drake/automotive/idm_controller.h"
 #include "drake/automotive/maliput/dragway/road_geometry.h"
-#include "drake/automotive/pure_pursuit_controller.h"
 #include "drake/systems/framework/diagram_builder.h"
 #include "drake/systems/primitives/constant_value_source.h"
 
@@ -17,6 +15,7 @@ namespace drake {
 namespace automotive {
 
 using maliput::api::RoadGeometry;
+using systems::Context;
 using systems::Diagram;
 using systems::DiagramBuilder;
 using systems::InputPortDescriptor;
@@ -38,26 +37,25 @@ IdmSimpleCar::IdmSimpleCar(std::string name, const RoadGeometry& road)
   set_name(name);
   DiagramBuilder<double> builder;
 
-  const auto idm_controller = builder.template AddSystem<IdmController<double>>(
+  idm_controller_ = builder.template AddSystem<IdmController<double>>(
       road, kScanStrategy, kRoadPositionStrategy, kPeriodSec);
-  idm_controller->set_name(name + "_idm_controller");
+  idm_controller_->set_name(name + "_idm_controller");
 
   simple_car_ = builder.template AddSystem<SimpleCar<double>>();
   simple_car_->set_name(name + "_simple_car");
 
-  const auto pursuit =
-      builder.template AddSystem<PurePursuitController<double>>();
-  pursuit->set_name(name + "_pure_pursuit_controller");
+  pursuit_ = builder.template AddSystem<PurePursuitController<double>>();
+  pursuit_->set_name(name + "_pure_pursuit_controller");
   const auto mux = builder.template AddSystem<DrivingCommandMux<double>>();
   mux->set_name(name + "_mux");
 
-  builder.Connect(simple_car_->pose_output(), idm_controller->ego_pose_input());
+  builder.Connect(simple_car_->pose_output(), idm_controller_->ego_pose_input());
   builder.Connect(simple_car_->velocity_output(),
-                  idm_controller->ego_velocity_input());
-  builder.Connect(simple_car_->pose_output(), pursuit->ego_pose_input());
+                  idm_controller_->ego_velocity_input());
+  builder.Connect(simple_car_->pose_output(), pursuit_->ego_pose_input());
 
-  builder.Connect(pursuit->steering_command_output(), mux->steering_input());
-  builder.Connect(idm_controller->acceleration_output(),
+  builder.Connect(pursuit_->steering_command_output(), mux->steering_input());
+  builder.Connect(idm_controller_->acceleration_output(),
                   mux->acceleration_input());
 
   const auto adder = builder.template AddSystem<DrivingCommandAdder<double>>(
@@ -71,14 +69,35 @@ IdmSimpleCar::IdmSimpleCar(std::string name, const RoadGeometry& road)
   // Export the I/O.
   disturbance_input_port_ =
       builder.ExportInput(adder->get_input_port(kAdderNoisePort));
-  traffic_input_port_ = builder.ExportInput(idm_controller->traffic_input());
-  lane_input_port_ = builder.ExportInput(pursuit->lane_input());
+  traffic_input_port_ = builder.ExportInput(idm_controller_->traffic_input());
+  lane_input_port_ = builder.ExportInput(pursuit_->lane_input());
 
   state_output_port_ = builder.ExportOutput(simple_car_->state_output());
   pose_output_port_ = builder.ExportOutput(simple_car_->pose_output());
   velocity_output_port_ = builder.ExportOutput(simple_car_->velocity_output());
 
   builder.BuildInto(this);
+}
+
+void IdmSimpleCar::set_simple_car_params(
+    const SimpleCarParams<double>& params, Context<double>* context) const {
+  auto& subcontext = GetMutableSubsystemContext(*simple_car_, context);
+  subcontext.get_mutable_numeric_parameter(0).SetFromVector(
+      params.CopyToVector());
+}
+
+void IdmSimpleCar::set_idm_params(const IdmPlannerParameters<double>& params,
+                                  Context<double>* context) const {
+  auto& subcontext = GetMutableSubsystemContext(*idm_controller_, context);
+  subcontext.get_mutable_numeric_parameter(0).SetFromVector(
+      params.CopyToVector());
+}
+
+void IdmSimpleCar::set_pure_pursuit_params(
+    const PurePursuitParams<double>& params, Context<double>* context) const {
+  auto& subcontext = GetMutableSubsystemContext(*pursuit_, context);
+  subcontext.get_mutable_numeric_parameter(0).SetFromVector(
+      params.CopyToVector());
 }
 
 const InputPortDescriptor<double>& IdmSimpleCar::disturbance_input_port()
@@ -101,18 +120,25 @@ const OutputPort<double>& IdmSimpleCar::velocity_output_port() const {
   return get_output_port(velocity_output_port_);
 }
 
+
 Scenario::Scenario(std::unique_ptr<RoadGeometry> road, double car_width,
                    double car_length)
     : road_(std::move(road)),
       geometry_(std::make_unique<CarGeometry>(car_width, car_length)),
       builder_(std::make_unique<DiagramBuilder<double>>()) {}
 
-const System<double>* Scenario::AddSimpleCar(const std::string& name) {
+const System<double>* Scenario::AddSimpleCar(
+    const std::string& name, const SimpleCarParams<double>& simple_car_params) {
   DRAKE_DEMAND(scenario_diagram_ == nullptr);
 
   // Wire up the subsystem to the scenario diagram.
   const auto simple_car = builder_->AddSystem<SimpleCar<double>>();
   simple_car->set_name(name + "_simple_car");
+
+  // Store the parameters.
+  contexts_[simple_car] = simple_car->CreateDefaultContext();
+  contexts_[simple_car]->get_mutable_numeric_parameter(0).SetFromVector(
+      simple_car_params.CopyToVector());
 
   // Register the subsystem.
   driving_command_ports_[simple_car] = &simple_car->get_input_port(0);
@@ -126,7 +152,10 @@ const System<double>* Scenario::AddSimpleCar(const std::string& name) {
 }
 
 const System<double>* Scenario::AddIdmSimpleCar(
-    const std::string& name, const LaneDirection& goal_lane_direction) {
+    const std::string& name, const LaneDirection& goal_lane_direction,
+    const SimpleCarParams<double>& simple_car_params,
+    const IdmPlannerParameters<double>& idm_params,
+    const PurePursuitParams<double>& pure_pursuit_params) {
   DRAKE_DEMAND(scenario_diagram_ == nullptr);
 
   // Wire up the subsystem to the scenario diagram.
@@ -138,6 +167,13 @@ const System<double>* Scenario::AddIdmSimpleCar(
           systems::AbstractValue::Make<LaneDirection>(goal_lane_direction));
   builder_->Connect(lane_source->get_output_port(0),
                     idm_car->lane_input_port());
+
+  // Store the parameters.
+  contexts_[idm_car] = idm_car->CreateDefaultContext();
+  idm_car->set_simple_car_params(simple_car_params, contexts_[idm_car].get());
+  idm_car->set_idm_params(idm_params, contexts_[idm_car].get());
+  idm_car->set_pure_pursuit_params(pure_pursuit_params,
+                                   contexts_[idm_car].get());
 
   // Register the subsystem.
   driving_command_ports_[idm_car] = &idm_car->disturbance_input_port();
@@ -187,9 +223,8 @@ void Scenario::Build() {
     builder_->Connect(*velocity_ports_[alias], ports.velocity_descriptor);
 
     // States.
-    auto context = alias->CreateDefaultContext();
-    const VectorBase<double>& states = context->get_continuous_state_vector();
-    state_sizes_[alias] = states.size();
+    state_sizes_[alias] =
+        contexts_[alias]->get_continuous_state_vector().size();
   }
 
   // Export the stacked input.
@@ -197,6 +232,15 @@ void Scenario::Build() {
 
   scenario_diagram_ = builder_->Build();
   scenario_diagram_->set_name("scenario");
+  scenario_context_ = scenario_diagram_->CreateDefaultContext();
+  for (const auto alias : aliases_) {
+    auto& subcontext = scenario_diagram_->GetMutableSubsystemContext(
+        *alias, scenario_context_.get());
+    for (int i{0}; i < subcontext.num_numeric_parameters(); i++) {
+      subcontext.get_mutable_numeric_parameter(i).SetFromVector(
+          contexts_[alias]->get_numeric_parameter(i).CopyToVector());
+    }
+  }
 }
 
 std::vector<int> Scenario::GetStateIndices(

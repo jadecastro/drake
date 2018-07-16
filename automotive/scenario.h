@@ -4,8 +4,10 @@
 #include <memory>
 #include <vector>
 
+#include "drake/automotive/idm_controller.h"
 #include "drake/automotive/lane_direction.h"
 #include "drake/automotive/maliput/api/road_geometry.h"
+#include "drake/automotive/pure_pursuit_controller.h"
 #include "drake/automotive/simple_car.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/systems/framework/diagram.h"
@@ -19,6 +21,13 @@ class IdmSimpleCar : public systems::Diagram<double> {
  public:
   ///
   IdmSimpleCar(std::string name, const maliput::api::RoadGeometry& road);
+
+  void set_simple_car_params(const SimpleCarParams<double>& params,
+                             systems::Context<double>* context) const;
+  void set_idm_params(const IdmPlannerParameters<double>& params,
+                      systems::Context<double>* context) const;
+  void set_pure_pursuit_params(const PurePursuitParams<double>& params,
+                               systems::Context<double>* context) const;
 
   // TODO(jadecastro) Make IdmSimpleCar derive from an abstract class with these
   // as pure vituals.
@@ -35,6 +44,8 @@ class IdmSimpleCar : public systems::Diagram<double> {
 
  private:
   SimpleCar<double>* simple_car_{nullptr};
+  IdmController<double>* idm_controller_{nullptr};
+  PurePursuitController<double>* pursuit_{nullptr};
 
   int disturbance_input_port_{};
   int lane_input_port_{};
@@ -80,7 +91,9 @@ class Scenario final {
 
   /// Add a new open-loop SimpleCar system to the scenario.  Returns a reference
   /// to the (stateful) SimpleCar model.
-  const systems::System<double>* AddSimpleCar(const std::string& name);
+  const systems::System<double>* AddSimpleCar(
+      const std::string& name,
+      const SimpleCarParams<double>& simple_car_params);
 
   /// Add a new SimpleCar controlled by a (stateless) IDM longitudinal
   /// controller and a (stateless) pure-pursuit lateral controller to the
@@ -93,7 +106,10 @@ class Scenario final {
   // TODO(jadecastro) Default to current lane if goal_lane_direction is
   // unspecified.
   const systems::System<double>* AddIdmSimpleCar(
-      const std::string& name, const LaneDirection& goal_lane_direction);
+      const std::string& name, const LaneDirection& goal_lane_direction,
+      const SimpleCarParams<double>& simple_car_params,
+      const IdmPlannerParameters<double>& idm_params,
+      const PurePursuitParams<double>& pure_pursuit_params);
 
   void Build();
 
@@ -109,6 +125,11 @@ class Scenario final {
 
   /// Accessor to the finalized scenario Diagram.
   const systems::Diagram<double>& diagram() const { return *scenario_diagram_; }
+
+  /// Clones the scenario Diagram's Context.
+  std::unique_ptr<systems::Context<double>> context() const {
+    return scenario_context_->Clone();
+  }
 
   /// Accessor to the subsystems of the scenario Diagram.
   std::vector<const systems::System<double>*> aliases() const {
@@ -148,13 +169,16 @@ class Scenario final {
   std::map<const systems::System<double>*, int> state_sizes_;
 
   std::vector<const systems::System<double>*> aliases_{};
+  std::map<const systems::System<double>*,
+           std::unique_ptr<systems::Context<double>>> contexts_{};
 
   // Maps a subsystem to the corresponding sub-subsystem that has states.
   std::map<const systems::System<double>*, const systems::System<double>*>
-      stateful_aliases_{};  // TODO(jadecastro) Remove me once subsystems are
-                            // all symbolic-supported.
+  stateful_aliases_{};  // TODO(jadecastro) Remove me once subsystems are
+                        // all symbolic-supported.
 
   std::unique_ptr<systems::Diagram<double>> scenario_diagram_;
+  std::unique_ptr<systems::Context<double>> scenario_context_;
 };
 
 }  // namespace automotive

@@ -196,7 +196,7 @@ class TrajectoryOptimization final {
   /// python.  To view, type `bazel run //common/proto:call_python_client_cli`.
   void PlotSolution();
 
-  // ** TODO **
+  // Animates the current solution.
   void AnimateSolution() const;
 
   /// Computes the utility of the solution returned after calling Solve() with

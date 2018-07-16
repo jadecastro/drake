@@ -46,6 +46,7 @@ DirectCollocationConstraint::DirectCollocationConstraint(
   // time-invariance.
 
   context_->SetTimeStateAndParametersFrom(context);
+  contextd_->SetTimeStateAndParametersFrom(context);
 
   if (context.get_num_input_ports() > 0) {
     // Allocate the input port and keep an alias around.
