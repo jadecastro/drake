@@ -160,7 +160,7 @@ PYBIND11_MODULE(automotive, m) {
       .def("AddLinearConstraint",
            &TrajectoryOptimization::AddLinearConstraint,
            py::arg("subsystem"), py::arg("A"), py::arg("b"), py::arg("t"))
-      .def("Solve", &TrajectoryOptimization::Solve)
+      .def("Solve", &TrajectoryOptimization::Solve, py_reference_internal)
       .def("GetSolutionTotalLogPdf",
            &TrajectoryOptimization::GetSolutionTotalLogPdf)
       .def("GetSolutionTotalLogNormalizedPdf",

@@ -143,7 +143,7 @@ class TrajectoryOptimization final {
                            const Eigen::Ref<const Eigen::VectorXd> b, double t);
 
   /// Attempts to solve the trajectory optimization problem.
-  void Solve();
+  solvers::SolutionResult Solve();
 
   /// @name Convenience getters for decision variables associated with a
   /// particular subsystem.

@@ -296,7 +296,7 @@ void TrajectoryOptimization::AddLinearConstraint(
   prog_->AddLinearConstraint(A * state <= b);
 }
 
-void TrajectoryOptimization::Solve() {
+solvers::SolutionResult TrajectoryOptimization::Solve() {
   DRAKE_DEMAND(!is_solved_);
 
   result_ = prog_->Solve();
@@ -325,6 +325,7 @@ void TrajectoryOptimization::Solve() {
   std::cout << " SOLUTION RESULT: " << result_ << std::endl;
   std::cout << " Sample times: " << trajectory_.times.transpose() << std::endl;
   is_solved_ = true;
+  return result_;
 }
 
 solvers::VectorXDecisionVariable TrajectoryOptimization::get_input(
