@@ -158,6 +158,9 @@ PYBIND11_MODULE(automotive, m) {
       .def("AddDragwayLaneConstraints",
            &TrajectoryOptimization::AddDragwayLaneConstraints,
            py::arg("subsystem"), py::arg("lane_bounds"))
+      .def("AddFinalCollisionConstraintsOld",
+           &TrajectoryOptimization::AddFinalCollisionConstraintsOld,
+           py::arg("subsystem1"), py::arg("subsystem2"))
       .def("AddFinalCollisionConstraints",
            &TrajectoryOptimization::AddFinalCollisionConstraints,
            py::arg("subsystem1"), py::arg("subsystem2"))

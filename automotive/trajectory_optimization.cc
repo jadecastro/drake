@@ -61,10 +61,10 @@ TrajectoryOptimization::TrajectoryOptimization(
       max_time_step_(max_time_step),
       initial_guess_duration_sec_(initial_guess_duration_sec),
       scenario_(std::move(scenario)),
-      initial_context_ub_(scenario_->context()),
-      initial_context_lb_(scenario_->context()),
-      final_context_ub_(scenario_->context()),
-      final_context_lb_(scenario_->context()) {
+      initial_context_ub_(scenario_->context().Clone()),
+      initial_context_lb_(scenario_->context().Clone()),
+      final_context_ub_(scenario_->context().Clone()),
+      final_context_lb_(scenario_->context().Clone()) {
   // ** TODO ** Check that scenario_ is valid.
 
   // Set up a direct-collocation problem.
@@ -206,7 +206,7 @@ void TrajectoryOptimization::AddDragwayLaneConstraints(
   prog_->AddConstraintToAllKnotPoints(y11 <= y_max);
 }
 
-void TrajectoryOptimization::AddFinalCollisionConstraints(
+void TrajectoryOptimization::AddFinalCollisionConstraintsOld(
     const System<double>& subsystem1, const System<double>& subsystem2) {
   DRAKE_DEMAND(!is_solved_);
   using std::cos;
@@ -255,9 +255,49 @@ void TrajectoryOptimization::AddFinalCollisionConstraints(
   prog_->AddConstraint(A_ado * xy_bisect <= b_hi_ado);
 }
 
+void TrajectoryOptimization::AddFinalCollisionConstraints(
+    const System<double>& subsystem1, const System<double>& subsystem2) {
+  DRAKE_DEMAND(!is_solved_);
+  using std::cos;
+  using std::sin;
+
+  // Compute a bounding box in the body frame (x'-y') and check for
+  // intersections with a trial point.
+  const double w = scenario_->car_width();
+  const double l = scenario_->car_length();
+  const Eigen::DiagonalMatrix<symbolic::Expression, 2> Q(l / 2., w / 2.);
+
+  auto ego_final_state = get_final_state(subsystem1);
+  auto ego = get_cartesian(subsystem1, ego_final_state);
+  const Vector2<symbolic::Expression> z_ego(ego.x, ego.y);
+
+  auto ado_final_state = get_final_state(subsystem2);
+  auto ado = get_cartesian(subsystem2, ado_final_state);
+  const Vector2<symbolic::Expression> z_ado(ado.x, ado.y);
+
+  Matrix2<symbolic::Expression> R_ego;
+  // clang-format off
+  R_ego << -sin(ego.heading), cos(ego.heading),
+            cos(ego.heading), sin(ego.heading);
+  // clang-format on
+
+  Matrix2<symbolic::Expression> R_ado;
+  // clang-format off
+  R_ado << -sin(ado.heading), cos(ado.heading),
+            cos(ado.heading), sin(ado.heading);
+  // clang-format on
+
+  const Matrix2<symbolic::Expression> C_ego = R_ego * Q;
+  const Matrix2<symbolic::Expression> C_ado = R_ado * Q;
+  const Vector2<symbolic::Expression> z_tilde =
+      C_ego.inverse() * (z_ado - z_ego);
+
+  prog_->AddConstraint(z_tilde.transpose() * (C_ado + R_ado).inverse() *
+                       (C_ado + R_ado) * z_tilde <= 1.);
+}
+
 void TrajectoryOptimization::AddGaussianCost(const System<double>& subsystem,
                                              const Eigen::MatrixXd& sigma) {
-  // ** TODO ** make sigma a BasicVector?
   DRAKE_DEMAND(!is_solved_);
   sigma_map_[&subsystem] = sigma;
 
@@ -271,7 +311,7 @@ void TrajectoryOptimization::AddGaussianCost(const System<double>& subsystem,
 
 void TrajectoryOptimization::AddGaussianTotalProbabilityConstraint(
     const System<double>& subsystem) {
-  throw std:runtime_error("Not implemented.");
+  throw std::runtime_error("Not implemented.");
 }
 
 void TrajectoryOptimization::AddLinearConstraint(

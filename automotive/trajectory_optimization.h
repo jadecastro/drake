@@ -109,6 +109,12 @@ class TrajectoryOptimization final {
   /// `subsystem1` and `subsystem2`.  We prevent a disjunctive expression in the
   /// exact formulation by approximating the constraint as finding the
   /// hull-containment of a bisecting point between the centers of both cars.
+  void AddFinalCollisionConstraintsOld(
+      const systems::System<double>& subsystem1,
+      const systems::System<double>& subsystem2);
+
+  /// Adds a constraint at the final time step for collision between two cars,
+  /// `subsystem1` and `subsystem2`.  We use an inscribing-ellipse approach.
   void AddFinalCollisionConstraints(const systems::System<double>& subsystem1,
                                     const systems::System<double>& subsystem2);
 

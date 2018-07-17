@@ -70,6 +70,8 @@ class Scenario final {
                                 const systems::InputPortDescriptor<double>*>;
   using OutputPortMap = std::map<const systems::System<double>*,
                                  const systems::OutputPort<double>*>;
+  using ContextMap = std::map<const systems::System<double>*,
+                              std::unique_ptr<systems::Context<double>>>;
 
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(Scenario)
 
@@ -126,10 +128,8 @@ class Scenario final {
   /// Accessor to the finalized scenario Diagram.
   const systems::Diagram<double>& diagram() const { return *scenario_diagram_; }
 
-  /// Clones the scenario Diagram's Context.
-  std::unique_ptr<systems::Context<double>> context() const {
-    return scenario_context_->Clone();
-  }
+  /// Accessor to the scenario Diagram's Context.
+  const systems::Context<double>& context() const { return *scenario_context_; }
 
   /// Accessor to the subsystems of the scenario Diagram.
   std::vector<const systems::System<double>*> aliases() const {
@@ -169,8 +169,7 @@ class Scenario final {
   std::map<const systems::System<double>*, int> state_sizes_;
 
   std::vector<const systems::System<double>*> aliases_{};
-  std::map<const systems::System<double>*,
-           std::unique_ptr<systems::Context<double>>> contexts_{};
+  ContextMap contexts_{};
 
   // Maps a subsystem to the corresponding sub-subsystem that has states.
   std::map<const systems::System<double>*, const systems::System<double>*>
