@@ -176,6 +176,8 @@ PYBIND11_MODULE(automotive, m) {
            &TrajectoryOptimization::GetSolutionTotalLogNormalizedPdf)
       .def("PlotSolution", &TrajectoryOptimization::PlotSolution)
       .def("AnimateSolution", &TrajectoryOptimization::AnimateSolution)
+      .def("AnimateSolutionFrom", &TrajectoryOptimization::AnimateSolutionFrom,
+           py::arg("t"), py::arg("states"), py::arg("final_time"))
       .def("scenario", &TrajectoryOptimization::scenario, py_reference_internal)
       .def("prog", &TrajectoryOptimization::prog, py_reference_internal)
       .def("get_trajectory", &TrajectoryOptimization::get_trajectory,

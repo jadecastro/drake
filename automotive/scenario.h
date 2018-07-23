@@ -31,9 +31,9 @@ class IdmSimpleCar : public systems::Diagram<double> {
 
   // TODO(jadecastro) Make IdmSimpleCar derive from an abstract class with these
   // as pure vituals.
-  const systems::InputPortDescriptor<double>& disturbance_input_port() const;
-  const systems::InputPortDescriptor<double>& lane_input_port() const;
-  const systems::InputPortDescriptor<double>& traffic_input_port() const;
+  const systems::InputPort<double>& disturbance_input_port() const;
+  const systems::InputPort<double>& lane_input_port() const;
+  const systems::InputPort<double>& traffic_input_port() const;
   const systems::OutputPort<double>& state_output_port() const;
   const systems::OutputPort<double>& pose_output_port() const;
   const systems::OutputPort<double>& velocity_output_port() const;
@@ -67,7 +67,7 @@ class IdmSimpleCar : public systems::Diagram<double> {
 class Scenario final {
  public:
   using InputPortMap = std::map<const systems::System<double>*,
-                                const systems::InputPortDescriptor<double>*>;
+                                const systems::InputPort<double>*>;
   using OutputPortMap = std::map<const systems::System<double>*,
                                  const systems::OutputPort<double>*>;
   using ContextMap = std::map<const systems::System<double>*,

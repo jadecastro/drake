@@ -310,7 +310,7 @@ void TrajectoryOptimization::AddGaussianCost(const System<double>& subsystem,
 }
 
 void TrajectoryOptimization::AddGaussianTotalProbabilityConstraint(
-    const System<double>& subsystem) {
+    const System<double>&) {
   throw std::runtime_error("Not implemented.");
 }
 
@@ -481,9 +481,15 @@ void TrajectoryOptimization::PlotSolution() {
 }
 
 void TrajectoryOptimization::AnimateSolution() const {
+  DRAKE_DEMAND(is_solved_);
+  // AnimateSolutionFrom(trajectory_);
+}
+
+/*
+void TrajectoryOptimization::AnimateSolutionFrom(
+    const InputStateTrajectoryData& trajectory) const {
   using Type = Trajectory::InterpolationType;
 
-  DRAKE_DEMAND(is_solved_);
   const double kRealTimeRate = 1.;
 
   // Build another simulator with LCM capability and run in play-back mode.
@@ -493,18 +499,18 @@ void TrajectoryOptimization::AnimateSolution() const {
   auto* lcm = dynamic_cast<drake::lcm::DrakeLcm*>(simulator->get_lcm());
   DRAKE_DEMAND(lcm != nullptr);
 
-  std::vector<double> times(trajectory_.times.rows());
+  std::vector<double> times(trajectory.times.rows());
   for (size_t i{0}; i < times.size(); i++) {
-    times[i] = trajectory_.times(i);
+    times[i] = trajectory.times(i);
   }
   for (const auto& subsystem : scenario_->aliases()) {
     std::vector<Eigen::Vector3d> translations{};
     std::vector<Quaternion<double>> rotations{};
     for (size_t i{0}; i < times.size(); i++) {
       translations.push_back(
-          {trajectory_.x.at(subsystem)(i), trajectory_.y.at(subsystem)(i), 0.});
+          {trajectory.x.at(subsystem)(i), trajectory.y.at(subsystem)(i), 0.});
       const math::RollPitchYaw<double> rpy(
-          Eigen::Vector3d(0., 0., trajectory_.heading.at(subsystem)(i)));
+          Eigen::Vector3d(0., 0., trajectory.heading.at(subsystem)(i)));
       rotations.push_back(rpy.ToQuaternion());
       rotations.back().normalize();  // TODO: Need?
     }
@@ -515,6 +521,49 @@ void TrajectoryOptimization::AnimateSolution() const {
   lcm->StartReceiveThread();
   simulator->Start(kRealTimeRate);
   simulator->StepBy(times.back());
+}
+*/
+
+void TrajectoryOptimization::AnimateSolutionFrom(const Eigen::VectorXd& t,
+                                                 const Eigen::MatrixXd& states,
+                                                 double final_time)
+    const {
+  using Type = Trajectory::InterpolationType;
+
+  const double kRealTimeRate = 1.;
+
+  // Build another simulator with LCM capability and run in play-back mode.
+  auto simulator = std::make_unique<AutomotiveSimulator<double>>();
+
+  simulator->SetRoadGeometry(scenario_->get_road());
+  auto* lcm = dynamic_cast<drake::lcm::DrakeLcm*>(simulator->get_lcm());
+  DRAKE_DEMAND(lcm != nullptr);
+
+  std::vector<double> times(t.rows());
+  for (size_t i{0}; i < times.size(); i++) {
+    times[i] = t(i);
+  }
+  int index{0};
+  for (const auto& subsystem : scenario_->aliases()) {
+    std::vector<Eigen::Vector3d> translations{};
+    std::vector<Quaternion<double>> rotations{};
+    for (size_t i{0}; i < times.size(); i++) {
+      translations.push_back(
+          {states(0 + index * SimpleCarStateIndices::kNumCoordinates, i),
+           states(1 + index * SimpleCarStateIndices::kNumCoordinates, i), 0.});
+      const math::RollPitchYaw<double> rpy(
+          Eigen::Vector3d(0., 0., states(2 + index * SimpleCarStateIndices::kNumCoordinates, i)));
+      rotations.push_back(rpy.ToQuaternion());
+      rotations.back().normalize();  // TODO: Need?
+    }
+    const Trajectory trajectory =
+        Trajectory::Make(times, rotations, translations, Type::kPchip);
+    simulator->AddPriusTrajectoryFollower(subsystem->get_name(), trajectory);
+    index++;
+  }
+  lcm->StartReceiveThread();
+  simulator->Start(kRealTimeRate);
+  simulator->StepBy(final_time);
 }
 
 const TrajectoryOptimization::InputStateTrajectoryData&

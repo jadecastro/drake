@@ -205,6 +205,12 @@ class TrajectoryOptimization final {
   // Animates the current solution.
   void AnimateSolution() const;
 
+  // Animates an externally-provided solution.
+  //  void AnimateSolutionFrom(const InputStateTrajectoryData& trajectory) const;
+  void AnimateSolutionFrom(const Eigen::VectorXd& t,
+                           const Eigen::MatrixXd& states,
+                           double final_time) const;
+
   /// Computes the utility of the solution returned after calling Solve() with
   /// respect to a given "test" hyperplane.
   double ComputeUtility(const Eigen::Ref<const Eigen::VectorXd> a,

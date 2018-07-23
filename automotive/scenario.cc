@@ -18,7 +18,7 @@ using maliput::api::RoadGeometry;
 using systems::Context;
 using systems::Diagram;
 using systems::DiagramBuilder;
-using systems::InputPortDescriptor;
+using systems::InputPort;
 using systems::OutputPort;
 using systems::System;
 using systems::VectorBase;
@@ -100,14 +100,14 @@ void IdmSimpleCar::set_pure_pursuit_params(
       params.CopyToVector());
 }
 
-const InputPortDescriptor<double>& IdmSimpleCar::disturbance_input_port()
+const InputPort<double>& IdmSimpleCar::disturbance_input_port()
     const {
   return get_input_port(disturbance_input_port_);
 }
-const InputPortDescriptor<double>& IdmSimpleCar::lane_input_port() const {
+const InputPort<double>& IdmSimpleCar::lane_input_port() const {
   return get_input_port(lane_input_port_);
 }
-const InputPortDescriptor<double>& IdmSimpleCar::traffic_input_port() const {
+const InputPort<double>& IdmSimpleCar::traffic_input_port() const {
   return get_input_port(traffic_input_port_);
 }
 const OutputPort<double>& IdmSimpleCar::state_output_port() const {
@@ -219,8 +219,8 @@ void Scenario::Build() {
                  FrameVelocity<double>::kSize);
     auto ports =
         aggregator->AddSinglePoseAndVelocityInput(alias->get_name(), port_id);
-    builder_->Connect(*pose_ports_[alias], ports.pose_descriptor);
-    builder_->Connect(*velocity_ports_[alias], ports.velocity_descriptor);
+    builder_->Connect(*pose_ports_[alias], ports.pose_input_port);
+    builder_->Connect(*velocity_ports_[alias], ports.velocity_input_port);
 
     // States.
     state_sizes_[alias] =
