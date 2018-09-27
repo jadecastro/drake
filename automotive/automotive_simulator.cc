@@ -124,8 +124,9 @@ void AutomotiveSimulator<T>::ConnectCarOutputsAndPriusVis(
           Isometry3d(Eigen::Translation3d(
               -2.27 + kVisOffset, -0.911, -0.219 + 0.385)),
           std::make_unique<geometry::Mesh>(
-              FindResourceOrThrow("drake/automotive/models/prius/prius.obj")),
+              FindResourceOrThrow("drake/automotive/models/prius/duck.obj"), 0.02),
           "prius_body"));
+  /*
   const geometry::VisualMaterial gray(Eigen::Vector4d(0.2, 0.2, 0.2, 1.0));
   scene_graph_->RegisterGeometry(
       source_id, frame_id,
@@ -163,6 +164,7 @@ void AutomotiveSimulator<T>::ConnectCarOutputsAndPriusVis(
           .GetAsIsometry3(),
           std::make_unique<geometry::Cylinder>(0.323, 0.215),
           "right_wheel_rear", gray));
+  */
 
   // Convert PoseVector into FramePoseVector.
   using Converter = systems::rendering::PoseVectorToGeometry<T>;
