@@ -481,8 +481,6 @@ void TrajectoryOptimization::PlotSolution() {
 }
 
 void TrajectoryOptimization::AnimateSolution() const {
-  using Type = Trajectory::InterpolationType;
-
   DRAKE_DEMAND(is_solved_);
   // AnimateSolutionFrom(trajectory_);
 }

@@ -375,6 +375,10 @@ class AutomotiveSimulator {
   // @pre Start() has NOT been called.
   void AddPublisher(const TrajectoryCar<T>& system, int vehicle_number);
 
+  // Adds an LCM publisher for the given @p system.
+  // @pre Start() has NOT been called.
+  void AddPublisher(const TrajectoryFollower<T>& system, int vehicle_number);
+
   // Generates the visualization mesh of the road network and adds it to the
   // SceneGraph.  Member variable `road_` must be set prior to calling this
   // method.  This method is a no-op if visualization is disabled.
