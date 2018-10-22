@@ -34,7 +34,7 @@ void TrajectoryFollower<T>::CalcStateOutput(
 
 template <typename T>
 void TrajectoryFollower<T>::CalcPoseOutput(const systems::Context<T>& context,
-                                        PoseVector<T>* pose) const {
+                                           PoseVector<T>* pose) const {
   const PoseVelocity values = GetValues(context);
   pose->set_translation(Eigen::Translation<T, 3>{values.translation()});
   const Eigen::Quaternion<double>& q =

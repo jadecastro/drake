@@ -93,6 +93,15 @@ void AutomotiveSimulator<T>::ConnectCarOutputsAndPriusVis(
     int id,
     const OutputPort<T>& pose_output,
     const OutputPort<T>& velocity_output) {
+  std::string obj_filename;
+  // Hack that uses the blue prius for vehicles with id == 0 and the red prius
+  // otherwise.
+  if (id == 0) {
+    obj_filename = "drake/automotive/models/prius/blue_prius.obj";
+  } else {
+    obj_filename = "drake/automotive/models/prius/red_prius.obj";
+  }
+
   DRAKE_DEMAND(&pose_output.get_system() == &velocity_output.get_system());
   const std::string name = pose_output.get_system().get_name();
   auto ports = aggregator_->AddSinglePoseAndVelocityInput(name, id);
@@ -130,7 +139,7 @@ void AutomotiveSimulator<T>::ConnectCarOutputsAndPriusVis(
           Isometry3d(Eigen::Translation3d(
               -2.27 + kVisOffsetInX, -0.911, -0.219 + 0.385)),
           std::make_unique<geometry::Mesh>(
-              FindResourceOrThrow("drake/automotive/models/prius/prius.obj")),
+              FindResourceOrThrow(obj_filename)),
           "prius_body"));
   const geometry::VisualMaterial gray(Eigen::Vector4d(0.2, 0.2, 0.2, 1.0));
   scene_graph_->RegisterGeometry(
