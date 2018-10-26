@@ -532,7 +532,8 @@ drake_cc_binary(
     name = "crash_finder",
     srcs = ["crash_finder.cc"],
     deps = [
-        "//automotive:trajectory_optimization",
+        ":generated_vectors",
+        ":trajectory_optimization",
         "//common:text_logging_gflags",
     ],
 )

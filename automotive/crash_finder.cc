@@ -1,8 +1,12 @@
 #include <gflags/gflags.h>
 
-#include "drake/automotive/automotive_trajectory_optimization.h"
+#include "drake/automotive/gen/idm_planner_parameters.h"
+#include "drake/automotive/gen/pure_pursuit_params.h"
+#include "drake/automotive/gen/simple_car_params.h"
+#include "drake/automotive/trajectory_optimization.h"
 #include "drake/automotive/maliput/api/junction.h"
 #include "drake/automotive/maliput/api/segment.h"
+#include "drake/automotive/maliput/dragway/road_geometry.h"
 
 namespace drake {
 namespace automotive {
@@ -10,36 +14,56 @@ namespace {
 
 using maliput::api::Lane;
 
-static constexpr double kRoadLength = 100.;
+static constexpr double kRoadLength = 300.;
 static constexpr double kLaneWidth = 3.;
 static constexpr int kNumLanes = 3;
+static constexpr double kCarWidth = 2.;
+static constexpr double kCarLength = 4.;
 
 static constexpr int kNumTimeSamples = 21;
-static constexpr double kInitialGuessDurationSec = 10.;
+static constexpr double kInitialGuessDurationSec = 4.;
 
-static constexpr int kX = SimpleCarStateIndices::kX;
-static constexpr int kY = SimpleCarStateIndices::kY;
+static constexpr double kMinTimeStep =
+    0.9 * kInitialGuessDurationSec / (kNumTimeSamples - 1);
+static constexpr double kMaxTimeStep =
+    1.1 * kInitialGuessDurationSec / (kNumTimeSamples - 1);
+
+static constexpr double kBoundingBoxLimit = 300.;
 
 int DoMain(void) {
+  auto road = std::make_unique<maliput::dragway::RoadGeometry>(
+      maliput::api::RoadGeometryId("three_lane_road"), kNumLanes, kRoadLength,
+      kLaneWidth, 0., 5., 1e-6, 1e-6);
+
   auto scenario =
-      std::make_unique<Scenario>(kNumLanes, kLaneWidth, kRoadLength);
+      std::make_unique<Scenario>(std::move(road), kCarWidth, kCarLength);
   const maliput::api::Segment* segment =
       scenario->road().junction(0)->segment(0);
 
   // Make an ego car.
-  const auto ego = scenario->AddSimpleCar("ego_car");
+  const auto ego = scenario->AddSimpleCar("ego_car", SimpleCarParams<double>());
 
   // Make three ado cars.
-  const auto ado0 = scenario->AddIdmSimpleCar("ado_car_0");
-  // const auto ado1 = scenario->AddIdmSimpleCar("ado_car_1");
-  // const auto ado2 = scenario->AddIdmSimpleCar("ado_car_2");
-
-  // Fix the goal lanes for each of the ado cars.
-  scenario->FixGoalLaneDirection(*ado0, LaneDirection(segment->lane(2), true));
-  // scenario->FixGoalLaneDirection(*ado1, LaneDirection(segment->lane(0), true));
-  // scenario->FixGoalLaneDirection(*ado2, LaneDirection(segment->lane(1), true));
+  const auto ado0 = scenario->AddIdmSimpleCar(
+      "ado_car_0", LaneDirection(segment->lane(2), true),
+      SimpleCarParams<double>(), IdmPlannerParameters<double>(),
+      PurePursuitParams<double>());
+  /*
+  const auto ado1 = scenario->AddIdmSimpleCar(
+      "ado_car_1", LaneDirection(segment->lane(0), true),
+      SimpleCarParams<double>(), IdmPlannerParameters<double>(),
+      PurePursuitParams<double>()));
+  const auto ado2 = scenario->AddIdmSimpleCar(
+      "ado_car_2", LaneDirection(segment->lane(1), true),
+      SimpleCarParams<double>(), IdmPlannerParameters<double>(),
+      PurePursuitParams<double>()));
+  */
 
   scenario->Build();
+
+  auto falsifier = std::make_unique<TrajectoryOptimization>(
+      std::move(scenario), kNumTimeSamples, kMinTimeStep, kMaxTimeStep,
+      kInitialGuessDurationSec, kBoundingBoxLimit);
 
   // Supply initial conditions (used as falsification constraints and for the
   // initial guess trajectory).
@@ -49,31 +73,14 @@ int DoMain(void) {
   initial_conditions.set_y(ego_initial_pos.y());
   initial_conditions.set_heading(0.);
   initial_conditions.set_velocity(7.);
-  scenario->SetInitialSubsystemState(*ego, initial_conditions);
+  falsifier->RegisterInitialConstraint(*ego, initial_conditions);
 
   auto ado0_initial_pos = segment->lane(2)->ToGeoPosition({10., 0., 0.});
   initial_conditions.set_x(ado0_initial_pos.x());
   initial_conditions.set_y(ado0_initial_pos.y());
   initial_conditions.set_heading(0.);
   initial_conditions.set_velocity(5.);
-  scenario->SetInitialSubsystemState(*ado0, initial_conditions);
-
-  /*
-  auto ado1_initial_pos = segment->lane(0)->ToGeoPosition({40., 0., 0.});
-  initial_conditions.set_x(ado1_initial_pos.x());
-  initial_conditions.set_y(ado1_initial_pos.y());
-  initial_conditions.set_heading(0.);
-  initial_conditions.set_velocity(5.);
-  scenario->SetInitialSubsystemState(*ado1, initial_conditions);
-  */
-  /*
-  auto ado2_initial_pos = segment->lane(1)->ToGeoPosition({60., 0., 0.});
-  initial_conditions.set_x(ado2_initial_pos.x());
-  initial_conditions.set_y(ado2_initial_pos.y());
-  initial_conditions.set_heading(0.);
-  initial_conditions.set_velocity(8.);
-  scenario->SetInitialSubsystemState(*ado2, initial_conditions);
-  */
+  falsifier->RegisterInitialConstraint(*ado0, initial_conditions);
 
   // Supply final conditions (only used for the initial guess trajectory).
   SimpleCarState<double> final_conditions;
@@ -82,72 +89,46 @@ int DoMain(void) {
   final_conditions.set_y(ego_final_pos.y());
   final_conditions.set_heading(0.);
   final_conditions.set_velocity(5.0);
-  scenario->SetFinalSubsystemState(*ego, final_conditions);
+  falsifier->RegisterFinalConstraint(*ego, final_conditions);
 
   auto ado0_final_pos = segment->lane(2)->ToGeoPosition({40., 0., 0.});
   final_conditions.set_x(ado0_final_pos.x());
   final_conditions.set_y(ado0_final_pos.y());
   final_conditions.set_heading(0.);
   final_conditions.set_velocity(6.);
-  scenario->SetFinalSubsystemState(*ado0, final_conditions);
+  falsifier->RegisterFinalConstraint(*ado0, final_conditions);
 
-  /*
-  auto ado1_final_pos = segment->lane(0)->ToGeoPosition({60., 0., 0.});
-  final_conditions.set_x(ado1_final_pos.x());
-  final_conditions.set_y(ado1_final_pos.y());
-  final_conditions.set_heading(0.);
-  final_conditions.set_velocity(5.);
-  scenario->SetFinalSubsystemState(*ado1, final_conditions);
-  */
-  /*
-  auto ado2_final_pos = segment->lane(1)->ToGeoPosition({80., 0., 0.});
-  final_conditions.set_x(ado2_final_pos.x());
-  final_conditions.set_y(ado2_final_pos.y());
-  final_conditions.set_heading(0.);
-  final_conditions.set_velocity(8.);
-  scenario->SetFinalSubsystemState(*ado2, final_conditions);
-  */
+  // Set a guess trajectory based on these constraints.
+  falsifier->SetLinearGuessTrajectory();
 
-  const double kMinTimeStep =
-      0.2 * kInitialGuessDurationSec / (kNumTimeSamples - 1);
-  const double kMaxTimeStep =
-      3. * kInitialGuessDurationSec / (kNumTimeSamples - 1);
-  auto falsifier = std::make_unique<AutomotiveTrajectoryOptimization>(
-      std::move(scenario), kNumTimeSamples, kMinTimeStep, kMaxTimeStep,
-      kInitialGuessDurationSec);
+  // Set constraints on the initial states based on these constraints.
+  falsifier->AddInitialConstraints();
 
   // Constraints keeping the cars on the road or in their lanes.
   std::pair<const Lane*, const Lane*> lane_bounds =
       std::make_pair(segment->lane(0), segment->lane(2));
-  falsifier->SetDragwayLateralLaneBounds(ego, lane_bounds);
-  falsifier->SetDragwayLateralLaneBounds(ado0, lane_bounds);
-  // falsifier->SetDragwayLateralLaneBounds(ado1, lane_bounds);
-  // falsifier->SetDragwayLateralLaneBounds(ado2, lane_bounds);
+  falsifier->AddDragwayLaneConstraints(*ego, lane_bounds);
+  falsifier->AddDragwayLaneConstraints(*ado0, lane_bounds);
 
-  // Solve a collision with one of the cars, in this case, Traffic Car 2 merging
-  // into the middle lane.  Assume for now that, irrespective of its
-  // orientation, the traffic car occupies a lane-aligned bounding box.
-  const auto final_state = falsifier->prog()->final_state();
-  const int ego_y_index = falsifier->scenario().GetStateIndices(*ego)[kY];
-  const int ado_y_index = falsifier->scenario().GetStateIndices(*ado0)[kY];
-  falsifier->prog()->AddLinearConstraint(
-      final_state[ego_y_index] <= final_state[ado_y_index] + 0.5 * kLaneWidth);
-  falsifier->prog()->AddLinearConstraint(
-      final_state[ado_y_index] >= final_state[ego_y_index] - 2.5);
-  const int ego_x_index = falsifier->scenario().GetStateIndices(*ego)[kX];
-  const int ado_x_index = falsifier->scenario().GetStateIndices(*ado0)[kX];
-  falsifier->prog()->AddLinearConstraint(
-      final_state[ado_x_index] <= final_state[ego_x_index] + 2.5);
+  falsifier->AddFinalCollisionConstraints(*ego, *ado0);
 
-  falsifier->AddLogProbabilityCost();
+  Eigen::Matrix2d sigma;
+  sigma << 0.1, 0.0, // BR
+           0.0, 0.1;
+  falsifier->AddGaussianCost(*ado0, sigma);
 
-  falsifier->AddLogProbabilityChanceConstraint();
+  const solvers::SolutionResult result = falsifier->Solve();
+  if (result == solvers::SolutionResult::kSolutionFound) {
+    std::cout << "Solution found." << std::endl;
+  } else {
+    std::cout << "A solution could not be found." << std::endl;
+  }
+  std::cout << "The log-pdf of the solution is: "
+            << falsifier->GetSolutionTotalLogPdf() << std::endl;
+  std::cout << "The normalized log-pdf of the solution is: "
+            << falsifier->GetSolutionTotalLogNormalizedPdf() << std::endl;
 
-  falsifier->SetLinearGuessTrajectory();
-
-  falsifier->Solve();
-
-  falsifier->SimulateResult();
+  falsifier->AnimateSolution();
 
   return 0;
 }

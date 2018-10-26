@@ -59,9 +59,20 @@ drake_pybind_library(
     ],
 )
 
+drake_pybind_library(
+    name = "multilane_py",
+    cc_deps = ["//bindings/pydrake:documentation_pybind"],
+    cc_srcs = ["multilane_py.cc"],
+    package_info = PACKAGE_INFO,
+    py_deps = [
+        ":module_py",
+    ],
+)
+
 PY_LIBRARIES_WITH_INSTALL = [
     ":api_py",
     ":dragway_py",
+    ":multilane_py",
 ]
 
 PY_LIBRARIES = [
@@ -93,6 +104,7 @@ drake_py_unittest(
     deps = [
         ":api_py",
         ":dragway_py",
+        ":multilane_py",
         "//bindings/pydrake/systems",
     ],
 )
