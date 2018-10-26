@@ -75,8 +75,8 @@ class Scenario final {
 
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(Scenario)
 
-  Scenario(std::unique_ptr<maliput::api::RoadGeometry> road, double car_width,
-           double car_length);
+  Scenario(std::unique_ptr<const maliput::api::RoadGeometry> road,
+           double car_width, double car_length);
 
   static constexpr int kSimpleCarStatePort = 0;
   static constexpr int kPoseVectorPort = 1;
@@ -148,7 +148,7 @@ class Scenario final {
   /// @name Road and geometry accessors.
   /// @{
   const maliput::api::RoadGeometry& road() const { return *road_; }
-  std::unique_ptr<maliput::api::RoadGeometry> get_road() {
+  std::unique_ptr<const maliput::api::RoadGeometry> get_road() {
     return std::move(road_);
   }
   double car_width() const { return geometry_->width; }
@@ -156,7 +156,7 @@ class Scenario final {
   /// @}
 
  private:
-  std::unique_ptr<maliput::api::RoadGeometry> road_;
+  std::unique_ptr<const maliput::api::RoadGeometry> road_;
   std::unique_ptr<CarGeometry> geometry_;
 
   std::unique_ptr<systems::DiagramBuilder<double>> builder_;

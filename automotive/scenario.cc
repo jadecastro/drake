@@ -65,7 +65,6 @@ IdmSimpleCar::IdmSimpleCar(std::string name, const RoadGeometry& road)
   builder.Connect(adder->get_output_port(), simple_car_->get_input_port(0));
   builder.Connect(mux->get_output_port(0),
                   adder->get_input_port(kAdderValuePort));
-
   // Export the I/O.
   disturbance_input_port_ =
       builder.ExportInput(adder->get_input_port(kAdderNoisePort));
@@ -120,8 +119,7 @@ const OutputPort<double>& IdmSimpleCar::velocity_output_port() const {
   return get_output_port(velocity_output_port_);
 }
 
-
-Scenario::Scenario(std::unique_ptr<RoadGeometry> road, double car_width,
+Scenario::Scenario(std::unique_ptr<const RoadGeometry> road, double car_width,
                    double car_length)
     : road_(std::move(road)),
       geometry_(std::make_unique<CarGeometry>(car_width, car_length)),

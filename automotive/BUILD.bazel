@@ -32,6 +32,7 @@ drake_cc_package_library(
         ":bicycle_car",
         ":calc_ongoing_road_position",
         ":calc_smooth_acceleration",
+        ":crash_finder",
         ":create_trajectory_params",
         ":curve2",
         ":driving_command_adder",
@@ -529,11 +530,27 @@ drake_cc_binary(
 )
 
 drake_cc_binary(
-    name = "crash_finder",
-    srcs = ["crash_finder.cc"],
+    name = "crash_finder_dragway",
+    srcs = ["crash_finder_dragway.cc"],
     deps = [
         ":generated_vectors",
         ":trajectory_optimization",
+        "//automotive/maliput/dragway",
+        "//automotive/maliput/multilane",
+        "//common:essential",
+        "//common:text_logging_gflags",
+    ],
+)
+
+drake_cc_binary(
+    name = "crash_finder_tee_intersection",
+    srcs = ["crash_finder_tee_intersection.cc"],
+    deps = [
+        ":generated_vectors",
+        ":trajectory_optimization",
+        "//automotive/maliput/dragway",
+        "//automotive/maliput/multilane",
+        "//common:essential",
         "//common:text_logging_gflags",
     ],
 )
