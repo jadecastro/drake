@@ -3,6 +3,7 @@
 #include <cmath>
 #include <memory>
 
+#include "drake/automotive/maliput_autodiff_adapter.h"
 #include "drake/automotive/maliput/api/lane.h"
 #include "drake/common/autodiff.h"
 #include "drake/common/autodiffxd_make_coherent.h"
@@ -59,16 +60,17 @@ const GeoPositionT<T> PurePursuit<T>::ComputeGoalPoint(
   const Lane* const lane = lane_direction.lane;
   const bool with_s = lane_direction.with_s;
 
-  const LanePositionT<T> position =
-      lane->ToLanePositionT<T>({pose.get_translation().x(),
+  const GeoPositionT<T> geo_pos{pose.get_translation().x(),
                                 pose.get_translation().y(),
-                                pose.get_translation().z()},
-                               nullptr, nullptr);
+                                pose.get_translation().z()};
+  const LanePositionT<T> position =
+      autodiff::ToLanePositionT(lane, geo_pos, nullptr, nullptr);
   const T s_new =
       with_s ? position.s() + s_lookahead : position.s() - s_lookahead;
   const T s_goal = math::saturate(s_new, T(0.), T(lane->length()));
   // TODO(jadecastro): Add support for locating goal points in ongoing lanes.
-  return lane->ToGeoPositionT<T>({s_goal, 0. * position.r(), position.h()});
+  const LanePositionT<T> lane_pos{s_goal, 0. * position.r(), position.h()};
+  return autodiff::ToGeoPositionT(lane, lane_pos);
 }
 
 }  // namespace automotive

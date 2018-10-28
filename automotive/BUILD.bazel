@@ -32,7 +32,6 @@ drake_cc_package_library(
         ":bicycle_car",
         ":calc_ongoing_road_position",
         ":calc_smooth_acceleration",
-        ":crash_finder",
         ":create_trajectory_params",
         ":curve2",
         ":driving_command_adder",
@@ -44,6 +43,7 @@ drake_cc_package_library(
         ":idm_controller",
         ":idm_planner",
         ":lane_direction",
+        ":maliput_autodiff_adapter",
         ":maliput_railcar",
         ":mobil_planner",
         ":multilane_onramp_merge",
@@ -327,6 +327,7 @@ drake_cc_library(
     hdrs = ["pose_selector.h"],
     deps = [
         ":lane_direction",
+        ":maliput_autodiff_adapter",
         ":road_odometry",
         "//automotive/maliput/api",
         "//common:autodiffxd_make_coherent",
@@ -343,6 +344,7 @@ drake_cc_library(
     deps = [
         ":generated_vectors",
         ":lane_direction",
+        ":maliput_autodiff_adapter",
         "//automotive/maliput/api",
         "//common:autodiffxd_make_coherent",
         "//common:symbolic",
@@ -422,6 +424,7 @@ drake_cc_library(
     srcs = ["calc_ongoing_road_position.cc"],
     hdrs = ["calc_ongoing_road_position.h"],
     deps = [
+        ":maliput_autodiff_adapter",
         ":pose_selector",
         "//automotive/maliput/api",
         "//common:autodiff",

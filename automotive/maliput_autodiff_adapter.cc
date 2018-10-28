@@ -25,11 +25,8 @@ static constexpr double kDelta = 1e-9;
 // Populate the partial derivatives of LanePosition with respect to x, y, z from
 // a GeoPosition using the method of finite differences.
 LanePositionT<AutoDiffXd> ToLanePositionFiniteDifferences(
-    const Lane* lane, const GeoPosition& gp) {
-  LanePosition lp = lane->ToLanePosition(gp, nullptr, nullptr);
-  LanePositionT<AutoDiffXd> lp_result;
+    const Lane* lane, const GeoPosition& gp, const GeoPositionT<AutoDiffXd>& gp_ad) {
   Eigen::Matrix3d derivs;
-
   GeoPosition gp_p = gp;
   GeoPosition gp_m = gp;
   gp_p.set_x(gp.x() + 0.5 * kDelta);
@@ -62,21 +59,24 @@ LanePositionT<AutoDiffXd> ToLanePositionFiniteDifferences(
                                   (lp_z_p.r() - lp_z_m.r()) / kDelta,
                                   (lp_z_p.h() - lp_z_m.h()) / kDelta};
 
-  lp_result.set_s(AutoDiffXd(lp.s(), derivs.row(0)));
-  lp_result.set_r(AutoDiffXd(lp.r(), derivs.row(1)));
-  lp_result.set_h(AutoDiffXd(lp.h(), derivs.row(2)));
+  Eigen::MatrixXd gp_derivs(3, gp_ad.x().derivatives().size());
+  gp_derivs.row(0) = gp_ad.x().derivatives();
+  gp_derivs.row(1) = gp_ad.y().derivatives();
+  gp_derivs.row(2) = gp_ad.z().derivatives();
+  LanePosition lp = lane->ToLanePosition(gp, nullptr, nullptr);
+  LanePositionT<AutoDiffXd> lp_result;
+  lp_result.set_s(AutoDiffXd(lp.s(), derivs.row(0) * gp_derivs));
+  lp_result.set_r(AutoDiffXd(lp.r(), derivs.row(1) * gp_derivs));
+  lp_result.set_h(AutoDiffXd(lp.h(), derivs.row(2) * gp_derivs));
+
   return lp_result;
 }
-
 
 // Populate the partial derivatives of GeoPosition with respect to s, r, h from
 // a LanePosition using the method of finite differences.
 GeoPositionT<AutoDiffXd> ToGeoPositionFiniteDifferences(
-    const Lane* lane, const LanePosition& lp) {
-  GeoPosition gp = lane->ToGeoPosition(lp);
-  GeoPositionT<AutoDiffXd> gp_result;
+    const Lane* lane, const LanePosition& lp, const LanePositionT<AutoDiffXd>& lp_ad) {
   Eigen::Matrix3d derivs;
-
   LanePosition lp_p = lp;
   LanePosition lp_m = lp;
   lp_p.set_s(lp.s() + 0.5 * kDelta);
@@ -109,9 +109,15 @@ GeoPositionT<AutoDiffXd> ToGeoPositionFiniteDifferences(
                                   (gp_h_p.y() - gp_h_m.y()) / kDelta,
                                   (gp_h_p.z() - gp_h_m.z()) / kDelta};
 
-  gp_result.set_x(AutoDiffXd(gp.x(), derivs.row(0)));
-  gp_result.set_y(AutoDiffXd(gp.y(), derivs.row(1)));
-  gp_result.set_z(AutoDiffXd(gp.z(), derivs.row(2)));
+  Eigen::MatrixXd lp_derivs(3, lp_ad.s().derivatives().size());
+  lp_derivs.row(0) = lp_ad.s().derivatives();
+  lp_derivs.row(1) = lp_ad.r().derivatives();
+  lp_derivs.row(2) = lp_ad.h().derivatives();
+  GeoPosition gp = lane->ToGeoPosition(lp);
+  GeoPositionT<AutoDiffXd> gp_result;
+  gp_result.set_x(AutoDiffXd(gp.x(), derivs.row(0) * lp_derivs));
+  gp_result.set_y(AutoDiffXd(gp.y(), derivs.row(1) * lp_derivs));
+  gp_result.set_z(AutoDiffXd(gp.z(), derivs.row(2) * lp_derivs));
   return gp_result;
 }
 
@@ -145,7 +151,16 @@ LanePositionT<AutoDiffXd> ToLanePositionT(
     distance->value() = distance_double;
     autodiffxd_make_coherent(geo_pos.x(), distance);
   }
-  return ToLanePositionFiniteDifferences(lane, gp_double);
+
+  const LanePositionT<AutoDiffXd> lp_fd = ToLanePositionFiniteDifferences(lane, gp_double, geo_pos);
+  const LanePositionT<AutoDiffXd> lp_ad = lane->ToLanePositionT<AutoDiffXd>(geo_pos, nullptr, nullptr);
+  std::cout << " LP finite differences (s) " << lp_fd.s().derivatives() << std::endl;
+  std::cout << " LP finite differences (r) " << lp_fd.r().derivatives() << std::endl;
+  std::cout << " LP finite differences (h) " << lp_fd.h().derivatives() << std::endl;
+  std::cout << " LP analytical derivatives (s) " << lp_ad.s().derivatives() << std::endl;
+  std::cout << " LP analytical derivatives (r) " << lp_ad.r().derivatives() << std::endl;
+  std::cout << " LP analytical derivatives (h) " << lp_ad.h().derivatives() << std::endl;
+  return lp_fd;
 }
 
 LanePositionT<double> ToLanePositionT(const Lane* lane,
@@ -163,11 +178,19 @@ GeoPositionT<AutoDiffXd> ToGeoPositionT(
   DRAKE_DEMAND(lane_pos.h().derivatives().size() == deriv_size);
 
   const LanePosition lp_double = lane_pos.MakeDouble();
-  return ToGeoPositionFiniteDifferences(lane, lp_double);
+  const GeoPositionT<AutoDiffXd> gp_fd = ToGeoPositionFiniteDifferences(lane, lp_double, lane_pos);
+  const GeoPositionT<AutoDiffXd> gp_ad = lane->ToGeoPositionT<AutoDiffXd>(lane_pos);
+  std::cout << " GP finite differences (x) " << gp_fd.x().derivatives() << std::endl;
+  std::cout << " GP finite differences (y) " << gp_fd.y().derivatives() << std::endl;
+  std::cout << " GP finite differences (z) " << gp_fd.z().derivatives() << std::endl;
+  std::cout << " GP analytical derivatives (x) " << gp_ad.x().derivatives() << std::endl;
+  std::cout << " GP analytical derivatives (y) " << gp_ad.y().derivatives() << std::endl;
+  std::cout << " GP analytical derivatives (z) " << gp_ad.z().derivatives() << std::endl;
+  return gp_fd;
 }
 
-GeoPositionT<double> ToGeoPositionT(Lane* lane,
-                                    LanePositionT<double>& lane_pos) {
+GeoPositionT<double> ToGeoPositionT(const Lane* lane,
+                                    const LanePositionT<double>& lane_pos) {
   return lane->ToGeoPosition(lane_pos);
 }
 

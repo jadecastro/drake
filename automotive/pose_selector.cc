@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include "drake/automotive/maliput_autodiff_adapter.h"
 #include "drake/automotive/maliput/api/branch_point.h"
 #include "drake/automotive/maliput/api/junction.h"
 #include "drake/automotive/maliput/api/segment.h"
@@ -67,7 +68,7 @@ bool IsWithinLane(const GeoPositionT<T>& geo_position, const Lane* lane) {
       lane->segment()->junction()->road_geometry()->linear_tolerance();
   T distance{};
   const LanePositionT<T> pos =
-      lane->ToLanePositionT<T>(geo_position, nullptr, &distance);
+      autodiff::ToLanePositionT(lane, geo_position, nullptr, &distance);
   const maliput::api::RBounds r_bounds =
       lane->lane_bounds(ExtractDoubleOrThrow(pos.s()));
   return (distance < tol && pos.r() >= r_bounds.min() - tol &&
@@ -238,7 +239,7 @@ ClosestPose<T> FindSingleClosestInDefaultPath(
   const GeoPositionT<T> ego_geo_position =
       GeoPositionT<T>::FromXyz(ego_pose.get_isometry().translation());
   const LanePositionT<T> ego_lane_position =
-      lane->ToLanePositionT<T>(ego_geo_position, nullptr, nullptr);
+      autodiff::ToLanePositionT(lane, ego_geo_position, nullptr, nullptr);
   LaneDirection lane_direction =
       CalcLaneDirection<T>(lane, ego_lane_position, ego_pose.get_rotation(),
                            side);
@@ -269,8 +270,8 @@ ClosestPose<T> FindSingleClosestInDefaultPath(
       if (!IsWithinLane(traffic_geo_position, lane_direction.lane)) continue;
 
       const LanePositionT<T> traffic_lane_position =
-          lane_direction.lane->ToLanePositionT<T>(traffic_geo_position, nullptr,
-                                                  nullptr);
+          autodiff::ToLanePositionT(lane_direction.lane,
+                                    traffic_geo_position, nullptr, nullptr);
       const T traffic_s =
           CalcLaneProgress<T>(lane_direction, traffic_lane_position);
 
@@ -353,7 +354,7 @@ ClosestPose<T> FindSingleClosestInBranches(
   const GeoPositionT<T> ego_geo_position =
       GeoPositionT<T>::FromXyz(ego_pose.get_isometry().translation());
   const LanePositionT<T> ego_lane_position =
-      ego_lane->template ToLanePositionT<T>(ego_geo_position, nullptr, nullptr);
+      autodiff::ToLanePositionT(ego_lane, ego_geo_position, nullptr, nullptr);
   LaneDirection ego_lane_direction =
       CalcLaneDirection<T>(ego_lane, ego_lane_position, ego_pose.get_rotation(),
                            side);
@@ -373,7 +374,8 @@ ClosestPose<T> FindSingleClosestInBranches(
     /// TODO(jadecastro) RoadGeometry::ToRoadPositionT() doesn't yet exist, so
     /// for now, just call Lane::ToLanePositionT.
     const LanePositionT<T> lane_position =
-        traffic_lane->ToLanePositionT<T>(
+        autodiff::ToLanePositionT(
+            traffic_lane,
             GeoPositionT<T>::FromXyz(traffic_isometry.translation()), nullptr,
             nullptr);
 
@@ -476,7 +478,7 @@ std::vector<LaneEndDistance<T>> FindConfluentBranches(
   const GeoPositionT<T> ego_geo_position =
       GeoPositionT<T>::FromXyz(ego_pose.get_isometry().translation());
   const LanePositionT<T> ego_lane_position =
-      lane->ToLanePositionT<T>(ego_geo_position, nullptr, nullptr);
+      autodiff::ToLanePositionT(lane, ego_geo_position, nullptr, nullptr);
   LaneDirection lane_direction =
       CalcLaneDirection<T>(lane, ego_lane_position, ego_pose.get_rotation(),
                            side);
