@@ -67,7 +67,7 @@ const GeoPositionT<T> PurePursuit<T>::ComputeGoalPoint(
       autodiff::ToLanePositionT(lane, geo_pos, nullptr, nullptr);
   const T s_new =
       with_s ? position.s() + s_lookahead : position.s() - s_lookahead;
-  const T s_goal = math::saturate(s_new, T(0.), T(lane->length()));
+  const T s_goal = math::saturate(s_new, 0. * s_new, lane->length() * (s_new / s_new));
   // TODO(jadecastro): Add support for locating goal points in ongoing lanes.
   const LanePositionT<T> lane_pos{s_goal, 0. * position.r(), position.h()};
   return autodiff::ToGeoPositionT(lane, lane_pos);

@@ -140,9 +140,9 @@ LanePositionT<AutoDiffXd> ToLanePositionT(
   double distance_double{};
   lane->ToLanePosition(gp_double, &np_double, &distance_double);
 
-  const double tol =
-      lane->segment()->junction()->road_geometry()->linear_tolerance();
-  DRAKE_DEMAND(distance_double < tol);  // geo_pos must be in the lane's
+  // const double tol =
+  //    lane->segment()->junction()->road_geometry()->linear_tolerance();
+  // DRAKE_DEMAND(distance_double < tol);  // geo_pos must be in the lane's
                                         // driveable bounds.
   if (!!nearest_point) {
     nearest_point->set_xyz(geo_pos.xyz());
@@ -153,13 +153,15 @@ LanePositionT<AutoDiffXd> ToLanePositionT(
   }
 
   const LanePositionT<AutoDiffXd> lp_fd = ToLanePositionFiniteDifferences(lane, gp_double, geo_pos);
-  const LanePositionT<AutoDiffXd> lp_ad = lane->ToLanePositionT<AutoDiffXd>(geo_pos, nullptr, nullptr);
-  std::cout << " LP finite differences (s) " << lp_fd.s().derivatives() << std::endl;
-  std::cout << " LP finite differences (r) " << lp_fd.r().derivatives() << std::endl;
-  std::cout << " LP finite differences (h) " << lp_fd.h().derivatives() << std::endl;
-  std::cout << " LP analytical derivatives (s) " << lp_ad.s().derivatives() << std::endl;
-  std::cout << " LP analytical derivatives (r) " << lp_ad.r().derivatives() << std::endl;
-  std::cout << " LP analytical derivatives (h) " << lp_ad.h().derivatives() << std::endl;
+  /*
+    const LanePositionT<AutoDiffXd> lp_ad = lane->ToLanePositionT<AutoDiffXd>(geo_pos, nullptr, nullptr);
+    std::cout << " LP finite differences (s) " << lp_fd.s().derivatives() << std::endl;
+    std::cout << " LP finite differences (r) " << lp_fd.r().derivatives() << std::endl;
+    std::cout << " LP finite differences (h) " << lp_fd.h().derivatives() << std::endl;
+    std::cout << " LP analytical derivatives (s) " << lp_ad.s().derivatives() << std::endl;
+    std::cout << " LP analytical derivatives (r) " << lp_ad.r().derivatives() << std::endl;
+    std::cout << " LP analytical derivatives (h) " << lp_ad.h().derivatives() << std::endl;
+  */
   return lp_fd;
 }
 
@@ -179,13 +181,15 @@ GeoPositionT<AutoDiffXd> ToGeoPositionT(
 
   const LanePosition lp_double = lane_pos.MakeDouble();
   const GeoPositionT<AutoDiffXd> gp_fd = ToGeoPositionFiniteDifferences(lane, lp_double, lane_pos);
-  const GeoPositionT<AutoDiffXd> gp_ad = lane->ToGeoPositionT<AutoDiffXd>(lane_pos);
-  std::cout << " GP finite differences (x) " << gp_fd.x().derivatives() << std::endl;
-  std::cout << " GP finite differences (y) " << gp_fd.y().derivatives() << std::endl;
-  std::cout << " GP finite differences (z) " << gp_fd.z().derivatives() << std::endl;
-  std::cout << " GP analytical derivatives (x) " << gp_ad.x().derivatives() << std::endl;
-  std::cout << " GP analytical derivatives (y) " << gp_ad.y().derivatives() << std::endl;
-  std::cout << " GP analytical derivatives (z) " << gp_ad.z().derivatives() << std::endl;
+  /*
+    const GeoPositionT<AutoDiffXd> gp_ad = lane->ToGeoPositionT<AutoDiffXd>(lane_pos);
+    std::cout << " GP finite differences (x) " << gp_fd.x().derivatives() << std::endl;
+    std::cout << " GP finite differences (y) " << gp_fd.y().derivatives() << std::endl;
+    std::cout << " GP finite differences (z) " << gp_fd.z().derivatives() << std::endl;
+    std::cout << " GP analytical derivatives (x) " << gp_ad.x().derivatives() << std::endl;
+    std::cout << " GP analytical derivatives (y) " << gp_ad.y().derivatives() << std::endl;
+    std::cout << " GP analytical derivatives (z) " << gp_ad.z().derivatives() << std::endl;
+  */
   return gp_fd;
 }
 
