@@ -34,6 +34,8 @@ drake_cc_package_library(
         ":calc_smooth_acceleration",
         ":create_trajectory_params",
         ":curve2",
+        ":driving_command_adder",
+        ":driving_command_demux",
         ":driving_command_mux",
         ":dynamic_bicycle_car",
         ":generated_translators",
@@ -49,6 +51,7 @@ drake_cc_package_library(
         ":pure_pursuit_controller",
         ":road_odometry",
         ":road_path",
+        ":scenario",
         ":simple_car",
         ":simple_powertrain",
         ":trajectory",
@@ -138,6 +141,28 @@ drake_cc_library(
         ":generated_vectors",
         "//common:autodiff",
         "//common:autodiffxd_make_coherent",
+    ],
+)
+
+drake_cc_library(
+    name = "driving_command_adder",
+    srcs = ["driving_command_adder.cc"],
+    hdrs = ["driving_command_adder.h"],
+    deps = [
+        ":generated_vectors",
+        "//common:default_scalars",
+        "//systems/framework:leaf_system",
+    ],
+)
+
+drake_cc_library(
+    name = "driving_command_demux",
+    srcs = ["driving_command_demux.cc"],
+    hdrs = ["driving_command_demux.h"],
+    deps = [
+        ":generated_vectors",
+        "//common:default_scalars",
+        "//systems/framework:leaf_system",
     ],
 )
 
@@ -309,6 +334,26 @@ drake_cc_library(
         "//common:unused",
         "//common/trajectories:piecewise_polynomial",
         "//math:saturate",
+    ],
+)
+
+drake_cc_library(
+    name = "scenario",
+    srcs = ["scenario.cc"],
+    hdrs = ["scenario.h"],
+    deps = [
+        ":driving_command_adder",
+        ":driving_command_demux",
+        ":driving_command_mux",
+        ":lane_direction",
+        ":idm_controller",
+        ":pure_pursuit_controller",
+        ":simple_car",
+        "//automotive/maliput/api",
+        "//automotive/maliput/dragway",
+        "//systems/framework",
+        "//systems/primitives:constant_value_source",
+        "//systems/rendering:pose_aggregator",
     ],
 )
 
@@ -684,6 +729,20 @@ drake_cc_googletest(
         "//automotive/maliput/dragway",
         "//common:essential",
         "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "system_identification_test",
+    timeout = "moderate",
+    deps = [
+        ":scenario",
+        ":simple_car",
+        "//automotive/maliput/api",
+        "//automotive/maliput/dragway",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//solvers:system_identification",
+        "//systems/framework",
     ],
 )
 
