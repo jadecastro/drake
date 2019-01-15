@@ -97,9 +97,9 @@ void AutomotiveSimulator<T>::ConnectCarOutputsAndPriusVis(
   // Hack that uses the blue prius for vehicles with id == 0 and the red prius
   // otherwise.
   if (id == 0) {
-    obj_filename = "drake/automotive/models/prius/blue_prius.obj";
+    obj_filename = "/home/jon/drake-distro/automotive/models/prius/blue_prius.obj";
   } else {
-    obj_filename = "drake/automotive/models/prius/red_prius.obj";
+    obj_filename = "/home/jon/drake-distro/automotive/models/prius/red_prius.obj";
   }
 
   DRAKE_DEMAND(&pose_output.get_system() == &velocity_output.get_system());
@@ -139,7 +139,7 @@ void AutomotiveSimulator<T>::ConnectCarOutputsAndPriusVis(
           Isometry3d(Eigen::Translation3d(
               -2.27 + kVisOffsetInX, -0.911, -0.219 + 0.385)),
           std::make_unique<geometry::Mesh>(
-              FindResourceOrThrow(obj_filename)),
+              obj_filename),
           "prius_body"));
   const geometry::VisualMaterial gray(Eigen::Vector4d(0.2, 0.2, 0.2, 1.0));
   scene_graph_->RegisterGeometry(

@@ -482,10 +482,9 @@ void TrajectoryOptimization::PlotSolution() {
 
 void TrajectoryOptimization::AnimateSolution() const {
   DRAKE_DEMAND(is_solved_);
-  // AnimateSolutionFrom(trajectory_);
+  AnimateSolutionFrom(trajectory_);
 }
 
-/*
 void TrajectoryOptimization::AnimateSolutionFrom(
     const InputStateTrajectoryData& trajectory) const {
   using Type = Trajectory::InterpolationType;
@@ -514,15 +513,14 @@ void TrajectoryOptimization::AnimateSolutionFrom(
       rotations.push_back(rpy.ToQuaternion());
       rotations.back().normalize();  // TODO: Need?
     }
-    const Trajectory trajectory =
+    const Trajectory raw_trajectory =
         Trajectory::Make(times, rotations, translations, Type::kPchip);
-    simulator->AddPriusTrajectoryFollower(subsystem->get_name(), trajectory);
+    simulator->AddPriusTrajectoryFollower(subsystem->get_name(), raw_trajectory);
   }
   lcm->StartReceiveThread();
   simulator->Start(kRealTimeRate);
   simulator->StepBy(times.back());
 }
-*/
 
 void TrajectoryOptimization::AnimateSolutionFrom(const Eigen::VectorXd& t,
                                                  const Eigen::MatrixXd& states,

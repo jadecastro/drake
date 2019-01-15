@@ -206,7 +206,7 @@ class TrajectoryOptimization final {
   void AnimateSolution() const;
 
   // Animates an externally-provided solution.
-  //  void AnimateSolutionFrom(const InputStateTrajectoryData& trajectory) const;
+  void AnimateSolutionFrom(const InputStateTrajectoryData& trajectory) const;
   void AnimateSolutionFrom(const Eigen::VectorXd& t,
                            const Eigen::MatrixXd& states,
                            double final_time) const;
