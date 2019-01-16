@@ -568,6 +568,7 @@ drake_cc_binary(
         "//automotive/maliput/multilane",
         "//common:essential",
         "//common:text_logging_gflags",
+        "//common/trajectories:piecewise_polynomial",
     ],
 )
 

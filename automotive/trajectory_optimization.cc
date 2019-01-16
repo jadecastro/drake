@@ -24,7 +24,9 @@ using maliput::api::LanePosition;
 using maliput::api::RoadGeometry;
 using systems::BasicVector;
 using systems::Context;
+using systems::ContinuousState;
 using systems::Diagram;
+using systems::Simulator;
 using systems::System;
 using systems::trajectory_optimization::DirectCollocation;
 using trajectories::PiecewisePolynomial;
@@ -151,6 +153,12 @@ void TrajectoryOptimization::SetLinearGuessTrajectory() {
       {0, initial_guess_duration_sec_}, {x0, xf});
   prog_->SetInitialTrajectory(PiecewisePolynomial<double>(),
                               guess_state_trajectory);
+}
+
+void TrajectoryOptimization::SetGuessTrajectory(
+    const PiecewisePolynomial<double>& traj_u) {
+  DRAKE_DEMAND(!is_solved_);
+  prog_->SetInitialTrajectory(traj_u, MakeStateTrajectory(traj_u));
 }
 
 // N.B. Assumes Dragway.
@@ -410,6 +418,12 @@ TrajectoryOptimization::get_cartesian(
   return CalcCartesian<symbolic::Expression>(*subsystem_symb, substate);
 }
 
+const Context<double>& TrajectoryOptimization::get_initial_context() const {
+  return *initial_context_ub_;  // TODO(jadecastro) Do something smarter here,
+                                // like sampling from the interior of the
+                                // bounding box.
+}
+
 double TrajectoryOptimization::GetSolutionTotalLogPdf() const {
   DRAKE_DEMAND(is_solved_);
   using std::log;
@@ -578,6 +592,46 @@ void TrajectoryOptimization::SetSubcontext(
   systems::VectorBase<double>& state =
       subcontext.get_mutable_continuous_state_vector();
   state.SetFromVector(state_vector.get_value());
+}
+
+const PiecewisePolynomial<double> TrajectoryOptimization::MakeStateTrajectory(
+    const PiecewisePolynomial<double>& traj_u) const {
+  const Diagram<double>& diagram = scenario_->diagram();
+  auto simulator = std::make_unique<Simulator<double>>(diagram);
+  simulator->reset_context(get_initial_context().Clone());
+  Context<double>& context = simulator->get_mutable_context();
+  const std::unique_ptr<ContinuousState<double>> continuous_derivatives =
+      diagram.AllocateTimeDerivatives();
+
+  std::vector<double> times_vec(num_time_samples_);
+  std::vector<Eigen::MatrixXd> states(num_time_samples_);
+  std::vector<Eigen::MatrixXd> derivatives(num_time_samples_);
+  systems::FixedInputPortValue& input_port_value = context.FixInputPort(
+        0, diagram.AllocateInputVector(diagram.get_input_port(0)));
+  const double average_time_step = 0.5 * (min_time_step_ + max_time_step_);
+  double time{0.};
+  for (int i = 0; i < num_time_samples_; i++) {
+    times_vec[i] = time;
+    if (context.get_num_input_ports() > 0) {
+      if (traj_u.get_number_of_segments() > 0) {
+        input_port_value.GetMutableVectorData<double>()->SetFromVector(
+            traj_u.value(time));
+      } else {
+        input_port_value.GetMutableVectorData<double>()->SetFromVector(
+            Eigen::VectorXd::Zero(
+                input_port_value.GetMutableVectorData<double>()->size()));
+      }
+    }
+    simulator->StepTo(time);
+    const Eigen::VectorXd state =
+        context.get_continuous_state_vector().CopyToVector();
+    states[i] = state;
+    diagram.CalcTimeDerivatives(context, continuous_derivatives.get());
+    derivatives[i] = continuous_derivatives->CopyToVector();
+
+    time += average_time_step;
+  }
+  return PiecewisePolynomial<double>::Cubic(times_vec, states, derivatives);
 }
 
 }  // namespace automotive

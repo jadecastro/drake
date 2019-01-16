@@ -11,12 +11,14 @@
 #include "drake/automotive/maliput/dragway/road_geometry.h"
 #include "drake/automotive/maliput/multilane/loader.h"
 #include "drake/common/find_resource.h"
+#include "drake/common/trajectories/piecewise_polynomial.h"
 
 namespace drake {
 namespace automotive {
 namespace {
 
 using maliput::api::Lane;
+using trajectories::PiecewisePolynomial;
 
 /*
 static constexpr double kRoadLength = 300.;
@@ -97,6 +99,8 @@ int DoMain(void) {
   falsifier->RegisterInitialConstraint(*ado0, initial_conditions);
 
   // Supply final conditions (only used for the initial guess trajectory).
+  // Note: These must correspond to an ongoing or default branch to upstream
+  // connections containing the initial conditions.
   SimpleCarState<double> final_conditions;
   auto ego_final_pos = straight_segment_1->lane(0)->ToGeoPosition({0., 0., 0.});
   final_conditions.set_x(ego_final_pos.x());
@@ -113,7 +117,8 @@ int DoMain(void) {
   falsifier->RegisterFinalConstraint(*ado0, final_conditions);
 
   // Set a guess trajectory based on these constraints.
-  falsifier->SetLinearGuessTrajectory();
+  // falsifier->SetLinearGuessTrajectory();
+  falsifier->SetGuessTrajectory(trajectories::PiecewisePolynomial<double>());
 
   // Set constraints on the initial states based on these constraints.
   falsifier->AddInitialConstraints();

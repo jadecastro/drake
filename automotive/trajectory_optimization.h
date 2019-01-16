@@ -94,7 +94,8 @@ class TrajectoryOptimization final {
   void SetLinearGuessTrajectory();
 
   // ** TODO **
-  // void SetGuessTrajectory(const InputStateTrajectoryData& trajectory);
+  void SetGuessTrajectory(
+    const trajectories::PiecewisePolynomial<double>& traj_u);
 
   /// Adds lane bounds on the system, requiring a particular car to stay within
   /// the prescribed set of `lane_bounds`, for a dragway::RoadGeometry.  If the
@@ -186,6 +187,11 @@ class TrajectoryOptimization final {
       const systems::System<double>& subsystem,
       const VectorX<symbolic::Expression>& substate) const;
 
+  /// Accessor for the initial context of the scenario diagram.  Currently, we
+  /// just return one of the vertices of the bounding box specified under
+  /// RegisterInitialConstraint.
+  const systems::Context<double>& get_initial_context() const;
+
   /// Retuns the value of the total log-probability density function of the
   /// solution under the cost function specified under AddGaussianCost(), as a
   /// zero-mean Gaussian probability density function representing the deviation
@@ -227,6 +233,11 @@ class TrajectoryOptimization final {
   /// Accessor to the solution trajectory, once the DirectCollocation problem
   /// has been solved.
   const InputStateTrajectoryData& get_trajectory() const;
+
+  /// Makes a state trajectory from a simulation based on a set of registered
+  /// initial states and an input trajectory.
+  const trajectories::PiecewisePolynomial<double> MakeStateTrajectory(
+      const trajectories::PiecewisePolynomial<double>& traj_u) const;
 
  private:
   // Convenience utility to set the `context` for the `subsystem` with the
