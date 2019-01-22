@@ -7,6 +7,8 @@
 namespace drake {
 namespace automotive {
 
+enum class WhichLimit { kHigh = 0, kLow = 1, kBoth = 2 };
+
 class TrajectoryOptimization final {
  public:
   using SubVectorXDecisionVariable = Eigen::VectorBlock<
@@ -101,10 +103,11 @@ class TrajectoryOptimization final {
   /// the prescribed set of `lane_bounds`, for a dragway::RoadGeometry.  If the
   /// given lanes are not contiguous, the car is required to stay within the
   /// hull formed from the specified pair of lanes.
-  void AddDragwayLaneConstraints(
+  void AddLaneConstraints(
       const systems::System<double>& subsystem,
       std::pair<const maliput::api::Lane*, const maliput::api::Lane*>
-          lane_bounds);
+         lane_bounds,
+      WhichLimit which_limit = WhichLimit::kBoth);
 
   /// Adds a constraint at the final time step for collision between two cars,
   /// `subsystem1` and `subsystem2`.  We prevent a disjunctive expression in the

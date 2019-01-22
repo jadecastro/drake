@@ -1,4 +1,5 @@
 #include <string>
+#include <vector>
 
 #include <gflags/gflags.h>
 
@@ -18,6 +19,8 @@ namespace automotive {
 namespace {
 
 using maliput::api::Lane;
+using maliput::api::RoadGeometry;
+using maliput::api::Segment;
 using trajectories::PiecewisePolynomial;
 
 /*
@@ -30,7 +33,7 @@ static constexpr double kCarWidth = 2.;
 static constexpr double kCarLength = 4.;
 
 static constexpr int kNumTimeSamples = 21;
-static constexpr double kInitialGuessDurationSec = 4.;
+static constexpr double kInitialGuessDurationSec = 3.;
 
 static constexpr double kMinTimeStep =
     0.9 * kInitialGuessDurationSec / (kNumTimeSamples - 1);
@@ -39,29 +42,52 @@ static constexpr double kMaxTimeStep =
 
 static constexpr double kBoundingBoxLimit = 300.;
 
+std::map<const std::string, const maliput::api::Segment*>
+get_segments_with(const std::vector<std::string>& keys,
+                  const maliput::api::RoadGeometry& road) {
+  std::map<const std::string, const maliput::api::Segment*> segments;
+  for (int i{0}; i < road.num_junctions(); i++) {
+    for (int j{0}; j < road.junction(i)->num_segments(); j++) {
+      const maliput::api::Segment* segment = road.junction(i)->segment(j);
+      std::string name_str = segment->lane(0)->id().string();
+      // Expect a `l:` at the beginning of the string and `_#` at the end.  We
+      // strip these and do an exact string match on the remainder.
+      name_str.erase(name_str.begin(), name_str.begin()+2);
+      name_str.erase(name_str.end()-2, name_str.end());
+      for (auto& key : keys) {
+        if (!name_str.compare(key)) {
+          segments.emplace(std::make_pair(key, segment));
+        }
+      }
+    }
+  }
+  return segments;
+}
+
 int DoMain(void) {
   // For building Multilane roads.
   //  const auto resource = FindResourceOrThrow(
   //    "drake/automotive/maliput/multilane/tee_intersection.yaml");
   const maliput::multilane::BuilderFactory builder_factory{};
   auto road = maliput::multilane::LoadFile(
-      builder_factory, "/home/jon/drake-distro/automotive/maliput/multilane/tee_intersection.yaml");
+      builder_factory, "/Users/jond/TRI/drake-distro/automotive/maliput/multilane/tee_intersection.yaml");
 
   auto scenario =
       std::make_unique<Scenario>(std::move(road), kCarWidth, kCarLength);
-  const maliput::api::Segment* branch_segment =
-      scenario->road().junction(0)->segment(0);
-  const maliput::api::Segment* straight_segment_0 =
-      scenario->road().junction(3)->segment(0);
-  const maliput::api::Segment* straight_segment_1 =
-      scenario->road().junction(1)->segment(0);
+
+  const std::vector<std::string> keys{
+    "south", "east", "west", "east_west", "south_east", "south_west"};
+  const auto segments = get_segments_with(keys, scenario->road());
+  for (auto& key : keys) {
+    std::cout << "found " << key << " under the name " << segments.at(key)->lane(0)->id().string() << std::endl;
+  }
 
   // Make an ego car.
   const auto ego = scenario->AddSimpleCar("ego_car", SimpleCarParams<double>());
 
   // Make three ado cars.
   const auto ado0 = scenario->AddIdmSimpleCar(
-      "ado_car_0", LaneDirection(branch_segment->lane(0), true),
+      "ado_car_0", LaneDirection(segments.at("south")->lane(0), false),
       SimpleCarParams<double>(), IdmPlannerParameters<double>(),
       PurePursuitParams<double>());
   /*
@@ -84,52 +110,36 @@ int DoMain(void) {
   // Supply initial conditions (used as falsification constraints and for the
   // initial guess trajectory).
   SimpleCarState<double> initial_conditions;
-  auto ego_initial_pos = branch_segment->lane(0)->ToGeoPosition({3., 0., 0.});
+  auto ego_initial_pos = segments.at("east")->lane(0)->ToGeoPosition({4., 0., 0.});
   initial_conditions.set_x(ego_initial_pos.x());
   initial_conditions.set_y(ego_initial_pos.y());
-  initial_conditions.set_heading(1.5);
+  initial_conditions.set_heading(3.14);
   initial_conditions.set_velocity(7.);
   falsifier->RegisterInitialConstraint(*ego, initial_conditions);
 
-  auto ado0_initial_pos = straight_segment_0->lane(0)->ToGeoPosition({4., 0., 0.});
+  auto ado0_initial_pos =
+      segments.at("south")->lane(0)->ToGeoPosition({8., 0., 0.});
   initial_conditions.set_x(ado0_initial_pos.x());
   initial_conditions.set_y(ado0_initial_pos.y());
-  initial_conditions.set_heading(0.);
+  initial_conditions.set_heading(1.5);
   initial_conditions.set_velocity(5.);
   falsifier->RegisterInitialConstraint(*ado0, initial_conditions);
 
-  // Supply final conditions (only used for the initial guess trajectory).
-  // Note: These must correspond to an ongoing or default branch to upstream
-  // connections containing the initial conditions.
-  SimpleCarState<double> final_conditions;
-  auto ego_final_pos = straight_segment_1->lane(0)->ToGeoPosition({0., 0., 0.});
-  final_conditions.set_x(ego_final_pos.x());
-  final_conditions.set_y(ego_final_pos.y());
-  final_conditions.set_heading(0.);
-  final_conditions.set_velocity(5.0);
-  falsifier->RegisterFinalConstraint(*ego, final_conditions);
-
-  auto ado0_final_pos = straight_segment_1->lane(0)->ToGeoPosition({2., 0., 0.});
-  final_conditions.set_x(ado0_final_pos.x());
-  final_conditions.set_y(ado0_final_pos.y());
-  final_conditions.set_heading(0.);
-  final_conditions.set_velocity(6.);
-  falsifier->RegisterFinalConstraint(*ado0, final_conditions);
-
   // Set a guess trajectory based on these constraints.
   // falsifier->SetLinearGuessTrajectory();
+  // ** TODO ** Make the guess time depend on the trajectory, or at least throw
+  //            when inconsistent.
   falsifier->SetGuessTrajectory(trajectories::PiecewisePolynomial<double>());
 
-  // Set constraints on the initial states based on these constraints.
+  // Set constraints on the initial states based on the above constraints.
   falsifier->AddInitialConstraints();
 
   // Constraints keeping the cars on the road or in their lanes.
-  /*
   std::pair<const Lane*, const Lane*> lane_bounds =
-      std::make_pair(segment->lane(0), segment->lane(0));
-  falsifier->AddDragwayLaneConstraints(*ego, lane_bounds);
-  falsifier->AddDragwayLaneConstraints(*ado0, lane_bounds);
-  */
+      std::make_pair(segments.at("west")->lane(0),
+                     segments.at("west")->lane(0));
+  falsifier->AddLaneConstraints(*ego, lane_bounds, WhichLimit::kHigh);
+  falsifier->AddLaneConstraints(*ado0, lane_bounds, WhichLimit::kHigh);
 
   falsifier->AddFinalCollisionConstraints(*ego, *ado0);
 

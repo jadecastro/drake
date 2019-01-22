@@ -161,14 +161,10 @@ void TrajectoryOptimization::SetGuessTrajectory(
   prog_->SetInitialTrajectory(traj_u, MakeStateTrajectory(traj_u));
 }
 
-// N.B. Assumes Dragway.
-void TrajectoryOptimization::AddDragwayLaneConstraints(
+void TrajectoryOptimization::AddLaneConstraints(
     const System<double>& subsystem,
-    std::pair<const Lane*, const Lane*> lane_bounds) {
-  if (dynamic_cast<const maliput::dragway::RoadGeometry*>(&scenario_->road()) ==
-      nullptr) {
-    throw std::runtime_error("This function only works for Dragway.");
-  }
+    std::pair<const Lane*, const Lane*> lane_bounds,
+    WhichLimit which_limit) {
   DRAKE_DEMAND(!is_solved_);
 
   using std::cos;
@@ -185,8 +181,6 @@ void TrajectoryOptimization::AddDragwayLaneConstraints(
   y_bounds.push_back(lane_bounds.first->ToGeoPosition(max_lane_pos).y());
   y_bounds.push_back(lane_bounds.second->ToGeoPosition(min_lane_pos).y());
   y_bounds.push_back(lane_bounds.second->ToGeoPosition(max_lane_pos).y());
-  const double y_min = *std::min_element(y_bounds.begin(), y_bounds.end());
-  const double y_max = *std::max_element(y_bounds.begin(), y_bounds.end());
 
   const double w = scenario_->car_width();
   const double l = scenario_->car_length();
@@ -204,14 +198,20 @@ void TrajectoryOptimization::AddDragwayLaneConstraints(
   const auto y11 =
       ego.y + (l / 2.) * sin(ego.heading) + (w / 2.) * cos(ego.heading);
 
-  prog_->AddConstraintToAllKnotPoints(y_min <= y00);
-  prog_->AddConstraintToAllKnotPoints(y00 <= y_max);
-  prog_->AddConstraintToAllKnotPoints(y_min <= y01);
-  prog_->AddConstraintToAllKnotPoints(y01 <= y_max);
-  prog_->AddConstraintToAllKnotPoints(y_min <= y10);
-  prog_->AddConstraintToAllKnotPoints(y10 <= y_max);
-  prog_->AddConstraintToAllKnotPoints(y_min <= y11);
-  prog_->AddConstraintToAllKnotPoints(y11 <= y_max);
+  if (which_limit == WhichLimit::kLow || which_limit == WhichLimit::kBoth) {
+    const double y_min = *std::min_element(y_bounds.begin(), y_bounds.end());
+    prog_->AddConstraintToAllKnotPoints(y_min <= y00);
+    prog_->AddConstraintToAllKnotPoints(y_min <= y01);
+    prog_->AddConstraintToAllKnotPoints(y_min <= y10);
+    prog_->AddConstraintToAllKnotPoints(y_min <= y11);
+  } else if (which_limit == WhichLimit::kHigh ||
+             which_limit == WhichLimit::kBoth) {
+    const double y_max = *std::max_element(y_bounds.begin(), y_bounds.end());
+    prog_->AddConstraintToAllKnotPoints(y00 <= y_max);
+    prog_->AddConstraintToAllKnotPoints(y01 <= y_max);
+    prog_->AddConstraintToAllKnotPoints(y10 <= y_max);
+    prog_->AddConstraintToAllKnotPoints(y11 <= y_max);
+  }
 }
 
 void TrajectoryOptimization::AddFinalCollisionConstraintsOld(
@@ -606,11 +606,16 @@ const PiecewisePolynomial<double> TrajectoryOptimization::MakeStateTrajectory(
   std::vector<double> times_vec(num_time_samples_);
   std::vector<Eigen::MatrixXd> states(num_time_samples_);
   std::vector<Eigen::MatrixXd> derivatives(num_time_samples_);
+  Eigen::VectorXd times_mp(num_time_samples_);
+  Eigen::MatrixXd inputs_mp(diagram.get_input_port(0).size(),
+                            num_time_samples_);
+  Eigen::MatrixXd states_mp(diagram.get_num_continuous_states(),
+                            num_time_samples_);
   systems::FixedInputPortValue& input_port_value = context.FixInputPort(
-        0, diagram.AllocateInputVector(diagram.get_input_port(0)));
+      0, diagram.AllocateInputVector(diagram.get_input_port(0)));
   const double average_time_step = 0.5 * (min_time_step_ + max_time_step_);
   double time{0.};
-  for (int i = 0; i < num_time_samples_; i++) {
+  for (int i{0}; i < num_time_samples_; i++) {
     times_vec[i] = time;
     if (context.get_num_input_ports() > 0) {
       if (traj_u.get_number_of_segments() > 0) {
@@ -629,8 +634,36 @@ const PiecewisePolynomial<double> TrajectoryOptimization::MakeStateTrajectory(
     diagram.CalcTimeDerivatives(context, continuous_derivatives.get());
     derivatives[i] = continuous_derivatives->CopyToVector();
 
+    // Populate the MP structs for animation.
+    times_mp(i) = time;
+    inputs_mp.col(i) =
+        input_port_value.GetMutableVectorData<double>()->CopyToVector();
+    states_mp.col(i) = state;
+
     time += average_time_step;
   }
+  InputStateTrajectoryData traj;
+  traj.times = times_mp;
+  traj.inputs = inputs_mp;
+  traj.states = states_mp;
+
+  for (const auto& subsystem : scenario_->aliases()) {
+    traj.x[subsystem].resize(num_time_samples_);
+    traj.y[subsystem].resize(num_time_samples_);
+    traj.heading[subsystem].resize(num_time_samples_);
+    for (int i{0}; i < num_time_samples_; i++) {
+      const std::vector<int> indices = scenario_->GetStateIndices(*subsystem);
+      const Eigen::VectorXd substates =
+          traj.states.col(i).segment(indices[0], indices.size());
+      const auto stateful_subsystem = scenario_->stateful_aliases()[subsystem];
+      const TrajectoryOptimization::Cartesian<double> cartesian =
+          CalcCartesian<double>(*stateful_subsystem, substates);
+      traj.x[subsystem](i) = cartesian.x;
+      traj.y[subsystem](i) = cartesian.y;
+      traj.heading[subsystem](i) = cartesian.heading;
+    }
+  }
+  // AnimateSolutionFrom(traj);
   return PiecewisePolynomial<double>::Cubic(times_vec, states, derivatives);
 }
 

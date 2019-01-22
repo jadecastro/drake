@@ -97,9 +97,11 @@ void AutomotiveSimulator<T>::ConnectCarOutputsAndPriusVis(
   // Hack that uses the blue prius for vehicles with id == 0 and the red prius
   // otherwise.
   if (id == 0) {
-    obj_filename = "/home/jon/drake-distro/automotive/models/prius/blue_prius.obj";
+    // obj_filename = "/home/jon/drake-distro/automotive/models/prius/blue_prius.obj";
+    obj_filename = "/Users/jond/TRI/drake-distro/automotive/models/prius/blue_prius.obj";
   } else {
-    obj_filename = "/home/jon/drake-distro/automotive/models/prius/red_prius.obj";
+    // obj_filename = "/home/jon/drake-distro/automotive/models/prius/red_prius.obj";
+    obj_filename = "/Users/jond/TRI/drake-distro/automotive/models/prius/red_prius.obj";
   }
 
   DRAKE_DEMAND(&pose_output.get_system() == &velocity_output.get_system());
