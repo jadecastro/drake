@@ -3,12 +3,17 @@
 
 #include "drake/automotive/calc_ongoing_road_position.h"
 #include "drake/automotive/gen/driving_command.h"
+#include "drake/automotive/gen/idm_planner_parameters.h"
+#include "drake/automotive/gen/pure_pursuit_params.h"
+#include "drake/automotive/gen/simple_car_params.h"
+#include "drake/automotive/gen/simple_car_state.h"
 #include "drake/automotive/idm_controller.h"
 #include "drake/automotive/maliput/api/lane_data.h"
 #include "drake/automotive/maliput/api/road_geometry.h"
 #include "drake/automotive/pose_selector.h"
 #include "drake/automotive/pure_pursuit_controller.h"
 #include "drake/automotive/road_odometry.h"
+#include "drake/automotive/scenario.h"
 #include "drake/automotive/simple_car.h"
 #include "drake/bindings/pydrake/common/wrap_pybind.h"
 #include "drake/bindings/pydrake/documentation_pybind.h"
@@ -104,6 +109,23 @@ PYBIND11_MODULE(automotive, m) {
       .def("set_acceleration", &DrivingCommand<T>::set_acceleration,
           doc.DrivingCommand.set_acceleration.doc);
 
+  py::class_<Scenario>(m, "Scenario")
+      .def(py::init<std::unique_ptr<maliput::api::RoadGeometry>, double, double>(),
+           py::arg("road"), py::arg("car_width"), py::arg("car_length"),
+           // Keep alive, reference: `self` keeps `road` alive.
+           py::keep_alive<1, 2>())
+      .def("AddIdmSimpleCar", &Scenario::AddIdmSimpleCar, py::arg("name"),
+           py::arg("lane_direction"), py::arg("simple_car_params"),
+           py::arg("idm_params"), py::arg("pure_pursuit_params"),
+           py_reference_internal)
+      .def("AddSimpleCar", &Scenario::AddSimpleCar, py::arg("name"),
+           py::arg("simple_car_params"), py_reference_internal)
+      .def("Build", &Scenario::Build)
+      .def("GetStateIndices", &Scenario::GetStateIndices,
+           py::arg("subsystem"))
+      .def("road", &Scenario::road, py_reference_internal)
+      ;
+
   py::class_<IdmController<T>, LeafSystem<T>>(
       m, "IdmController", doc.IdmController.doc)
       .def(py::init<const maliput::api::RoadGeometry&, ScanStrategy,
@@ -185,6 +207,52 @@ PYBIND11_MODULE(automotive, m) {
           doc.SimpleCar.pose_output.doc)
       .def("velocity_output", &SimpleCar<T>::velocity_output,
           py_reference_internal, doc.SimpleCar.velocity_output.doc);
+
+  py::class_<SimpleCarParams<T>, BasicVector<T>>(m, "SimpleCarParams")
+      .def(py::init<>())
+      .def("wheelbase", &SimpleCarParams<T>::wheelbase)
+      .def("track", &SimpleCarParams<T>::track)
+      .def("max_abs_steering_angle",
+           &SimpleCarParams<T>::max_abs_steering_angle)
+      .def("max_velocity", &SimpleCarParams<T>::max_velocity)
+      .def("max_acceleration", &SimpleCarParams<T>::max_acceleration)
+      .def("velocity_limit_kp", &SimpleCarParams<T>::velocity_limit_kp)
+      .def("set_wheelbase", &SimpleCarParams<T>::set_wheelbase)
+      .def("set_track", &SimpleCarParams<T>::set_track)
+      .def("set_max_abs_steering_angle",
+           &SimpleCarParams<T>::set_max_abs_steering_angle)
+      .def("set_max_velocity", &SimpleCarParams<T>::set_max_velocity)
+      .def("set_max_acceleration", &SimpleCarParams<T>::set_max_acceleration)
+      .def("set_velocity_limit_kp", &SimpleCarParams<T>::set_velocity_limit_kp);
+
+  py::class_<IdmPlannerParameters<T>, BasicVector<T>>(m, "IdmPlannerParameters")
+      .def(py::init<>())
+      .def("v_ref", &IdmPlannerParameters<T>::v_ref)
+      .def("a", &IdmPlannerParameters<T>::a)
+      .def("b", &IdmPlannerParameters<T>::b)
+      .def("s_0", &IdmPlannerParameters<T>::s_0)
+      .def("time_headway", &IdmPlannerParameters<T>::time_headway)
+      .def("delta", &IdmPlannerParameters<T>::delta)
+      .def("bloat_diameter", &IdmPlannerParameters<T>::bloat_diameter)
+      .def("distance_lower_limit",
+           &IdmPlannerParameters<T>::distance_lower_limit)
+      .def("scan_ahead_distance", &IdmPlannerParameters<T>::scan_ahead_distance)
+      .def("set_v_ref", &IdmPlannerParameters<T>::set_v_ref)
+      .def("set_a", &IdmPlannerParameters<T>::set_a)
+      .def("set_b", &IdmPlannerParameters<T>::set_b)
+      .def("set_s_0", &IdmPlannerParameters<T>::set_s_0)
+      .def("set_time_headway", &IdmPlannerParameters<T>::set_time_headway)
+      .def("set_delta", &IdmPlannerParameters<T>::set_delta)
+      .def("set_bloat_diameter", &IdmPlannerParameters<T>::set_bloat_diameter)
+      .def("set_distance_lower_limit",
+           &IdmPlannerParameters<T>::set_distance_lower_limit)
+      .def("set_scan_ahead_distance",
+           &IdmPlannerParameters<T>::set_scan_ahead_distance);
+
+  py::class_<PurePursuitParams<T>, BasicVector<T>>(m, "PurePursuitParams")
+      .def(py::init<>())
+      .def("s_lookahead", &PurePursuitParams<T>::s_lookahead)
+      .def("set_s_lookahead", &PurePursuitParams<T>::set_s_lookahead);
 
   // TODO(jadecastro) Bind more systems as appropriate.
 }

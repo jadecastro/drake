@@ -131,6 +131,7 @@ drake_pybind_library(
         "//bindings/pydrake:documentation_pybind",
         "//bindings/pydrake/common:wrap_pybind",
         "//bindings/pydrake/systems:systems_pybind",
+        "//lcmtypes:viewer",
     ],
     cc_srcs = ["automotive_py.cc"],
     package_info = PACKAGE_INFO,

@@ -163,6 +163,19 @@ void AutomotiveSimulator<T>::ConnectCarOutputsAndPriusVis(
     const OutputPort<T>& pose_output,
     const OutputPort<T>& velocity_output) {
   DRAKE_DEMAND(&pose_output.get_system() == &velocity_output.get_system());
+
+  std::string obj_filename;
+  // Hack that uses the blue prius for vehicles with id == 0 and the red prius
+  // otherwise.
+  // TODO(jon) Resolve issue with FindResourceOrThrow() and use it.
+  if (id == 0) {
+    // obj_filename = "/home/jon/drake-distro/automotive/models/prius/blue_prius.obj";
+    obj_filename = "/Users/jond/TRI/drake-distro/automotive/models/prius/blue_prius.obj";
+  } else {
+    // obj_filename = "/home/jon/drake-distro/automotive/models/prius/red_prius.obj";
+    obj_filename = "/Users/jond/TRI/drake-distro/automotive/models/prius/red_prius.obj";
+  }
+
   const std::string name = pose_output.get_system().get_name();
   auto ports = aggregator_->AddSinglePoseAndVelocityInput(name, id);
   builder_->Connect(pose_output, ports.pose_input_port);
@@ -199,8 +212,7 @@ void AutomotiveSimulator<T>::ConnectCarOutputsAndPriusVis(
       std::make_unique<geometry::GeometryInstance>(
           Isometry3d(Eigen::Translation3d(
               -2.27 + kVisOffsetInX, -0.911, -0.219 + 0.385)),
-          std::make_unique<geometry::Mesh>(
-              FindResourceOrThrow("drake/automotive/models/prius/prius.obj")),
+          std::make_unique<geometry::Mesh>(obj_filename),
           "prius_body"));
   scene_graph_->AssignRole(source_id, geometry_id,
                            geometry::IllustrationProperties());
@@ -391,6 +403,28 @@ int AutomotiveSimulator<T>::AddPriusTrajectoryCar(
 
   if (lcm_) {
     AddPublisher(*trajectory_car, id);
+  }
+  return id;
+}
+
+template <typename T>
+int AutomotiveSimulator<T>::AddPriusTrajectoryFollower(
+    const std::string& name, const Trajectory& trajectory) {
+  // DRAKE_DEMAND(!has_started());
+  DRAKE_DEMAND(aggregator_ != nullptr);
+  CheckNameUniqueness(name);
+  const int id = allocate_vehicle_number();
+
+  auto trajectory_follower =
+      builder_->template AddSystem<TrajectoryFollower<T>>(trajectory);
+  trajectory_follower->set_name(name);
+  vehicles_[id] = trajectory_follower;
+
+  ConnectCarOutputsAndPriusVis(id, trajectory_follower->pose_output(),
+      trajectory_follower->velocity_output());
+
+  if (lcm_) {
+    AddPublisher(*trajectory_follower, id);
   }
   return id;
 }
@@ -656,6 +690,21 @@ void AutomotiveSimulator<T>::AddPublisher(const TrajectoryCar<T>& system,
       LcmPublisherSystem::Make<lcmt_simple_car_state_t>(
           channel, lcm_));
   builder_->Connect(system.raw_pose_output(), encoder->get_input_port(0));
+  builder_->Connect(encoder->get_output_port(0), publisher->get_input_port());
+}
+
+template <typename T>
+void AutomotiveSimulator<T>::AddPublisher(const TrajectoryFollower<T>& system,
+                                          int vehicle_number) {
+  DRAKE_DEMAND(!has_started());
+  DRAKE_DEMAND(lcm_ != nullptr);
+  const std::string channel =
+      std::to_string(vehicle_number) + "_SIMPLE_CAR_STATE";
+  auto encoder = builder_->template AddSystem<SimpleCarStateEncoder>();
+  auto publisher = builder_->AddSystem(
+      LcmPublisherSystem::Make<lcmt_simple_car_state_t>(
+          channel, lcm_.get()));
+  builder_->Connect(system.state_output(), encoder->get_input_port(0));
   builder_->Connect(encoder->get_output_port(0), publisher->get_input_port());
 }
 

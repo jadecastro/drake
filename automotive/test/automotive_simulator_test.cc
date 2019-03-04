@@ -235,6 +235,45 @@ GTEST_TEST(AutomotiveSimulatorTest, TestPriusTrajectoryCar) {
   // TODO(jeremy.nimmer) Roughly confirm the car positions are as expected.
 }
 
+// Cover AddPriusTrajectoryFollower.
+GTEST_TEST(AutomotiveSimulatorTest, TestPriusTrajectoryFollower) {
+  using Type = Trajectory::InterpolationType;
+
+  const double kDeltaT = 0.2;
+
+  const std::vector<double> times{0., kDeltaT, 2 * kDeltaT};
+  std::vector<Eigen::Vector3d> translations{};
+  std::vector<Quaternion<double>> rotations{};
+
+  for (double time : times) {
+    translations.push_back({1. + time, 2. + time, 3. + time});
+    rotations.push_back({0.4 - 0.1 * time,  // BR
+                         0.5 + 0.2 * time,  // BR
+                         0.6 + 0.3 * time,  // BR
+                         0.7 + 0.4 * time});
+    rotations.back().normalize();
+  }
+
+  const Trajectory trajectory = Trajectory::Make(
+      times, rotations, translations, Type::kFirstOrderHold);
+
+  // Set up a basic simulation with a couple Prius TrajectoryCars. Both cars
+  // start at position zero; the first has a speed of 1 m/s, while the other is
+  // stationary. They both follow a straight 100 m long line.
+  auto simulator = std::make_unique<AutomotiveSimulator<double>>(
+      std::make_unique<lcm::DrakeMockLcm>());
+  const int id = simulator->AddPriusTrajectoryFollower("follower", trajectory);
+  EXPECT_EQ(id, 0);
+
+  // Finish all initialization, so that we can test the post-init state.
+  simulator->Start();
+
+  // Simulate for one second.
+  for (int i = 0; i < 100; ++i) {
+    simulator->StepBy(0.01);
+  }
+}
+
 std::unique_ptr<AutomotiveSimulator<double>> MakeWithIdmCarAndDecoy(
     std::unique_ptr<lcm::DrakeMockLcm> lcm) {
   auto simulator = std::make_unique<AutomotiveSimulator<double>>(

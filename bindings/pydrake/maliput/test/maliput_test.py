@@ -17,6 +17,11 @@ from pydrake.maliput.dragway import (
     create_dragway,
     )
 
+from pydrake.maliput.multilane import (
+    BuilderFactory,
+    LoadFile,
+    )
+
 
 # Instantiate and return a two-lane straight road.
 def make_test_dragway(lane_width, length):
@@ -136,5 +141,11 @@ class TestMaliput(unittest.TestCase):
                                     lane_pos_expected.srh()))
         self.assertTrue(np.allclose(nearest_pos.xyz(), geo_pos.xyz()))
         self.assertTrue(distance == 0.)
+
+    def test_multilane(self):
+        builder = BuilderFactory()
+        # TODO(jon) Resolve the hard-coded absolute path.
+        rg = LoadFile(builder, "/Users/jond/TRI/drake-distro/automotive/maliput/multilane/tee_intersection.yaml")
+        self.assertIsInstance(rg, RoadGeometry)
 
     # TODO(jadecastro) Add more maliput backends as needed.
