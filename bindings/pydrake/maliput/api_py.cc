@@ -67,7 +67,9 @@ PYBIND11_MODULE(api, m) {
       .def("num_junctions", &RoadGeometry::num_junctions,
           doc.RoadGeometry.num_junctions.doc)
       .def("junction", &RoadGeometry::junction, py_reference_internal,
-          doc.RoadGeometry.junction.doc);
+          doc.RoadGeometry.junction.doc)
+      .def("ToRoadPosition", &RoadGeometry::ToRoadPosition,
+           doc.RoadGeometry.ToRoadPosition.doc);
 
   py::class_<Junction>(m, "Junction", doc.Junction.doc)
       .def("num_segments", &Junction::num_segments,

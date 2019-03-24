@@ -193,6 +193,7 @@ drake_cc_library(
     srcs = ["scenario.cc"],
     hdrs = ["scenario.h"],
     deps = [
+        ":automotive_simulator",
         ":driving_command_adder",
         ":driving_command_demux",
         ":driving_command_mux",

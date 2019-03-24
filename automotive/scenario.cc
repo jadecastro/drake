@@ -3,12 +3,16 @@
 #include <memory>
 #include <vector>
 
+#include "drake/automotive/automotive_simulator.h"
 #include "drake/automotive/gen/driving_command.h"
 #include "drake/automotive/driving_command_adder.h"
 #include "drake/automotive/driving_command_demux.h"
 #include "drake/automotive/driving_command_mux.h"
 #include "drake/automotive/maliput/dragway/road_geometry.h"
+#include "drake/common/trajectories/piecewise_polynomial.h"
 #include "drake/systems/framework/diagram_builder.h"
+#include "drake/lcm/drake_lcm.h"
+#include "drake/systems/analysis/simulator.h"
 #include "drake/systems/primitives/constant_value_source.h"
 
 namespace drake {
@@ -278,6 +282,46 @@ std::vector<int> Scenario::GetInputIndices(
   std::iota(std::begin(result), std::end(result),
             index * DrivingCommandIndices::kNumCoordinates);
   return result;
+}
+
+void Scenario::Playback(const Eigen::VectorXd& t,
+                        const Eigen::MatrixXd& states) {
+  using Type = Trajectory::InterpolationType;
+
+  const double kRealTimeRate = 1.;
+
+  // Build another simulator with LCM capability and run in play-back mode.
+  auto simulator = std::make_unique<AutomotiveSimulator<double>>();
+
+  simulator->SetRoadGeometry(get_road());
+  auto* lcm = dynamic_cast<drake::lcm::DrakeLcm*>(simulator->get_lcm());
+  DRAKE_DEMAND(lcm != nullptr);
+
+  std::vector<double> times(t.rows());
+  for (size_t i{0}; i < times.size(); i++) {
+    times[i] = t(i);
+  }
+  int index{0};
+  for (const auto& subsystem : aliases_) {
+    std::vector<Eigen::Vector3d> translations{};
+    std::vector<Quaternion<double>> rotations{};
+    for (size_t i{0}; i < times.size(); i++) {
+      translations.push_back(
+          {states(0 + index * SimpleCarStateIndices::kNumCoordinates, i),
+           states(1 + index * SimpleCarStateIndices::kNumCoordinates, i), 0.});
+      const math::RollPitchYaw<double> rpy(
+          Eigen::Vector3d(0., 0., states(2 + index * SimpleCarStateIndices::kNumCoordinates, i)));
+      rotations.push_back(rpy.ToQuaternion());
+      rotations.back().normalize();  // TODO: Need?
+    }
+    const Trajectory trajectory =
+        Trajectory::Make(times, rotations, translations, Type::kPchip);
+    simulator->AddPriusTrajectoryFollower(subsystem->get_name(), trajectory);
+    index++;
+  }
+  lcm->StartReceiveThread();
+  simulator->Start(kRealTimeRate);
+  simulator->StepBy(times.back());
 }
 
 }  // namespace automotive

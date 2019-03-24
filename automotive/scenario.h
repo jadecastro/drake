@@ -10,6 +10,7 @@
 #include "drake/automotive/pure_pursuit_controller.h"
 #include "drake/automotive/simple_car.h"
 #include "drake/common/drake_copyable.h"
+#include "drake/systems/framework/context.h"
 #include "drake/systems/framework/diagram.h"
 #include "drake/systems/framework/diagram_builder.h"
 #include "drake/systems/rendering/pose_aggregator.h"
@@ -154,6 +155,9 @@ class Scenario final {
   double car_width() const { return geometry_->width; }
   double car_length() const { return geometry_->length; }
   /// @}
+
+  /// Plays back the scenario in Drake Visualizer.
+  void Playback(const Eigen::VectorXd& t, const Eigen::MatrixXd& states);
 
  private:
   std::unique_ptr<const maliput::api::RoadGeometry> road_;

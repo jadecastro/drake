@@ -123,6 +123,9 @@ PYBIND11_MODULE(automotive, m) {
       .def("Build", &Scenario::Build)
       .def("GetStateIndices", &Scenario::GetStateIndices,
            py::arg("subsystem"))
+      .def("Playback", &Scenario::Playback, py::arg("t"), py::arg("states"))
+      .def("diagram", &Scenario::diagram, py_reference_internal)
+      .def("context", &Scenario::context, py_reference_internal)
       .def("road", &Scenario::road, py_reference_internal)
       ;
 
