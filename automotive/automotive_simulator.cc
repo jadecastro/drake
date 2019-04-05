@@ -703,7 +703,7 @@ void AutomotiveSimulator<T>::AddPublisher(const TrajectoryFollower<T>& system,
   auto encoder = builder_->template AddSystem<SimpleCarStateEncoder>();
   auto publisher = builder_->AddSystem(
       LcmPublisherSystem::Make<lcmt_simple_car_state_t>(
-          channel, lcm_.get()));
+          channel, lcm_));
   builder_->Connect(system.state_output(), encoder->get_input_port(0));
   builder_->Connect(encoder->get_output_port(0), publisher->get_input_port());
 }

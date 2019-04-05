@@ -20,7 +20,7 @@ DrivingCommandAdder<T>::DrivingCommandAdder(int num_inputs)
 template <typename T>
 template <typename U>
 DrivingCommandAdder<T>::DrivingCommandAdder(const DrivingCommandAdder<U>& other)
-    : DrivingCommandAdder<T>(other.get_num_input_ports()) {}
+    : DrivingCommandAdder<T>(other.num_input_ports()) {}
 
 template <typename T>
 void DrivingCommandAdder<T>::CalcSum(const systems::Context<T>& context,
@@ -29,7 +29,7 @@ void DrivingCommandAdder<T>::CalcSum(const systems::Context<T>& context,
   sum->set_acceleration(0.);
   Eigen::VectorBlock<VectorX<T>> sum_vector = sum->get_mutable_value();
   // Sum each input port into the output.
-  for (int i = 0; i < context.get_num_input_ports(); i++) {
+  for (int i = 0; i < context.num_input_ports(); i++) {
     const DrivingCommand<T>* input_vector =
         this->template EvalVectorInput<DrivingCommand>(context, i);
     sum_vector += input_vector->get_value();

@@ -26,7 +26,7 @@ DrivingCommandDemux<T>::DrivingCommandDemux(int num_output_ports)
 template <typename T>
 template <typename U>
 DrivingCommandDemux<T>::DrivingCommandDemux(const DrivingCommandDemux<U>& other)
-    : DrivingCommandDemux<T>(other.get_num_output_ports()) {}
+    : DrivingCommandDemux<T>(other.num_output_ports()) {}
 
 template <typename T>
 void DrivingCommandDemux<T>::CopyToOutput(const systems::Context<T>& context,

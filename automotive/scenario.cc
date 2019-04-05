@@ -10,9 +10,9 @@
 #include "drake/automotive/driving_command_mux.h"
 #include "drake/automotive/maliput/dragway/road_geometry.h"
 #include "drake/common/trajectories/piecewise_polynomial.h"
-#include "drake/systems/framework/diagram_builder.h"
 #include "drake/lcm/drake_lcm.h"
 #include "drake/systems/analysis/simulator.h"
+#include "drake/systems/framework/diagram_builder.h"
 #include "drake/systems/primitives/constant_value_source.h"
 
 namespace drake {
@@ -166,7 +166,7 @@ const System<double>* Scenario::AddIdmSimpleCar(
   // Wire up a lane source.
   auto lane_source =
       builder_->template AddSystem<systems::ConstantValueSource<double>>(
-          AbstractValue::Make<LaneDirection>(goal_lane_direction));
+          Value<LaneDirection>(goal_lane_direction));
   builder_->Connect(lane_source->get_output_port(0),
                     idm_car->lane_input_port());
 
